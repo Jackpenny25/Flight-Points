@@ -3,6 +3,7 @@ import { projectId } from '../../../utils/supabase/info';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
+import { formatFlight } from './ui/utils';
 import { CheckCircle, XCircle, Clock, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -10,7 +11,6 @@ interface AttendanceSummary {
   cadetName: string;
   flight: string;
   totalPresent: number;
-  totalAuthorisedAbsence: number;
   totalAbsent: number;
   totalRecords: number;
   attendanceRate: number;
@@ -25,7 +25,6 @@ export function AttendanceReports({ accessToken }: AttendanceReportsProps) {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalPresent: 0,
-    totalAuthorisedAbsence: 0,
     totalAbsent: 0,
     averageAttendanceRate: 0,
   });
@@ -52,7 +51,6 @@ export function AttendanceReports({ accessToken }: AttendanceReportsProps) {
         setSummary(data.summary || []);
         setStats(data.stats || {
           totalPresent: 0,
-          totalAuthorisedAbsence: 0,
           totalAbsent: 0,
           averageAttendanceRate: 0,
         });
@@ -76,7 +74,7 @@ export function AttendanceReports({ accessToken }: AttendanceReportsProps) {
   return (
     <div className="space-y-6">
       {/* Overall Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card className="bg-gradient-to-br from-green-50 to-white border-green-200">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -86,18 +84,6 @@ export function AttendanceReports({ accessToken }: AttendanceReportsProps) {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-green-900">{stats.totalPresent}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-yellow-50 to-white border-yellow-200">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Clock className="size-4 text-yellow-600" />
-              Authorised Absences
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-yellow-900">{stats.totalAuthorisedAbsence}</p>
           </CardContent>
         </Card>
 
@@ -143,7 +129,6 @@ export function AttendanceReports({ accessToken }: AttendanceReportsProps) {
                     <TableHead>Cadet Name</TableHead>
                     <TableHead>Flight</TableHead>
                     <TableHead className="text-center">Present</TableHead>
-                    <TableHead className="text-center">Auth. Absence</TableHead>
                     <TableHead className="text-center">Absent</TableHead>
                     <TableHead className="text-center">Total Records</TableHead>
                     <TableHead className="text-right">Attendance Rate</TableHead>
@@ -156,18 +141,12 @@ export function AttendanceReports({ accessToken }: AttendanceReportsProps) {
                       <TableRow key={`${record.cadetName}-${index}`}>
                         <TableCell className="font-medium">{record.cadetName}</TableCell>
                         <TableCell>
-                          <Badge variant="outline">{record.flight}</Badge>
+                          <Badge variant="outline">{formatFlight(record.flight)}</Badge>
                         </TableCell>
                         <TableCell className="text-center">
                           <span className="inline-flex items-center gap-1 text-green-700">
                             <CheckCircle className="size-3" />
                             {record.totalPresent}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="inline-flex items-center gap-1 text-yellow-700">
-                            <Clock className="size-3" />
-                            {record.totalAuthorisedAbsence}
                           </span>
                         </TableCell>
                         <TableCell className="text-center">

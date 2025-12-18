@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
+import { formatFlight } from './ui/utils';
 import { Trash2, Plus, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from './ui/alert';
@@ -278,7 +279,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
                 <SelectContent>
                   {flights.map((flight) => (
                     <SelectItem key={flight} value={flight}>
-                      {flight}
+                      {formatFlight(flight)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -354,7 +355,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <p className="font-medium">{point.cadetName}</p>
-                      <p className="text-sm text-gray-600">{point.flight}</p>
+                      <p className="text-sm text-gray-600">{formatFlight(point.flight)}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={point.points >= 0 ? 'default' : 'destructive'}>

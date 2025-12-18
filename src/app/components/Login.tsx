@@ -218,12 +218,15 @@ export function Login({ onLogin }: LoginProps) {
       {/* Allow guest cadet access without creating an account */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 text-center">
         <p className="text-sm text-gray-600 mb-2">Cadets can continue without creating an account — only SNCOs and Point Givers need accounts.</p>
-        <Button
-          variant="ghost"
-          onClick={() => onLogin(null, { user_metadata: { role: 'cadet', name: name || 'Guest Cadet' } })}
-        >
-          Continue as Cadet (no account)
-        </Button>
+        <div className="mt-2 flex items-center justify-center gap-3">
+          <Input placeholder="Guest name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
+          <Button
+            variant="ghost"
+            onClick={() => onLogin(null, { user_metadata: { role: 'cadet', name: name || 'Guest Cadet' } })}
+          >
+            Continue as Cadet (no account)
+          </Button>
+        </div>
       </div>
     </div>
   );

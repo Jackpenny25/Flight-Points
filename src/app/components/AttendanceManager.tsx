@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
+import { formatFlight } from './ui/utils';
 import { CalendarDays, UserCheck, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -16,7 +17,7 @@ interface AttendanceRecord {
   cadetName: string;
   date: string;
   flight: string;
-  status: 'present' | 'authorised_absence' | 'absent';
+  status: 'present' | 'absent';
   submittedBy: string;
   createdAt: string;
 }
@@ -31,14 +32,14 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
   const [cadets, setCadets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [bulkEvents, setBulkEvents] = useState<Array<any>>([]);
 
   // Bulk attendance state
-  const [attendanceStatuses, setAttendanceStatuses] = useState<Record<string, 'present' | 'authorised_absence' | 'absent'>>({});
+  const [attendanceStatuses, setAttendanceStatuses] = useState<Record<string, 'present' | 'absent'>>({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [flightFilter, setFlightFilter] = useState<string>('all');
-  const [bulkStatus, setBulkStatus] = useState<'present' | 'authorised_absence' | 'absent'>('present');
   const [bulkErrors, setBulkErrors] = useState<Array<{ cadetName: string; reason?: string }>>([]);
   const [bulkFailedEntries, setBulkFailedEntries] = useState<Array<any>>([]);
 
@@ -60,7 +61,6 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedCadet, setSelectedCadet] = useState('');
   const [selectedFlight, setSelectedFlight] = useState('');
-  const [attendanceStatus, setAttendanceStatus] = useState<'present' | 'authorised_absence' | 'absent'>('present');
 
   // Helpers for bulk
   const toggleSelectAll = () => {
@@ -155,8 +155,8 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
   };
 
   // Canvas-based tick detection fallback (works without tesseract)
-  // sensitivity slider state (tunable)
-  const [tickThreshold, setTickThreshold] = useState<number>(0.02);
+  // sensitivity slider state (tunable). Higher = stricter (fewer false positives)
+  const [tickThreshold, setTickThreshold] = useState<number>(0.03);
 
   const runTickDetection = async () => {
     if (!ocrImage) throw new Error('No image');
@@ -284,24 +284,61 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
 
     const detections: Array<{ cadetId?: string; cadetName?: string; present: boolean; confidence: number }> = [];
 
-    // For each center, analyse a small band around the center in tick column
+    // For each center, analyse a small band around the center in tick column using an adaptive local threshold
     for (let i = 0; i < centers.length && i < cadetsToMatch.length; i++) {
       const centerY = centers[i];
       const band = Math.max(6, Math.floor((h / centers.length) * 0.6));
       const y0 = Math.max(0, centerY - Math.floor(band / 2));
       const y1 = Math.min(h - 1, centerY + Math.floor(band / 2));
+
+      // Count dark pixels and measure largest contiguous blob in the tick area band
       let dark = 0;
       let total = 0;
+      let maxBlob = 0;
       for (let y = y0; y <= y1; y++) {
+        let currentBlob = 0;
         for (let x = tickColStart; x < tickColStart + tickColWidth; x++) {
-          if (bw[y * w + x]) dark++;
+          const idx = y * w + x;
+          if (bw[idx]) {
+            dark++;
+            currentBlob++;
+          } else {
+            if (currentBlob > maxBlob) maxBlob = currentBlob;
+            currentBlob = 0;
+          }
           total++;
         }
+        if (currentBlob > maxBlob) maxBlob = currentBlob;
       }
+
       const ratio = total > 0 ? dark / total : 0;
-      const present = ratio > tickThreshold; // user-tunable
-      // Confidence scales with ratio beyond threshold
-      const conf = Math.min(1, Math.max(0, (ratio - tickThreshold) / (0.5 - tickThreshold)));
+
+      // Compute a local background ratio to avoid global bright/dark biases
+      let bgDark = 0;
+      let bgTotal = 0;
+      const bgWidth = Math.max(2, Math.min(tickColWidth * 2, tickColStart));
+      const bgStart = Math.max(0, tickColStart - bgWidth);
+      for (let y = y0; y <= y1; y++) {
+        for (let x = bgStart; x < tickColStart; x++) {
+          const idx = y * w + x;
+          if (bw[idx]) bgDark++;
+          bgTotal++;
+        }
+      }
+      const bgRatio = bgTotal > 0 ? bgDark / bgTotal : 0;
+
+      // Adaptive threshold: require ratio to exceed local background + user threshold
+      const adaptiveThreshold = Math.max(0.01, bgRatio + tickThreshold);
+
+      // Require a minimum contiguous blob to reduce speckle false positives
+      const minBlobPixels = Math.max(3, Math.floor(tickColWidth * 0.4));
+
+      const present = ratio > adaptiveThreshold && maxBlob >= minBlobPixels;
+
+      // Confidence scales with ratio beyond adaptive threshold, and scale by blob size
+      const confBase = adaptiveThreshold >= 0.5 ? 0 : (ratio - adaptiveThreshold) / (0.5 - adaptiveThreshold);
+      const conf = Math.min(1, Math.max(0, confBase)) * Math.min(1, maxBlob / (tickColWidth * 2));
+
       const cad = cadetsToMatch[i];
       detections.push({ cadetId: cad.id, cadetName: cad.name, present, confidence: conf });
     }
@@ -343,7 +380,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
     setSelectAll(next.size === visibleCount && visibleCount > 0);
   };
 
-  const applyStatusToSelected = (status: 'present' | 'authorised_absence' | 'absent') => {
+  const applyStatusToSelected = (status: 'present' | 'absent') => {
     setAttendanceStatuses(prev => {
       const next = { ...prev };
       cadets.forEach(c => {
@@ -373,42 +410,39 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
         cadetName: c.name,
         flight: c.flight,
         date: new Date(selectedDate).toISOString(),
-        status: attendanceStatuses[c.id] || 'present',
+        status: attendanceStatuses[c.id] || 'absent',
       }));
 
-      const results = await Promise.all(entries.map(async (entry) => {
-        try {
-          const res = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance`,
-            {
-              method: 'POST',
-              headers: postHeaders,
-              body: JSON.stringify(entry),
-            }
-          );
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({ error: 'unknown' }));
-            return { ok: false, cadetName: entry.cadetName, reason: err.error || res.statusText || 'Failed', entry };
-          }
-          return { ok: true, cadetName: entry.cadetName };
-        } catch (err: any) {
-          return { ok: false, cadetName: entry.cadetName, reason: String(err), entry };
+      // Create a bulkId so server can group these entries
+      const bulkId = crypto.randomUUID();
+
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance/bulk`,
+        {
+          method: 'POST',
+          headers: postHeaders,
+          body: JSON.stringify({ entries, date: new Date(selectedDate).toISOString(), flightFilter, bulkId }),
         }
-      }));
+      );
 
-      const failures = results.filter(r => !r.ok);
-      if (failures.length > 0) {
-        setBulkErrors(failures.map(f => ({ cadetName: f.cadetName, reason: f.reason })));
-        setBulkFailedEntries(failures.map(f => f.entry));
-        toast.error(`Saved ${entries.length - failures.length} succeeded, ${failures.length} failed`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'unknown' }));
+        toast.error(err.error || 'Failed to save attendance in bulk');
+        setBulkSubmitting(false);
+        return;
+      }
+
+      const data = await res.json();
+      if (data && data.bulk) {
+        toast.success(`Saved ${data.bulk.totalRecords} attendance records (${data.bulk.totalPresent} present)`);
       } else {
-        setBulkFailedEntries([]);
         toast.success(`Saved ${entries.length} attendance records`);
       }
 
       setSelectedIds(new Set());
       setSelectAll(false);
       fetchAttendance();
+      fetchBulkAttendance();
     } catch (err) {
       console.error('Bulk save error:', err);
       toast.error('Failed to save attendance in bulk');
@@ -420,6 +454,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
   useEffect(() => {
     fetchAttendance();
     fetchCadets();
+    fetchBulkAttendance();
   }, []);
 
   const fetchAttendance = async () => {
@@ -444,6 +479,25 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
     }
   };
 
+  const fetchBulkAttendance = async () => {
+    try {
+      const headers: Record<string, string> = {};
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance/bulk`,
+        { headers }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setBulkEvents(data.bulks || []);
+      }
+    } catch (error) {
+      console.error('Error fetching bulk attendance:', error);
+    }
+  };
+
   const fetchCadets = async () => {
     try {
       const headers2: Record<string, string> = {};
@@ -458,11 +512,11 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
         const data = await response.json();
         const cadetList = data.cadets || [];
         setCadets(cadetList);
-        // Initialize attendance statuses for new cadets
+        // Initialize attendance statuses for new cadets (default absent)
         setAttendanceStatuses(prev => {
           const next = { ...prev };
           cadetList.forEach((c: any) => {
-            if (!next[c.id]) next[c.id] = 'present';
+            if (!next[c.id]) next[c.id] = 'absent';
           });
           return next;
         });
@@ -472,45 +526,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
     }
   };
 
-  const handleSubmitAttendance = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
 
-    try {
-      const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance`,
-        {
-          method: 'POST',
-          headers: postHeaders,
-          body: JSON.stringify({
-            cadetName: selectedCadet,
-            flight: selectedFlight,
-            date: new Date(selectedDate).toISOString(),
-            status: attendanceStatus,
-          }),
-        }
-      );
-
-      if (response.ok) {
-        toast.success('Attendance recorded successfully!');
-        setSelectedCadet('');
-        setSelectedFlight('');
-        setAttendanceStatus('present');
-        fetchAttendance();
-      } else {
-        const error = await response.json();
-        toast.error(error.error || 'Failed to record attendance');
-      }
-    } catch (error) {
-      console.error('Error submitting attendance:', error);
-      toast.error('Failed to record attendance');
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleDeleteAttendance = async (attendanceId: string) => {
     if (!confirm('Are you sure you want to delete this attendance record?')) {
@@ -542,18 +558,52 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
     }
   };
 
+  // Delete an entire bulk attendance session and associated records
+  const handleDeleteBulk = async (bulkId: string) => {
+    if (!confirm('Delete this bulk attendance session and its attendance records? This is irreversible.')) {
+      return;
+    }
+
+    try {
+      const delHeaders: Record<string, string> = {};
+      if (accessToken) delHeaders['Authorization'] = `Bearer ${accessToken}`;
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance/bulk/${bulkId}`,
+        {
+          method: 'DELETE',
+          headers: delHeaders,
+        }
+      );
+
+      if (response.ok) {
+        toast.success('Bulk attendance deleted');
+        fetchBulkAttendance();
+        fetchAttendance();
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to delete bulk attendance');
+      }
+    } catch (error) {
+      console.error('Error deleting bulk attendance:', error);
+      toast.error('Failed to delete bulk attendance');
+    }
+  };
+
   const canDelete = userRole === 'staff' || userRole === 'snco';
 
   // Get unique flights from cadets
   const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
+  // Visible cadets based on current flight filter and counts for UI preview
+  const visibleCadets = cadets.filter(c => flightFilter === 'all' || c.flight === flightFilter);
+  const presentCount = visibleCadets.filter(c => attendanceStatuses[c.id] === 'present').length;
+  const selectedCount = selectedIds.size;
 
   // Get status badge color
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'present':
         return 'default';
-      case 'authorised_absence':
-        return 'secondary';
       case 'absent':
         return 'destructive';
       default:
@@ -565,8 +615,6 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
     switch (status) {
       case 'present':
         return 'Present Correctly Dressed';
-      case 'authorised_absence':
-        return 'Authorised Absence';
       case 'absent':
         return 'Absent';
       default:
@@ -588,37 +636,35 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            <div className="flex gap-3 items-center">
-              <Label>Date</Label>
-              <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+              <div className="space-y-2 sm:col-span-1">
+                <Label>Date</Label>
+                <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+              </div>
 
-              <Label>Flight</Label>
-              <Select value={flightFilter} onValueChange={(v: any) => setFlightFilter(v)}>
-                <SelectTrigger id="bulk-flight">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Flights</SelectItem>
-                  {flights.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                </SelectContent>
-              </Select>
-
-              <div className="ml-auto flex items-center gap-2">
-                <button className="btn-ghost text-sm" onClick={toggleSelectAll} type="button">
-                  <Checkbox checked={selectAll} onCheckedChange={toggleSelectAll} />
-                  <span className="ml-2">Select All</span>
-                </button>
-                <Select value={bulkStatus} onValueChange={(v: any) => setBulkStatus(v)}>
-                  <SelectTrigger id="bulk-status">
+              <div className="space-y-2 sm:col-span-1">
+                <Label>Flight</Label>
+                <Select value={flightFilter} onValueChange={(v: any) => setFlightFilter(v)}>
+                  <SelectTrigger id="bulk-flight">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="present">Present</SelectItem>
-                    <SelectItem value="authorised_absence">Authorised Absence</SelectItem>
-                    <SelectItem value="absent">Absent</SelectItem>
+                    <SelectItem value="all">All Flights</SelectItem>
+                    {flights.map(f => <SelectItem key={f} value={f}>{formatFlight(f)}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Button variant="outline" size="sm" onClick={() => applyStatusToSelected(bulkStatus)}>Set Selected</Button>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2 sm:col-span-2">
+                <div className="w-full sm:w-auto mr-2 text-sm text-gray-600">Marked present: {presentCount} • Selected: {selectedCount}</div>
+                <div className="flex items-center gap-2">
+                  <label className="inline-flex items-center text-sm cursor-pointer">
+                    <Checkbox checked={selectAll} onCheckedChange={toggleSelectAll} />
+                    <span className="ml-2">Select All</span>
+                  </label>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => applyStatusToSelected('present')}>Mark Selected Present</Button>
+                <Button variant="outline" size="sm" onClick={() => applyStatusToSelected('absent')}>Clear Selected</Button>
                 <Button onClick={saveAttendanceBulk} disabled={bulkSubmitting}>{bulkSubmitting ? 'Saving...' : 'Save All'}</Button>
               </div>
             </div>
@@ -638,9 +684,10 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
               )}
 
               <div className="mt-2 flex items-center gap-3">
-                <div className="text-xs text-gray-500">Sensitivity</div>
-                <input type="range" min="0.005" max="0.08" step="0.005" value={tickThreshold} onChange={(e) => setTickThreshold(Number(e.target.value))} />
+                <div className="text-xs text-gray-500">Sensitivity (higher = stricter)</div>
+                <input type="range" min="0.005" max="0.12" step="0.005" value={tickThreshold} onChange={(e) => setTickThreshold(Number(e.target.value))} />
                 <div className="text-xs text-gray-500">{(tickThreshold*100).toFixed(1)}%</div>
+                <div className="text-xs text-gray-500">Tip: increase sensitivity if too many false positives</div>
               </div>
 
               {ocrImage && (
@@ -785,134 +832,34 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
         </CardContent>
       </Card>
 
-      {/* Attendance Form */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CalendarDays className="size-5" />
-            Record Attendance
-          </CardTitle>
-          <CardDescription>Mark cadet attendance for a specific date</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmitAttendance} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="attendance-date">Date</Label>
-              <Input
-                id="attendance-date"
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                required
-              />
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="attendance-cadet">Cadet Name</Label>
-              <Select value={selectedCadet} onValueChange={(value) => {
-                setSelectedCadet(value);
-                const cadet = cadets.find(c => c.name === value);
-                if (cadet) setSelectedFlight(cadet.flight);
-              }}>
-                <SelectTrigger id="attendance-cadet">
-                  <SelectValue placeholder="Select a cadet" />
-                </SelectTrigger>
-                <SelectContent>
-                  {cadets.map((cadet) => (
-                    <SelectItem key={cadet.id} value={cadet.name}>
-                      {cadet.name} ({cadet.flight})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="attendance-flight">Flight</Label>
-              <Select value={selectedFlight} onValueChange={setSelectedFlight}>
-                <SelectTrigger id="attendance-flight">
-                  <SelectValue placeholder="Select flight" />
-                </SelectTrigger>
-                <SelectContent>
-                  {flights.map((flight) => (
-                    <SelectItem key={flight} value={flight}>
-                      {flight}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="attendance-status">Status</Label>
-              <Select 
-                value={attendanceStatus} 
-                onValueChange={(value: any) => setAttendanceStatus(value)}
-              >
-                <SelectTrigger id="attendance-status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="present">
-                    <div className="flex items-center gap-2">
-                      <UserCheck className="size-4 text-green-600" />
-                      Present Correctly Dressed
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="authorised_absence">
-                    Authorised Absence
-                  </SelectItem>
-                  <SelectItem value="absent">
-                    Absent
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button type="submit" className="w-full" disabled={submitting}>
-              <Plus className="size-4 mr-2" />
-              {submitting ? 'Recording...' : 'Record Attendance'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
 
       {/* Recent Attendance */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Attendance</CardTitle>
-          <CardDescription>Last 15 attendance records</CardDescription>
+          <CardDescription>Last 15 bulk attendance sessions</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="text-center py-8 text-gray-500">Loading...</div>
-          ) : attendance.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">No attendance recorded yet</div>
+          ) : bulkEvents.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">No bulk attendance recorded yet</div>
           ) : (
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
-              {attendance.slice(0, 15).map((record) => (
-                <div key={record.id} className="p-3 border rounded-lg bg-gray-50">
+              {bulkEvents.slice(0, 15).map((b) => (
+                <div key={b.id} className="p-3 border rounded-lg bg-gray-50">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium">{record.cadetName}</p>
-                        <Badge variant="outline" className="text-xs">
-                          {record.flight}
-                        </Badge>
+                        <p className="font-medium">Session on {new Date(b.date).toLocaleString()}</p>
+                        <Badge variant="outline" className="text-xs">{formatFlight(b.flightFilter)}</Badge>
                       </div>
-                      <p className="text-sm text-gray-600">
-                        {new Date(record.date).toLocaleDateString()}
-                      </p>
-                      <Badge variant={getStatusBadge(record.status)} className="mt-1">
-                        {getStatusLabel(record.status)}
-                      </Badge>
+                      <p className="text-sm text-gray-600">Present: {b.totalPresent} / {b.totalRecords}</p>
+                      <p className="text-sm text-gray-600">Submitted by: {b.submittedBy}</p>
                     </div>
                     {canDelete && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteAttendance(record.id)}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteBulk(b.id)}>
                         <Trash2 className="size-4 text-red-600" />
                       </Button>
                     )}

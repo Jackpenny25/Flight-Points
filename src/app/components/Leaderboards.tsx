@@ -3,6 +3,7 @@ import { projectId } from '../../../utils/supabase/info';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
+import { formatFlight } from './ui/utils';
 import { Trophy, Award, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -82,7 +83,7 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
               {data.winningFlight ? (
                 <div>
                   <p className="text-3xl font-bold text-yellow-900">
-                    {data.winningFlight.flight}
+                    {formatFlight(data.winningFlight.flight)}
                   </p>
                   <p className="text-xl text-yellow-700">
                     {data.winningFlight.points} points
@@ -143,7 +144,7 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
                           {index === 0 && <Trophy className="inline size-4 text-yellow-600 mr-1" />}
                           #{index + 1}
                         </TableCell>
-                        <TableCell className="font-medium">{entry.flight}</TableCell>
+                        <TableCell className="font-medium">{formatFlight(entry.flight)}</TableCell>
                         <TableCell className="text-right">
                           <Badge variant={index === 0 ? 'default' : 'secondary'}>
                             {entry.points}
@@ -216,7 +217,7 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium">{point.cadetName}</span>
-                        <Badge variant="outline" className="text-xs">{point.flight}</Badge>
+                        <Badge variant="outline" className="text-xs">{formatFlight(point.flight)}</Badge>
                         <Badge variant="outline" className="text-xs">{point.type}</Badge>
                       </div>
                       <p className="text-sm text-gray-600">{point.reason}</p>

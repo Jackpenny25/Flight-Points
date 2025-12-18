@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
+import { formatFlight } from './ui/utils';
 import { Download, Filter, FileSpreadsheet, Edit2, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -256,7 +257,7 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
                   <SelectItem value="all">All Flights</SelectItem>
                   {flights.map((flight) => (
                     <SelectItem key={flight} value={flight}>
-                      {flight}
+                      {formatFlight(flight)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -347,7 +348,7 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
                           <TableCell>{new Date(point.date).toLocaleDateString()}</TableCell>
                           <TableCell className="font-medium">{point.cadetName}</TableCell>
                           <TableCell>
-                            <Badge variant="outline">{point.flight}</Badge>
+                            <Badge variant="outline">{formatFlight(point.flight)}</Badge>
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">{point.type}</Badge>
@@ -420,7 +421,7 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
                           <TableCell>{new Date(record.date).toLocaleDateString()}</TableCell>
                           <TableCell className="font-medium">{record.cadetName}</TableCell>
                           <TableCell>
-                            <Badge variant="outline">{record.flight}</Badge>
+                            <Badge variant="outline">{formatFlight(record.flight)}</Badge>
                           </TableCell>
                           <TableCell>
                             <Badge

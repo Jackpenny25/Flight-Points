@@ -163,6 +163,44 @@ app.delete("/make-server-73a3871f/cadets/:id", verifyAuth, async (c) => {
   }
 });
 
+// Update cadet (staff/SNCO only) - allows editing name, flight, joinDate
+app.put("/make-server-73a3871f/cadets/:id", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const userRole = user.user_metadata?.role || 'cadet';
+
+    if (userRole !== 'staff' && userRole !== 'snco') {
+      return c.json({ error: 'Unauthorized - only staff/SNCO can update cadets' }, 403);
+    }
+
+    const cadetId = c.req.param('id');
+    const { name, flight, joinDate } = await c.req.json();
+
+    const existing = await kv.getByPrefix(`cadet:${cadetId}`);
+    const cadet = existing.find((c: any) => c.id === cadetId);
+
+    if (!cadet) {
+      return c.json({ error: 'Cadet not found' }, 404);
+    }
+
+    const updated = {
+      ...cadet,
+      name: name !== undefined ? name : cadet.name,
+      flight: flight !== undefined ? flight : cadet.flight,
+      joinDate: joinDate !== undefined ? joinDate : cadet.joinDate,
+      updatedAt: new Date().toISOString(),
+      updatedBy: user.user_metadata?.name || user.email,
+    };
+
+    await kv.set(`cadet:${cadetId}`, updated);
+
+    return c.json({ cadet: updated });
+  } catch (error) {
+    console.log('Error updating cadet:', error);
+    return c.json({ error: 'Failed to update cadet' }, 500);
+  }
+});
+
 // Points Routes
 // Get all points
 app.get("/make-server-73a3871f/points", verifyAuth, async (c) => {
@@ -350,7 +388,7 @@ app.post("/make-server-73a3871f/attendance", verifyAuth, async (c) => {
       return c.json({ error: 'Unauthorized - only point givers and staff can record attendance' }, 403);
     }
     
-    const { cadetName, date, flight, status } = await c.req.json();
+    const { cadetName, date, flight, status, bulkId } = await c.req.json();
     
     if (!cadetName || !flight || !status) {
       return c.json({ error: 'Cadet name, flight, and status are required' }, 400);
@@ -364,6 +402,7 @@ app.post("/make-server-73a3871f/attendance", verifyAuth, async (c) => {
       flight,
       status, // 'present', 'authorised_absence', 'absent'
       submittedBy: user.user_metadata?.name || user.email,
+      bulkId: bulkId || null,
       createdAt: new Date().toISOString(),
     };
     
@@ -393,6 +432,76 @@ app.post("/make-server-73a3871f/attendance", verifyAuth, async (c) => {
   }
 });
 
+// Add bulk attendance endpoint that writes a bulk summary and attendance records atomically
+app.post("/make-server-73a3871f/attendance/bulk", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const userRole = user.user_metadata?.role || 'cadet';
+    
+    if (userRole !== 'staff' && userRole !== 'snco' && userRole !== 'pointgiver') {
+      return c.json({ error: 'Unauthorized - only point givers and staff can record attendance' }, 403);
+    }
+
+    const { entries, date, flightFilter, bulkId } = await c.req.json();
+    if (!entries || !Array.isArray(entries) || entries.length === 0) {
+      return c.json({ error: 'Entries are required' }, 400);
+    }
+
+    const id = bulkId || crypto.randomUUID();
+    let presentCount = 0;
+    let total = entries.length;
+
+    for (const e of entries) {
+      const attendanceId = crypto.randomUUID();
+      const attendanceRecord = {
+        id: attendanceId,
+        cadetName: e.cadetName,
+        date: e.date || date || new Date().toISOString(),
+        flight: e.flight,
+        status: e.status,
+        submittedBy: user.user_metadata?.name || user.email,
+        bulkId: id,
+        createdAt: new Date().toISOString(),
+      };
+      await kv.set(`attendance:${attendanceId}`, attendanceRecord);
+
+      if (e.status === 'present') {
+        presentCount++;
+        const pointId = crypto.randomUUID();
+        const point = {
+          id: pointId,
+          cadetName: e.cadetName,
+          date: e.date || date || new Date().toISOString(),
+          flight: e.flight,
+          reason: 'Attendance - Present Correctly Dressed',
+          points: 1,
+          type: 'attendance',
+          givenBy: user.user_metadata?.name || user.email,
+          createdAt: new Date().toISOString(),
+        };
+        await kv.set(`point:${pointId}`, point);
+      }
+    }
+
+    const bulkRecord = {
+      id,
+      date: date || new Date().toISOString(),
+      flightFilter: flightFilter || 'all',
+      totalRecords: total,
+      totalPresent: presentCount,
+      submittedBy: user.user_metadata?.name || user.email,
+      createdAt: new Date().toISOString(),
+    };
+
+    await kv.set(`attendance-bulk:${id}`, bulkRecord);
+
+    return c.json({ bulk: bulkRecord });
+  } catch (error) {
+    console.log('Error adding bulk attendance:', error);
+    return c.json({ error: 'Failed to add bulk attendance' }, 500);
+  }
+});
+
 // Delete attendance (staff/SNCO only)
 app.delete("/make-server-73a3871f/attendance/:id", verifyAuth, async (c) => {
   try {
@@ -417,6 +526,57 @@ app.delete("/make-server-73a3871f/attendance/:id", verifyAuth, async (c) => {
 app.get("/make-server-73a3871f/attendance/reports", verifyAuth, async (c) => {
   try {
     const attendance = await kv.getByPrefix('attendance:');
+
+// Get bulk attendance overview
+app.get("/make-server-73a3871f/attendance/bulk", verifyAuth, async (c) => {
+  try {
+    const bulks = await kv.getByPrefix('attendance-bulk:');
+    bulks.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return c.json({ bulks });
+  } catch (error) {
+    console.log('Error fetching bulk attendance:', error);
+    return c.json({ error: 'Failed to fetch bulk attendance' }, 500);
+  }
+});
+
+// Delete a bulk attendance session and associated attendance/points
+app.delete("/make-server-73a3871f/attendance/bulk/:id", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const userRole = user.user_metadata?.role || 'cadet';
+
+    if (userRole !== 'staff' && userRole !== 'snco') {
+      return c.json({ error: 'Unauthorized - only staff/SNCO can delete bulk attendance' }, 403);
+    }
+
+    const id = c.req.param('id');
+
+    // Find and delete attendance records with this bulkId
+    const attendance = await kv.getByPrefix('attendance:');
+    const toDelete = attendance.filter((a: any) => a.bulkId === id);
+    for (const rec of toDelete) {
+      await kv.del(`attendance:${rec.id}`);
+    }
+
+    // Delete associated attendance points (match by cadetName and date)
+    const points = await kv.getByPrefix('point:');
+    let deletedPoints = 0;
+    for (const p of points) {
+      if (p.type === 'attendance' && toDelete.find((t: any) => t.cadetName === p.cadetName && t.date === p.date)) {
+        await kv.del(`point:${p.id}`);
+        deletedPoints++;
+      }
+    }
+
+    // Delete the bulk summary
+    await kv.del(`attendance-bulk:${id}`);
+
+    return c.json({ success: true, deletedAttendanceCount: toDelete.length, deletedPointsCount: deletedPoints });
+  } catch (error) {
+    console.log('Error deleting bulk attendance:', error);
+    return c.json({ error: 'Failed to delete bulk attendance' }, 500);
+  }
+});
     
     // Calculate summary per cadet
     const cadetSummary: { [key: string]: any } = {};
