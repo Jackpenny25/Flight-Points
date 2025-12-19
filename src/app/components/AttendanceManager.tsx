@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { projectId } from '../../../utils/supabase/info';
+import { FileStorage } from '../../../utils/fileStorage';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -76,14 +76,25 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
     setSelectAll(true);
   };
 
-  const handleOcrFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleOcrFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setOcrImage(url);
-    setOcrText('');
-    setOcrMatches([]);
-    setOcrError(null);
+    
+    try {
+      // Store the file in localStorage
+      const fileId = await FileStorage.uploadFile(file, { type: 'attendance_image' });
+      const fileUrl = await FileStorage.getFileAsDataUrl(fileId);
+      
+      if (fileUrl) {
+        setOcrImage(fileUrl);
+        setOcrText('');
+        setOcrMatches([]);
+        setOcrError(null);
+      }
+    } catch (error) {
+      console.error('Error handling file upload:', error);
+      setOcrError('Failed to save the image. Please try again.');
+    }
   };
 
   const runOcr = async () => {
@@ -122,7 +133,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
       setOcrText(text || '');
 
       // parse lines and try to match cadet names
-      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
       const matches: Array<{ line: string; cadet?: any }> = [];
       const cadetLower = cadets.map(c => ({ ...c, _name: c.name.toLowerCase() }));
       for (const line of lines) {
@@ -378,18 +389,21 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
 
       const results = await Promise.all(entries.map(async (entry) => {
         try {
-          const res = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance`,
-            {
-              method: 'POST',
-              headers: postHeaders,
-              body: JSON.stringify(entry),
-            }
-          );
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({ error: 'unknown' }));
-            return { ok: false, cadetName: entry.cadetName, reason: err.error || res.statusText || 'Failed', entry };
-          }
+          // Get existing attendance records from localStorage
+          const existingRecords = JSON.parse(localStorage.getItem('attendance') || '[]');
+          
+          // Create a new attendance record with a unique ID
+          const newRecord = {
+            ...entry,
+            id: `attn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            createdAt: new Date().toISOString(),
+            submittedBy: 'local_user' // You might want to update this with the actual user
+          };
+          
+          // Add the new record and save back to localStorage
+          existingRecords.push(newRecord);
+          localStorage.setItem('attendance', JSON.stringify(existingRecords));
+          
           return { ok: true, cadetName: entry.cadetName };
         } catch (err: any) {
           return { ok: false, cadetName: entry.cadetName, reason: String(err), entry };
@@ -424,21 +438,12 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
 
   const fetchAttendance = async () => {
     try {
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance`,
-        { headers }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setAttendance(data.attendance || []);
-      }
+      // Get attendance records from localStorage
+      const attendanceData = JSON.parse(localStorage.getItem('attendance') || '[]');
+      setAttendance(attendanceData);
     } catch (error) {
-      console.error('Error fetching attendance:', error);
-      toast.error('Failed to fetch attendance');
+      console.error('Error fetching attendance from localStorage:', error);
+      toast.error('Failed to load attendance records from local storage');
     } finally {
       setLoading(false);
     }
@@ -446,29 +451,21 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
 
   const fetchCadets = async () => {
     try {
-      const headers2: Record<string, string> = {};
-      if (accessToken) headers2['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/cadets`,
-        { headers: headers2 }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const cadetList = data.cadets || [];
-        setCadets(cadetList);
-        // Initialize attendance statuses for new cadets
-        setAttendanceStatuses(prev => {
-          const next = { ...prev };
-          cadetList.forEach((c: any) => {
-            if (!next[c.id]) next[c.id] = 'present';
-          });
-          return next;
+      // Get cadets from local storage
+      const cadetsData = JSON.parse(localStorage.getItem('cadets') || '[]');
+      setCadets(cadetsData);
+      
+      // Initialize attendance statuses for new cadets
+      setAttendanceStatuses(prev => {
+        const next = { ...prev };
+        cadetsData.forEach((c: any) => {
+          if (!next[c.id]) next[c.id] = 'present';
         });
-      }
+        return next;
+      });
     } catch (error) {
       console.error('Error fetching cadets:', error);
+      toast.error('Failed to load cadets from local storage');
     }
   };
 
@@ -477,33 +474,32 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
     setSubmitting(true);
 
     try {
-      const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance`,
-        {
-          method: 'POST',
-          headers: postHeaders,
-          body: JSON.stringify({
-            cadetName: selectedCadet,
-            flight: selectedFlight,
-            date: new Date(selectedDate).toISOString(),
-            status: attendanceStatus,
-          }),
-        }
-      );
-
-      if (response.ok) {
-        toast.success('Attendance recorded successfully!');
-        setSelectedCadet('');
-        setSelectedFlight('');
-        setAttendanceStatus('present');
-        fetchAttendance();
-      } else {
-        const error = await response.json();
-        toast.error(error.error || 'Failed to record attendance');
-      }
+      // Get existing attendance records from localStorage
+      const existingAttendance = JSON.parse(localStorage.getItem('attendance') || '[]');
+      
+      // Create a new attendance record with a unique ID
+      const newRecord = {
+        id: `attn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        cadetName: selectedCadet,
+        flight: selectedFlight,
+        date: new Date(selectedDate).toISOString(),
+        status: attendanceStatus,
+        createdAt: new Date().toISOString(),
+        submittedBy: 'local_user' // You might want to update this with the actual user
+      };
+      
+      // Add the new record and save back to localStorage
+      const updatedAttendance = [...existingAttendance, newRecord];
+      localStorage.setItem('attendance', JSON.stringify(updatedAttendance));
+      
+      // Update state
+      setAttendance(updatedAttendance);
+      
+      // Reset form
+      toast.success('Attendance recorded successfully!');
+      setSelectedCadet('');
+      setSelectedFlight('');
+      setAttendanceStatus('present');
     } catch (error) {
       console.error('Error submitting attendance:', error);
       toast.error('Failed to record attendance');
@@ -518,24 +514,18 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
     }
 
     try {
-      const delHeaders: Record<string, string> = {};
-      if (accessToken) delHeaders['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance/${attendanceId}`,
-        {
-          method: 'DELETE',
-          headers: delHeaders,
-        }
-      );
-
-      if (response.ok) {
-        toast.success('Attendance record deleted');
-        fetchAttendance();
-      } else {
-        const error = await response.json();
-        toast.error(error.error || 'Failed to delete attendance');
-      }
+      // Get existing attendance records from localStorage
+      const existingAttendance = JSON.parse(localStorage.getItem('attendance') || '[]');
+      
+      // Filter out the record to be deleted
+      const updatedAttendance = existingAttendance.filter((record: any) => record.id !== attendanceId);
+      
+      // Save back to localStorage
+      localStorage.setItem('attendance', JSON.stringify(updatedAttendance));
+      
+      // Update state
+      setAttendance(updatedAttendance);
+      toast.success('Attendance record deleted');
     } catch (error) {
       console.error('Error deleting attendance:', error);
       toast.error('Failed to delete attendance');
@@ -733,27 +723,32 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
                         if (bulkFailedEntries.length === 0) return;
                         setBulkSubmitting(true);
                         try {
-                          const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-                          if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
                           const retryResults = await Promise.all(bulkFailedEntries.map(async (entry: any) => {
                             try {
-                              const res = await fetch(
-                                `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance`,
-                                { method: 'POST', headers: postHeaders, body: JSON.stringify(entry) }
-                              );
-                              if (!res.ok) {
-                                const err = await res.json().catch(() => ({ error: 'unknown' }));
-                                return { ok: false, name: entry.cadetName, reason: err.error || res.statusText };
-                              }
-                              return { ok: true, name: entry.cadetName };
+                              // Get existing attendance records from localStorage
+                              const existingRecords = JSON.parse(localStorage.getItem('attendance') || '[]');
+                              
+                              // Create a new attendance record with a unique ID
+                              const newRecord = {
+                                ...entry,
+                                id: `attn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                createdAt: new Date().toISOString(),
+                                submittedBy: 'local_user' // You might want to update this with the actual user
+                              };
+                              
+                              // Add the new record and save back to localStorage
+                              existingRecords.push(newRecord);
+                              localStorage.setItem('attendance', JSON.stringify(existingRecords));
+                              
+                              return { ok: true, cadetName: entry.cadetName };
                             } catch (err: any) {
-                              return { ok: false, name: entry.cadetName, reason: String(err) };
+                              return { ok: false, cadetName: entry.cadetName, reason: String(err), entry };
                             }
                           }));
 
                           const stillFailed = retryResults.filter(r => !r.ok);
                           if (stillFailed.length > 0) {
-                            setBulkErrors(stillFailed.map(s => ({ cadetName: s.name, reason: s.reason })));
+                            setBulkErrors(stillFailed.map(s => ({ cadetName: s.cadetName, reason: s.reason })));
                             setBulkFailedEntries(stillFailed.map((s: any) => s.entry));
                             toast.error(`Retry completed: ${stillFailed.length} failures remain`);
                           } else {
