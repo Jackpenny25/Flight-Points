@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { FileStorage } from '../../../utils/fileStorage';
+import { projectId } from '../../../utils/supabase/info';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -44,7 +45,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
   const [bulkFailedEntries, setBulkFailedEntries] = useState<Array<any>>([]);
 
   // OCR state
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  
   const [ocrImage, setOcrImage] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState<string>('');
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -81,19 +82,59 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
     if (!file) return;
     
     try {
-      // Store the file in localStorage
-      const fileId = await FileStorage.uploadFile(file, { type: 'attendance_image' });
-      const fileUrl = await FileStorage.getFileAsDataUrl(fileId);
-      
-      if (fileUrl) {
-        setOcrImage(fileUrl);
-        setOcrText('');
-        setOcrMatches([]);
-        setOcrError(null);
+      // Try to save via FileStorage (uses File System Access API) when available.
+      if (FileStorage.isFileSystemAccessAPIAvailable && FileStorage.isFileSystemAccessAPIAvailable()) {
+        const fileId = await FileStorage.uploadFile(file, { type: 'attendance_image' });
+        const fileUrl = await FileStorage.getFileAsDataUrl(fileId);
+        if (fileUrl) {
+          setOcrImage(fileUrl);
+          setOcrText('');
+          setOcrMatches([]);
+          setOcrError(null);
+          return;
+        }
       }
+
+      // Fallback: read file as Data URL directly (works in all browsers without File System API).
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string | null;
+        if (result) {
+          setOcrImage(result);
+          setOcrText('');
+          setOcrMatches([]);
+          setOcrError(null);
+        } else {
+          setOcrError('Failed to read the image file');
+        }
+      };
+      reader.onerror = () => {
+        setOcrError('Failed to read the image file');
+      };
+      reader.readAsDataURL(file);
     } catch (error) {
       console.error('Error handling file upload:', error);
-      setOcrError('Failed to save the image. Please try again.');
+      // If FileStorage failed, attempt to fallback to reading the file directly
+      try {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string | null;
+          if (result) {
+            setOcrImage(result);
+            setOcrText('');
+            setOcrMatches([]);
+            setOcrError(null);
+          } else {
+            setOcrError('Failed to read the image file');
+          }
+        };
+        reader.onerror = () => setOcrError('Failed to read the image file');
+        const file = e.target.files?.[0];
+        if (file) reader.readAsDataURL(file);
+        else setOcrError('No file selected');
+      } catch (err) {
+        setOcrError('Failed to save or read the image. Try a different browser.');
+      }
     }
   };
 
@@ -427,7 +468,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
       const results = await Promise.all(entries.map(async (entry) => {
         try {
           const res = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance`,
+            `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/attendance`,
             {
               method: 'POST',
               headers: postHeaders,
@@ -490,7 +531,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance/bulk`,
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/attendance/bulk`,
         { headers }
       );
 
@@ -509,7 +550,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
       if (accessToken) headers2['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/cadets`,
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets`,
         { headers: headers2 }
       );
 
@@ -532,47 +573,6 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
     }
   };
 
-
-
-  const handleDeleteAttendance = async (attendanceId: string) => {
-    if (!confirm('Are you sure you want to delete this attendance record?')) {
-      return;
-    }
-
-    try {
-      const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance`,
-        {
-          method: 'POST',
-          headers: postHeaders,
-          body: JSON.stringify({
-            cadetName: selectedCadet,
-            flight: selectedFlight,
-            date: new Date(selectedDate).toISOString(),
-            status: attendanceStatus,
-          }),
-        }
-      );
-
-      if (response.ok) {
-        toast.success('Attendance recorded successfully!');
-        setSelectedCadet('');
-        setSelectedFlight('');
-        setAttendanceStatus('present');
-        fetchAttendance();
-      } else {
-        const error = await response.json();
-        toast.error(error.error || 'Failed to record attendance');
-      }
-    } catch (error) {
-      console.error('Error deleting attendance:', error);
-      toast.error('Failed to delete attendance');
-    }
-  };
-
   // Delete an entire bulk attendance session and associated records
   const handleDeleteBulk = async (bulkId: string) => {
     if (!confirm('Delete this bulk attendance session and its attendance records? This is irreversible.')) {
@@ -584,7 +584,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
       if (accessToken) delHeaders['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance/${attendanceId}`,
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/attendance/bulk/${bulkId}`,
         {
           method: 'DELETE',
           headers: delHeaders,
@@ -592,15 +592,16 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
       );
 
       if (response.ok) {
-        toast.success('Attendance record deleted');
+        toast.success('Bulk attendance session deleted');
         fetchAttendance();
+        fetchBulkAttendance();
       } else {
         const error = await response.json();
-        toast.error(error.error || 'Failed to delete attendance');
+        toast.error(error.error || 'Failed to delete bulk attendance session');
       }
     } catch (error) {
-      console.error('Error deleting bulk attendance:', error);
-      toast.error('Failed to delete bulk attendance');
+      console.error('Error deleting bulk attendance session:', error);
+      toast.error('Failed to delete bulk attendance session');
     }
   };
 
@@ -637,10 +638,10 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
   };
 
   return (
-    <div className="grid gap-6 md:grid-cols-2">
+    <div className="grid gap-6 md:grid-cols-3">
 
       {/* Bulk Attendance (for large groups) */}
-      <Card>
+      <Card className="md:col-span-2">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UserCheck className="size-5" />
@@ -865,7 +866,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
           ) : bulkEvents.length === 0 ? (
             <div className="text-center py-8 text-gray-500">No bulk attendance recorded yet</div>
           ) : (
-            <div className="space-y-3 max-h-[600px] overflow-y-auto">
+            <div className="space-y-3 max-h-[320px] overflow-y-auto">
               {bulkEvents.slice(0, 15).map((b) => (
                 <div key={b.id} className="p-3 border rounded-lg bg-gray-50">
                   <div className="flex justify-between items-start">

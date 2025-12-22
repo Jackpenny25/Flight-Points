@@ -61,7 +61,7 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/points`,
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/points`,
         { headers }
       );
 
@@ -80,7 +80,7 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
       if (accessToken) headers2['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance`,
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/attendance`,
         { headers: headers2 }
       );
 
@@ -99,7 +99,7 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
       if (accessToken) headers3['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/cadets`,
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets`,
         { headers: headers3 }
       );
 
@@ -120,7 +120,7 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
       if (accessToken) putHeaders['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/points/${editingPoint.id}`,
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/points/${editingPoint.id}`,
         {
           method: 'PUT',
           headers: putHeaders,

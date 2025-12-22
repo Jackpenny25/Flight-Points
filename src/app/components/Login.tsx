@@ -60,7 +60,7 @@ export function Login({ onLogin }: LoginProps) {
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/auth/signup`,
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/signup`,
         {
           method: 'POST',
           headers: {
@@ -103,11 +103,16 @@ export function Login({ onLogin }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">RAF Air Cadet Squadron</CardTitle>
-          <CardDescription>Flight Points Management System</CardDescription>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-100 via-blue-50 to-sky-200 p-4">
+      <Card className="w-full max-w-md shadow-xl">
+        <CardHeader className="text-center space-y-4">
+          <div className="flex justify-center">
+            <img src="/logo.png" alt="2427 Biggin Hill Squadron" className="h-24 w-24 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          </div>
+          <div>
+            <CardTitle className="text-2xl font-bold text-primary">2427 (Biggin Hill) Squadron</CardTitle>
+            <CardDescription className="text-base">RAF Air Cadets - Flight Points Management</CardDescription>
+          </div>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="signin" className="w-full">

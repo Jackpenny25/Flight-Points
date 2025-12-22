@@ -55,7 +55,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/points`,
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/points`,
         { headers }
       );
 
@@ -77,7 +77,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       if (accessToken) headers2['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/cadets`,
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets`,
         { headers: headers2 }
       );
 
@@ -106,7 +106,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
 
     // Check for duplicates
     const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
-    setDuplicateWarning([...new Set(duplicates)]);
+    setDuplicateWarning(Array.from(new Set(duplicates)));
 
     // Check if names exist in cadet list
     const cadetNames = cadets.map(c => c.name.toLowerCase());
@@ -151,7 +151,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
         if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
 
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/points`,
+          `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/points`,
           {
             method: 'POST',
             headers: postHeaders,
@@ -202,7 +202,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       if (accessToken) delHeaders['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/points/${pointId}`,
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/points/${pointId}`,
         {
           method: 'DELETE',
           headers: delHeaders,

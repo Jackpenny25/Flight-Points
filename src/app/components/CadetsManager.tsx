@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { FileStorage } from '../../../utils/fileStorage';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -17,7 +18,6 @@ import { toast } from 'sonner';
 interface Cadet {
   id: string;
   name: string;
-  joinDate: string;
   flight: string;
   createdAt: string;
 }
@@ -35,11 +35,11 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   // Form state
   const [name, setName] = useState('');
   const [flight, setFlight] = useState('');
-  // join dates are no longer exposed in the UI; created cadets will be assigned current date server-side
+  
 
   const csvInputRef = useRef<HTMLInputElement | null>(null);
   const [csvPreviewOpen, setCsvPreviewOpen] = useState(false);
-  const [csvPreviewEntries, setCsvPreviewEntries] = useState<Array<{ name: string; flight: string; joinDate: string }>>([]);
+  const [csvPreviewEntries, setCsvPreviewEntries] = useState<Array<{ name: string; flight: string }>>([]);
   const [csvImporting, setCsvImporting] = useState(false);
   const [csvImportFailures, setCsvImportFailures] = useState<Array<{ name: string; reason?: string }>>([]);
   // Flight to assign to rows missing a flight (1..4)
@@ -54,24 +54,59 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   const [editingCadet, setEditingCadet] = useState<Cadet | null>(null);
   const [editName, setEditName] = useState('');
   const [editFlight, setEditFlight] = useState('');
-  const [editJoinDate, setEditJoinDate] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
 
   useEffect(() => {
     fetchCadets();
+    
+    // Poll server periodically to keep cadets in sync across browsers
+    const id = setInterval(() => {
+      fetchCadets();
+    }, 30000); // every 30s
+    
+    return () => clearInterval(id);
   }, []);
 
   const fetchCadets = async () => {
+    // Try to fetch server cadets (public read). If that fails, fall back to localStorage.
     try {
-      // Get cadets from local storage
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        // Use access token if present, otherwise anon key (required by Supabase functions)
+        if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+        else headers['Authorization'] = `Bearer ${publicAnonKey}`;
+        const path = `/functions/v1/server/make-server-73a3871f/cadets`;
+        const res = await fetch(`https://${projectId}.supabase.co${path}`, { headers });
+        if (res.ok) {
+          const body = await res.json().catch(() => null);
+          const serverCadets = (body && body.cadets) ? body.cadets : [];
+          try { localStorage.setItem('cadets', JSON.stringify(serverCadets)); } catch (e) { /* noop */ }
+          setCadets(serverCadets);
+          return;
+        }
+      } catch (e) {
+        console.warn('Server cadets fetch failed, falling back to localStorage', e);
+      }
+
+      // localStorage fallback
       const cadetsData = JSON.parse(localStorage.getItem('cadets') || '[]');
-      setCadets(cadetsData);
+      setCadets(Array.isArray(cadetsData) ? cadetsData : []);
     } catch (error) {
-      console.error('Error fetching cadets from localStorage:', error);
-      toast.error('Failed to load cadets from local storage');
+      console.error('Error fetching cadets:', error);
+      toast.error('Failed to load cadets');
     } finally {
       setLoading(false);
     }
+  };
+
+  // helper: dedupe cadets array by `id`, preferring items from `overrides` when ids conflict
+  const mergeAndDedupe = (existing: Cadet[], overrides: Cadet[]) => {
+    const map = new Map<string, Cadet>();
+    // keep existing first
+    for (const c of existing || []) map.set(c.id, c);
+    // then apply overrides (they replace existing entries)
+    for (const c of overrides || []) map.set(c.id, c);
+    return Array.from(map.values());
   };
 
   const parseCSV = (text: string) => {
@@ -82,14 +117,15 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     const first = rows[0].toLowerCase();
     let startIndex = 0;
     if (first.includes('name') && (first.includes('flight') || first.includes('join'))) startIndex = 1;
+    // Also skip a numeric-only first row (many exported lists include an index '0' or '1' at top)
+    if (/^\d+$/.test(rows[0])) startIndex = 1;
 
-    // Accepts lines like: name,flight,joinDate (joinDate optional). Support comma or semicolon delimiters.
+    // Accepts lines like: name,flight. Support comma or semicolon delimiters.
     return rows.slice(startIndex).map((row) => {
       const parts = row.split(/,|;/).map(p => p.trim());
       return {
         name: parts[0] || '',
         flight: parts[1] || 'Unassigned',
-        joinDate: parts[2] ? new Date(parts[2]).toISOString() : new Date().toISOString(),
       };
     }).filter(r => r.name.length > 0);
   };
@@ -108,16 +144,11 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     setCsvPreviewOpen(true);
   };
 
-  const confirmCsvImport = async (entries?: Array<{ name: string; flight: string; joinDate: string }>) => {
+  const confirmCsvImport = async (entries?: Array<{ name: string; flight: string }>) => {
     const rows = entries || csvPreviewEntries;
     setCsvImporting(true);
 
-    // Quick authorization check
-    if (!accessToken) {
-      toast.error('You must be signed in as a staff/SNCO to import cadets');
-      setCsvImporting(false);
-      return;
-    }
+    // If not signed in, allow local-only import; if signed in, attempt server import and fall back to local entries
 
     try {
       const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -125,29 +156,78 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
 
       const results = await Promise.all(rows.map(async (entry) => {
         try {
+          const flightToUse = (!entry.flight || entry.flight === 'Unassigned') ? csvImportFlight : entry.flight;
+          // If no access token, create local cadet
+          if (!accessToken) {
+            const localCadet: Cadet = {
+              id: `local_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
+              name: entry.name,
+              flight: flightToUse,
+              createdAt: new Date().toISOString(),
+            };
+            return { ok: true, name: entry.name, cadet: localCadet } as any;
+          }
           const res = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/cadets`,
+            `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets`,
             {
               method: 'POST',
               headers: postHeaders,
-              body: JSON.stringify({ name: entry.name, flight: entry.flight, joinDate: entry.joinDate }),
+              body: JSON.stringify({ name: entry.name, flight: flightToUse }),
             }
           );
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({ error: 'unknown' }));
-            return { ok: false, name: entry.name, reason: err.error || res.statusText };
+          if (res.ok) {
+            try {
+              const body = await res.json().catch(() => null);
+              if (body && body.cadet) {
+                const created = body.cadet as Cadet;
+                const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
+                const merged = mergeAndDedupe(Array.isArray(existing) ? existing : [], [created]);
+                localStorage.setItem('cadets', JSON.stringify(merged));
+                setCadets(merged);
+                return { ok: true, name: entry.name, cadet: created } as any;
+              }
+              // If server returned ok but no cadet body, fall through to fallback
+            } catch (err) {
+              console.warn('Could not parse created cadet body:', err);
+            }
+            // Fallback local-ish cadet so UI can show it
+            const fallbackCadet: Cadet = {
+              id: `remote_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
+              name: entry.name,
+              flight: flightToUse,
+              createdAt: new Date().toISOString(),
+            };
+            const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
+            const merged = mergeAndDedupe(Array.isArray(existing) ? existing : [], [fallbackCadet]);
+            localStorage.setItem('cadets', JSON.stringify(merged));
+            setCadets(merged);
+            return { ok: true, name: entry.name, cadet: fallbackCadet } as any;
+          } else {
+            const errBody = await res.json().catch(() => ({ error: res.statusText }));
+            return { ok: false, name: entry.name, reason: errBody.error || res.statusText } as any;
           }
-          return { ok: true, name: entry.name };
         } catch (err: any) {
           return { ok: false, name: entry.name, reason: String(err) };
         }
       }));
 
       const failures = results.filter(r => !r.ok);
+      const successesWithCadets = results.filter((r: any) => r.ok && r.cadet).map((r: any) => r.cadet as Cadet);
+
+      if (successesWithCadets.length > 0) {
+        try {
+          const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
+          const merged = mergeAndDedupe(Array.isArray(existing) ? existing : [], successesWithCadets);
+          localStorage.setItem('cadets', JSON.stringify(merged));
+          setCadets(merged);
+        } catch (err) {
+          console.error('Failed updating local cadets after import', err);
+        }
+      }
       if (failures.length > 0) {
         toast.error(`Imported with ${failures.length} failures`);
       } else {
-        toast.success(`Imported ${rows.length} cadets`);
+        toast.success(`Imported ${successesWithCadets.length} cadets (persisted locally)`);
       }
 
       fetchCadets();
@@ -163,17 +243,18 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     try {
       // Get existing cadets from local storage
       const existingCadets = JSON.parse(localStorage.getItem('cadets') || '[]');
-      
+
       // Update the cadet's flight
-      const updatedCadets = existingCadets.map((cadet: Cadet) => 
-        cadet.id === cadetId ? { ...cadet, flight: newFlight } : cadet
+      const updatedCadets = (Array.isArray(existingCadets) ? existingCadets : []).map((cadet: Cadet) =>
+        cadet.id === cadetId ? { ...cadet, flight: newFlight, updatedAt: new Date().toISOString() } : cadet
       );
-      
-      // Save back to localStorage
-      localStorage.setItem('cadets', JSON.stringify(updatedCadets));
-      
+
+      // Save back to localStorage (dedupe safety)
+      const deduped = mergeAndDedupe([], updatedCadets);
+      localStorage.setItem('cadets', JSON.stringify(deduped));
+
       // Update state
-      setCadets(updatedCadets);
+      setCadets(deduped);
       toast.success('Cadet moved');
     } catch (err) {
       console.error('Error moving cadet:', err);
@@ -185,7 +266,6 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     setEditingCadet(cadet);
     setEditName(cadet.name);
     setEditFlight(cadet.flight);
-    setEditJoinDate(cadet.joinDate);
     setEditOpen(true);
   };
 
@@ -194,35 +274,57 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     setEditSubmitting(true);
 
     try {
+      // If unauthenticated, update localStorage directly
+      if (!accessToken) {
+        try {
+          const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
+          const updated = (Array.isArray(existing) ? existing : []).map((c: Cadet) => c.id === editingCadet.id ? { ...c, name: editName, flight: editFlight, updatedAt: new Date().toISOString() } : c);
+          localStorage.setItem('cadets', JSON.stringify(updated));
+          setCadets(updated);
+          toast.success('Cadet updated locally');
+          setEditOpen(false);
+          setEditingCadet(null);
+        } catch (err) {
+          console.error('Local edit failed', err);
+          toast.error('Failed to update cadet locally');
+        }
+        setEditSubmitting(false);
+        return;
+      }
+
       const putHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
       if (accessToken) putHeaders['Authorization'] = `Bearer ${accessToken}`;
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/cadets/${editingCadet.id}`,
-        {
-          method: 'PUT',
-          headers: putHeaders,
-          body: JSON.stringify({ name: editName, flight: editFlight, joinDate: editJoinDate }),
-        }
-      );
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets/${editingCadet.id}`, { method: 'PUT', headers: putHeaders, body: JSON.stringify({ name: editName, flight: editFlight }) });
 
-      if (response.ok) {
-        toast.success('Cadet updated');
-        setEditOpen(false);
-        setEditingCadet(null);
-        fetchCadets();
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'unknown' }));
+        toast.error(`Failed to update cadet: ${err.error || response.statusText}`);
       } else {
-        const err = await response.json();
-        toast.error(err.error || 'Failed to update cadet');
+        try {
+          const body = await response.json().catch(() => null);
+          if (body && body.cadet) {
+            const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
+            const updated = (Array.isArray(existing) ? existing : []).map((c: Cadet) => c.id === body.cadet.id ? body.cadet : c);
+            localStorage.setItem('cadets', JSON.stringify(updated));
+            setCadets(updated);
+          } else {
+            fetchCadets();
+          }
+          toast.success('Cadet updated');
+          setEditOpen(false);
+          setEditingCadet(null);
+        } catch (err) {
+          console.error('Failed processing update response', err);
+        }
       }
     } catch (err) {
-      console.error('Error updating cadet:', err);
+      console.error('Edit cadet failed', err);
       toast.error('Failed to update cadet');
     } finally {
       setEditSubmitting(false);
     }
   };
-
   const confirmBulkRemove = async () => {
     if (bulkRemoveConfirmText !== 'DELETE') {
       toast.error('Type DELETE to confirm');
@@ -245,7 +347,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
       const results = await Promise.all(ids.map(async (id) => {
         try {
           const res = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/cadets/${id}`,
+            `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets/${id}`,
             { method: 'DELETE', headers: delHeaders }
           );
           return res.ok ? { id, ok: true } : { id, ok: false };
@@ -275,7 +377,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     const checked = selectedCadetIds.has(cadet.id);
 
     return (
-      <div ref={drag} className={`p-3 mb-2 bg-white rounded border flex justify-between items-center ${checked ? 'ring-2 ring-red-200' : ''}`}>
+      <div ref={drag as any} className={`p-3 mb-2 bg-white rounded border flex justify-between items-center ${checked ? 'ring-2 ring-red-200' : ''}`}>
         <div className="flex items-center gap-3">
           <Checkbox checked={checked} onCheckedChange={() => {
             const next = new Set(selectedCadetIds);
@@ -311,7 +413,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     }));
 
     return (
-      <div ref={drop} className="bg-blue-50 rounded p-3 min-h-[200px]">
+      <div ref={drop as any} className="bg-blue-50 rounded p-3 min-h-[200px]">
         <h4 className="font-semibold mb-2">{formatFlight(flight)} ({items.length})</h4>
         <div>
           {items.sort((a,b) => a.name.localeCompare(b.name)).map(c => (
@@ -327,29 +429,52 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     setSubmitting(true);
 
     try {
+      // If not signed in, create a local cadet immediately
+      if (!accessToken) {
+        const localCadet: Cadet = { id: `local_${Date.now()}_${Math.random().toString(36).slice(2,9)}`, name, flight, createdAt: new Date().toISOString() };
+        try {
+          const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
+          const merged = Array.isArray(existing) ? existing.concat(localCadet) : [localCadet];
+          localStorage.setItem('cadets', JSON.stringify(merged));
+          setCadets(merged);
+        } catch (err) {
+          console.error('Failed saving local cadet', err);
+        }
+        toast.success('Cadet added locally');
+        setName('');
+        setFlight('');
+        setOpen(false);
+        return;
+      }
+
       const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
       if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/cadets`,
-        {
-          method: 'POST',
-          headers: postHeaders,
-          body: JSON.stringify({
-            name,
-            flight,
-            joinDate: new Date(joinDate).toISOString(),
-          }),
-        }
-      );
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets`, {
+        method: 'POST', headers: postHeaders, body: JSON.stringify({ name, flight })
+      });
 
       if (response.ok) {
+        try {
+          const body = await response.json().catch(() => null);
+          if (body && body.cadet) {
+            const created = body.cadet as Cadet;
+            const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
+            const merged = Array.isArray(existing) ? existing.concat(created) : [created];
+            localStorage.setItem('cadets', JSON.stringify(merged));
+            setCadets(merged);
+          } else {
+            fetchCadets();
+          }
+        } catch (err) {
+          console.warn('Could not parse created cadet body:', err);
+          fetchCadets();
+        }
+
         toast.success('Cadet added successfully!');
         setName('');
         setFlight('');
-        setJoinDate(new Date().toISOString().split('T')[0]);
         setOpen(false);
-        fetchCadets();
       } else {
         const error = await response.json();
         toast.error(error.error || 'Failed to add cadet');
@@ -434,13 +559,17 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="cadet-flight">Flight</Label>
-                      <Input
-                        id="cadet-flight"
-                        placeholder="e.g., Alpha, Bravo, Charlie"
-                        value={flight}
-                        onChange={(e) => setFlight(e.target.value)}
-                        required
-                      />
+                      <Select value={flight} onValueChange={(v: any) => setFlight(v)}>
+                        <SelectTrigger id="cadet-flight">
+                          <SelectValue placeholder="Select flight" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">{formatFlight('1')}</SelectItem>
+                          <SelectItem value="2">{formatFlight('2')}</SelectItem>
+                          <SelectItem value="3">{formatFlight('3')}</SelectItem>
+                          <SelectItem value="4">{formatFlight('4')}</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
                   </div>
@@ -468,6 +597,10 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             <div className="ml-3">
               <Button variant="outline" onClick={() => csvInputRef.current?.click()}>Import CSV</Button>
             </div>
+            <div className="ml-2">
+              <Button variant="ghost" onClick={() => { setLoading(true); fetchCadets(); }}>Sync</Button>
+            </div>
+            
           </div>
         </CardHeader>
 
@@ -551,18 +684,18 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                       )}
 
                       <div className="mt-2 flex gap-2">
-                        <Button size="sm" onClick={() => confirmCsvImport()} disabled={csvImporting || !accessToken}>{csvImporting ? 'Importing...' : 'Confirm Import'}</Button>
+                        <Button size="sm" onClick={() => confirmCsvImport()} disabled={csvImporting}>{csvImporting ? 'Importing...' : 'Confirm Import'}</Button>
                         <Button size="sm" variant="outline" onClick={() => { setCsvPreviewEntries([]); setCsvPreviewOpen(false); setCsvImportFailures([]); }}>Cancel</Button>
                       </div>
 
-                      {!accessToken && <div className="text-xs text-yellow-700 mt-2">You must be signed in as staff/SNCO to import cadets.</div>}
+                      {!accessToken && <div className="text-xs text-yellow-700 mt-2">Not signed in: imported rows will be stored locally only.</div>}
 
                       {/* Edit Cadet Dialog (reused for editing) */}
                       <Dialog open={editOpen} onOpenChange={setEditOpen}>
                         <DialogContent>
                           <DialogHeader>
                             <DialogTitle>Edit Cadet</DialogTitle>
-                            <DialogDescription>Edit cadet name, flight and join date</DialogDescription>
+                            <DialogDescription>Edit cadet name and flight</DialogDescription>
                           </DialogHeader>
                           <form onSubmit={(e) => { e.preventDefault(); submitEditCadet(); }}>
                             <div className="space-y-3 py-2">
@@ -572,11 +705,17 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                               </div>
                               <div className="space-y-2">
                                 <Label>Flight</Label>
-                                <Input value={editFlight} onChange={(e) => setEditFlight(e.target.value)} required />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Join Date</Label>
-                                <Input type="date" value={editJoinDate ? editJoinDate.split('T')[0] : ''} onChange={(e) => setEditJoinDate(e.target.value)} />
+                                <Select value={editFlight} onValueChange={(v: any) => setEditFlight(v)}>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select flight" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="1">{formatFlight('1')}</SelectItem>
+                                    <SelectItem value="2">{formatFlight('2')}</SelectItem>
+                                    <SelectItem value="3">{formatFlight('3')}</SelectItem>
+                                    <SelectItem value="4">{formatFlight('4')}</SelectItem>
+                                  </SelectContent>
+                                </Select>
                               </div>
                             </div>
                             <DialogFooter>
@@ -617,3 +756,5 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     </div>
   );
 }
+ 
+

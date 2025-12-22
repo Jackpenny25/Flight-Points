@@ -1,34 +1,5 @@
-// Type declarations for File System Access API
-declare global {
-  interface Window {
-    showSaveFilePicker: (options?: {
-      suggestedName?: string;
-      types?: Array<{
-        description?: string;
-        accept: Record<string, string[]>;
-      }>;
-    }) => Promise<FileSystemFileHandle>;
-    showOpenFilePicker: (options?: {
-      multiple?: boolean;
-      types?: Array<{
-        description?: string;
-        accept: Record<string, string[]>;
-      }>;
-    }) => Promise<FileSystemFileHandle[]>;
-  }
-}
-
-interface FileSystemFileHandle {
-  createWritable: () => Promise<FileSystemWritableFileStream>;
-  getFile: () => Promise<File>;
-  kind: 'file';
-  name: string;
-}
-
-interface FileSystemWritableFileStream extends WritableStream {
-  write: (data: any) => Promise<void>;
-  close: () => Promise<void>;
-}
+// Note: Rely on lib.dom types for File System Access API when available.
+// In environments where these are missing, the code uses runtime feature detection.
 
 interface StoredFileMetadata {
   id: string;
@@ -38,6 +9,7 @@ interface StoredFileMetadata {
   lastModified: number;
   createdAt: string;
   metadata?: Record<string, any>;
+  path?: string;
 }
 
 // Check if the File System Access API is available
@@ -97,6 +69,7 @@ export const FileStorage = {
         name: fileHandle.name,
         type: file.type,
         size: file.size,
+        lastModified: (file as any).lastModified ?? Date.now(),
         path: fileHandle.name, // Note: Actual path isn't accessible due to security restrictions
         createdAt: new Date().toISOString(),
         metadata
@@ -230,7 +203,7 @@ export const FileStorage = {
   },
   
   // Get the file system handle for a file (if available)
-  async getFileHandle(fileId: string): Promise<FileSystemFileHandle | null> {
+  async getFileHandle(fileId: string): Promise<any | null> {
     if (!isFileSystemAccessAPIAvailable) return null;
     
     try {

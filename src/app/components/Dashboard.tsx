@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import TopNav from './TopNav';
 import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -25,17 +26,41 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
 
   const tabCount = 1 + (canGivePoints ? 2 : 0) + (canManageCadets ? 3 : 0);
 
+  const [activeTab, setActiveTab] = useState<string>('leaderboards');
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      try {
+        const detail = (e as CustomEvent).detail || {};
+        const tab = detail.tab as string | undefined;
+        if (!tab) return;
+
+        // verify permissions before switching
+        if (tab === 'points' && !canGivePoints) return;
+        if (tab === 'attendance' && !canGivePoints) return;
+        if ((tab === 'cadets' || tab === 'reports' || tab === 'integrity') && !canManageCadets) return;
+
+        setActiveTab(tab);
+      } catch (err) {
+        // ignore
+      }
+    };
+
+    window.addEventListener('navigateTab', handler as EventListener);
+    return () => window.removeEventListener('navigateTab', handler as EventListener);
+  }, [canGivePoints, canManageCadets]);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white shadow-md border-b-2 border-primary/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <Award className="size-8 text-blue-600" />
+            <div className="flex items-center gap-3">
+              <img src="/logo.png" alt="2427 Squadron" className="h-12 w-12 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
               <div>
-                <h1 className="text-xl font-bold text-gray-900">RAF Air Cadet Squadron</h1>
-                <p className="text-sm text-gray-500">Flight Points System</p>
+                <h1 className="text-xl font-bold text-primary">2427 (Biggin Hill) Squadron</h1>
+                <p className="text-sm text-muted-foreground">RAF Air Cadets - Flight Points</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -52,9 +77,16 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         </div>
       </header>
 
+      {/* taskbar below header */}
+      {userRole !== 'cadet' && (
+        <div className="mt-4">
+          <TopNav active={activeTab} onSelect={(t) => setActiveTab(t)} />
+        </div>
+      )}
+
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Tabs defaultValue="leaderboards" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v)} className="space-y-6">
           <TabsContent value="leaderboards">
             <Leaderboards accessToken={accessToken} />
           </TabsContent>

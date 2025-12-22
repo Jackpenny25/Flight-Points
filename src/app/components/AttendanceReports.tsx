@@ -42,7 +42,7 @@ export function AttendanceReports({ accessToken }: AttendanceReportsProps) {
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-73a3871f/attendance-summary`,
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/attendance-summary`,
         { headers }
       );
 
