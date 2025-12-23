@@ -50,6 +50,22 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     return () => window.removeEventListener('navigateTab', handler as EventListener);
   }, [canGivePoints, canManageCadets]);
 
+  // Admin unlock indicator + logo click unlock
+  const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
+    typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
+  );
+  const ADMIN_PIN = '5394';
+  const ensureAdminPin = () => {
+    if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
+    const pin = prompt('Enter 4-digit admin PIN');
+    if (pin === ADMIN_PIN) {
+      sessionStorage.setItem('adminPinVerified', 'true');
+      setAdminUnlocked(true);
+      return true;
+    }
+    return false;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50">
       {/* Header */}
@@ -57,11 +73,21 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="2427 Squadron" className="h-12 w-12 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+              <img
+                src="/logo.png"
+                alt="2427 Squadron"
+                className="h-12 w-12 object-contain cursor-pointer"
+                title="Click to unlock admin"
+                onClick={() => ensureAdminPin()}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
               <div>
                 <h1 className="text-xl font-bold text-primary">2427 (Biggin Hill) Squadron</h1>
                 <p className="text-sm text-muted-foreground">RAF Air Cadets - Flight Points</p>
               </div>
+              <span className={`text-xs px-2 py-1 rounded ml-2 ${adminUnlocked ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                {adminUnlocked ? 'Admin: Unlocked' : 'Admin: Locked'}
+              </span>
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
