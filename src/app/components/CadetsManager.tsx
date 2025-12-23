@@ -70,6 +70,15 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     return false;
   };
 
+  const unlockAdmin = () => {
+    ensureAdminPin();
+  };
+
+  const lockAdmin = () => {
+    sessionStorage.removeItem('adminPinVerified');
+    toast.success('Admin PIN cleared for this session');
+  };
+
   useEffect(() => {
     fetchCadets();
     
@@ -635,6 +644,12 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             </div>
             <div className="ml-2">
               <Button variant="ghost" onClick={() => { setLoading(true); fetchCadets(); }}>Sync</Button>
+            </div>
+            <div className="ml-2">
+              <Button variant="outline" size="sm" onClick={unlockAdmin}>Unlock Admin</Button>
+            </div>
+            <div className="ml-2">
+              <Button variant="outline" size="sm" onClick={lockAdmin}>Lock Admin</Button>
             </div>
             
           </div>

@@ -66,6 +66,15 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
     return false;
   };
 
+  const unlockAdmin = () => {
+    ensureAdminPin();
+  };
+
+  const lockAdmin = () => {
+    sessionStorage.removeItem('adminPinVerified');
+    toast.success('Admin PIN cleared for this session');
+  };
+
   useEffect(() => {
     fetchPoints();
     fetchCadets();
@@ -429,8 +438,16 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       {/* Add Points Form */}
       <Card>
         <CardHeader>
-          <CardTitle>Add Points</CardTitle>
-          <CardDescription>Award or deduct points for cadets (supports multiple names)</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Add Points</CardTitle>
+              <CardDescription>Award or deduct points for cadets (supports multiple names)</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={unlockAdmin}>Unlock Admin</Button>
+              <Button variant="outline" size="sm" onClick={lockAdmin}>Lock Admin</Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleAddPoints} className="space-y-4">
