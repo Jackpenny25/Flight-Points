@@ -900,6 +900,50 @@ Deno.serve(async (req: Request) => {
         }
       }
     }
+
+    // Handle leaderboards directly (bypass Hono)
+    if (pathname.includes('/leaderboards') && req.method === 'GET') {
+      try {
+        const points = await kv.getByPrefix('point:');
+        const cadetTotals: Record<string, number> = {};
+        const flightTotals: Record<string, number> = {};
+
+        points.forEach((point: any) => {
+          cadetTotals[point.cadetName] = (cadetTotals[point.cadetName] || 0) + point.points;
+          flightTotals[point.flight] = (flightTotals[point.flight] || 0) + point.points;
+        });
+
+        const cadetLeaderboard = Object.entries(cadetTotals)
+          .map(([name, pts]) => ({ name, points: pts }))
+          .sort((a, b) => b.points - a.points);
+
+        const flightLeaderboard = Object.entries(flightTotals)
+          .map(([flight, pts]) => ({ flight, points: pts }))
+          .sort((a, b) => b.points - a.points);
+
+        const recentPoints = points
+          .filter((p: any) => p.type !== 'attendance')
+          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .slice(0, 20);
+
+        return new Response(JSON.stringify({
+          cadetLeaderboard,
+          flightLeaderboard,
+          recentPoints,
+          winningCadet: cadetLeaderboard[0] || null,
+          winningFlight: flightLeaderboard[0] || null,
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.error('Leaderboards error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to fetch leaderboards', details: String(e) }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
     
     // Handle cadets endpoint directly (bypass Hono for now)
     if (pathname.includes('/cadets')) {
