@@ -90,6 +90,43 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
     }
   };
 
+  // Smart name matching: allows partial last names, handles siblings
+  const matchCadetByPartialName = (input: string): { cadet: any; ambiguous: boolean } | null => {
+    const inputLower = input.trim().toLowerCase();
+    
+    // First try exact match
+    const exactMatch = cadets.find(c => c.name.toLowerCase() === inputLower);
+    if (exactMatch) return { cadet: exactMatch, ambiguous: false };
+    
+    // Try matching by last name (first word of input)
+    const inputParts = inputLower.split(/\s+/);
+    const inputLastName = inputParts[0];
+    const inputFirstInitial = inputParts[1] || null;
+    
+    // Find all cadets whose name starts with the input last name
+    const matches = cadets.filter(c => {
+      const cadetNameLower = c.name.toLowerCase();
+      return cadetNameLower.startsWith(inputLastName);
+    });
+    
+    if (matches.length === 0) return null;
+    if (matches.length === 1) return { cadet: matches[0], ambiguous: false };
+    
+    // Multiple matches - check if first initial was provided
+    if (inputFirstInitial) {
+      const withInitial = matches.filter(c => {
+        const cadetParts = c.name.toLowerCase().split(/[\s-]+/);
+        // Check if any part after the first (first name or initials) starts with inputFirstInitial
+        return cadetParts.slice(1).some(part => part.startsWith(inputFirstInitial));
+      });
+      
+      if (withInitial.length === 1) return { cadet: withInitial[0], ambiguous: false };
+    }
+    
+    // Still ambiguous - siblings with same last name
+    return { cadet: matches[0], ambiguous: true };
+  };
+
   // Validate and parse names
   const validateNames = (namesInput: string) => {
     if (!namesInput.trim()) {
@@ -104,14 +141,29 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       .map(name => name.trim())
       .filter(name => name.length > 0);
 
-    // Check for duplicates
+    // Check for duplicates in input
     const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
     setDuplicateWarning(Array.from(new Set(duplicates)));
 
-    // Check if names exist in cadet list
-    const cadetNames = cadets.map(c => c.name.toLowerCase());
-    const invalid = names.filter(name => !cadetNames.includes(name.toLowerCase()));
-    setInvalidNames(invalid);
+    // Check if names can be matched to cadets
+    const invalid: string[] = [];
+    const ambiguous: string[] = [];
+    
+    names.forEach(name => {
+      const match = matchCadetByPartialName(name);
+      if (!match) {
+        invalid.push(name);
+      } else if (match.ambiguous) {
+        // Find all matches for this name to show in error
+        const inputLower = name.trim().toLowerCase();
+        const inputParts = inputLower.split(/\s+/);
+        const inputLastName = inputParts[0];
+        const siblings = cadets.filter(c => c.name.toLowerCase().startsWith(inputLastName));
+        ambiguous.push(`${name} (could be: ${siblings.map(s => s.name).join(', ')} - add first initial)`);
+      }
+    });
+    
+    setInvalidNames([...invalid, ...ambiguous]);
   };
 
   useEffect(() => {
@@ -133,7 +185,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
     }
 
     if (invalidNames.length > 0) {
-      toast.error(`Invalid names: ${invalidNames.join(', ')}`);
+      toast.error(`Invalid or ambiguous names - please fix before submitting`);
       return;
     }
 
@@ -145,8 +197,14 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
     setSubmitting(true);
 
     try {
-      // Submit points for each name
-      const promises = names.map(async (name) => {
+      // Match each input name to the full cadet name
+      const resolvedNames = names.map(name => {
+        const match = matchCadetByPartialName(name);
+        return match ? match.cadet.name : name; // Use full name from match
+      });
+
+      // Submit points for each resolved name
+      const promises = resolvedNames.map(async (name) => {
         const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
         if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
 
@@ -175,7 +233,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
 
       await Promise.all(promises);
       
-      toast.success(`Points added successfully for ${names.length} cadet(s)!`);
+      toast.success(`Points added successfully for ${resolvedNames.length} cadet(s)!`);
       setMultipleNames('');
       setSelectedFlight('');
       setPointValue('');
