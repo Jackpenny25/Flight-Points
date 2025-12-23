@@ -846,6 +846,38 @@ Deno.serve(async (req: Request) => {
       }
     }
     
+    // Handle points endpoint directly (bypass Hono)
+    if (pathname.includes('/points') && req.method === 'POST') {
+      try {
+        const body = await req.json();
+        const { cadetName, points, type, reason, flight } = body;
+        
+        const id = crypto.randomUUID();
+        const entry = {
+          id,
+          cadetName,
+          points: Number(points),
+          type: type || 'general',
+          reason: reason || '',
+          flight: flight || 'unknown',
+          date: new Date().toISOString(),
+        };
+        
+        await kv.set(`point:${id}`, entry);
+        
+        return new Response(JSON.stringify(entry), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.error('Points error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to add points', details: String(e) }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
+    
     // Handle cadets endpoint directly (bypass Hono for now)
     if (pathname.includes('/cadets')) {
       if (req.method === 'GET') {
