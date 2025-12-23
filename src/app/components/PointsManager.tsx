@@ -92,6 +92,8 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
 
   // Smart name matching: allows partial last names, handles siblings
   const matchCadetByPartialName = (input: string): { cadet: any; ambiguous: boolean } | null => {
+    if (cadets.length === 0) return null; // No cadets loaded yet
+    
     const inputLower = input.trim().toLowerCase();
     
     // First try exact match
@@ -121,6 +123,10 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       });
       
       if (withInitial.length === 1) return { cadet: withInitial[0], ambiguous: false };
+      if (withInitial.length > 1) {
+        // Still multiple matches even with initial - return as ambiguous
+        return { cadet: withInitial[0], ambiguous: true };
+      }
     }
     
     // Still ambiguous - siblings with same last name
@@ -135,11 +141,16 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       return;
     }
 
+    console.log('[PointsManager] Validating, total cadets:', cadets.length);
+    console.log('[PointsManager] Cadet names:', cadets.map(c => c.name).join(', '));
+
     // Split by commas or newlines
     const names = namesInput
       .split(/[,\n]/)
       .map(name => name.trim())
       .filter(name => name.length > 0);
+
+    console.log('[PointsManager] Names to validate:', names);
 
     // Check for duplicates in input
     const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
@@ -151,6 +162,8 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
     
     names.forEach(name => {
       const match = matchCadetByPartialName(name);
+      console.log(`[PointsManager] Match result for "${name}":`, match);
+      
       if (!match) {
         invalid.push(name);
       } else if (match.ambiguous) {
@@ -162,6 +175,9 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
         ambiguous.push(`${name} (could be: ${siblings.map(s => s.name).join(', ')} - add first initial)`);
       }
     });
+    
+    console.log('[PointsManager] Invalid names:', invalid);
+    console.log('[PointsManager] Ambiguous names:', ambiguous);
     
     setInvalidNames([...invalid, ...ambiguous]);
   };
