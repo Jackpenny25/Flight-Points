@@ -847,34 +847,57 @@ Deno.serve(async (req: Request) => {
     }
     
     // Handle points endpoint directly (bypass Hono)
-    if (pathname.includes('/points') && req.method === 'POST') {
-      try {
-        const body = await req.json();
-        const { cadetName, points, type, reason, flight } = body;
-        
-        const id = crypto.randomUUID();
-        const entry = {
-          id,
-          cadetName,
-          points: Number(points),
-          type: type || 'general',
-          reason: reason || '',
-          flight: flight || 'unknown',
-          date: new Date().toISOString(),
-        };
-        
-        await kv.set(`point:${id}`, entry);
-        
-        return new Response(JSON.stringify(entry), {
-          status: 201,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        });
-      } catch (e) {
-        console.error('Points error:', e);
-        return new Response(JSON.stringify({ error: 'Failed to add points', details: String(e) }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        });
+    if (pathname.includes('/points')) {
+      if (req.method === 'GET') {
+        try {
+          const points = await kv.getByPrefix('point:');
+          const sorted = (points || []).sort((a, b) => {
+            const aDate = new Date(a.date || 0).getTime();
+            const bDate = new Date(b.date || 0).getTime();
+            return bDate - aDate;
+          });
+          return new Response(JSON.stringify(sorted.slice(0, 50)), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        } catch (e) {
+          console.error('Points list error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to fetch points', details: String(e) }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+      }
+      
+      if (req.method === 'POST') {
+        try {
+          const body = await req.json();
+          const { cadetName, points, type, reason, flight } = body;
+          
+          const id = crypto.randomUUID();
+          const entry = {
+            id,
+            cadetName,
+            points: Number(points),
+            type: type || 'general',
+            reason: reason || '',
+            flight: flight || 'unknown',
+            date: new Date().toISOString(),
+          };
+          
+          await kv.set(`point:${id}`, entry);
+          
+          return new Response(JSON.stringify(entry), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        } catch (e) {
+          console.error('Points error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to add points', details: String(e) }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
       }
     }
     
