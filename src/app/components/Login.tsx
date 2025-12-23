@@ -1,3 +1,4 @@
+  // Role is no longer self-assigned during signup
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
@@ -6,7 +7,6 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const supabase = createClient(
   `https://${projectId}.supabase.co`,
@@ -21,9 +21,9 @@ export function Login({ onLogin }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState('cadet');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [info, setInfo] = useState('');
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,44 +56,29 @@ export function Login({ onLogin }: LoginProps) {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setInfo('');
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/signup`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({ email, password, name, role }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        setError(result.error || 'Failed to sign up');
-        setLoading(false);
-        return;
-      }
-
-      // Auto sign in after signup
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const functionBase = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f`;
+      const response = await fetch(`${functionBase}/auth/request-signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ email, password, name }),
       });
-
-      if (signInError) {
-        setError('Account created but failed to sign in. Please try signing in manually.');
+      const result = await response.json();
+      if (!response.ok) {
+        setError(result.error || 'Failed to submit signup request');
         setLoading(false);
         return;
       }
-
-      if (data.session) {
-        onLogin(data.session.access_token, data.user);
-      }
+      setInfo('Signup request sent. Ask an SNCO to approve your access and assign a role.');
+      setName('');
+      setEmail('');
+      setPassword('');
     } catch (err: any) {
       console.error('Sign up error:', err);
       setError('Failed to sign up. Please try again.');
@@ -192,23 +177,15 @@ export function Login({ onLogin }: LoginProps) {
                     minLength={6}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-role">Role</Label>
-                  <Select value={role} onValueChange={setRole}>
-                    <SelectTrigger id="signup-role">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cadet">Cadet</SelectItem>
-                      <SelectItem value="pointgiver">Point Giver</SelectItem>
-                      <SelectItem value="snco">SNCO</SelectItem>
-                      <SelectItem value="staff">Staff</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Role selection removed; SNCOs will assign upon approval */}
                 {error && (
                   <div className="text-sm text-red-600 bg-red-50 p-3 rounded">
                     {error}
+                  </div>
+                )}
+                {info && (
+                  <div className="text-sm text-green-700 bg-green-50 p-3 rounded">
+                    {info}
                   </div>
                 )}
                 <Button type="submit" className="w-full" disabled={loading}>

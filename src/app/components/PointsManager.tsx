@@ -433,7 +433,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className={`grid gap-6 ${(userRole === 'snco' || userRole === 'staff') ? 'md:grid-cols-2' : 'max-w-2xl mx-auto'}`}>
       {/* Add Points Form */}
       <Card>
         <CardHeader>
@@ -442,14 +442,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
               <CardTitle>Add Points</CardTitle>
               <CardDescription>Award or deduct points for cadets (supports multiple names)</CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={handleLogoClick}>
-                <span className="font-bold tracking-wider">2427</span>
-              </Button>
-              <span className={`text-xs px-2 py-1 rounded ${adminUnlocked ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                {adminUnlocked ? 'Admin: Unlocked' : 'Admin: Locked'}
-              </span>
-            </div>
+            {/* Admin controls removed; use header logo as unlock indicator */}
           </div>
         </CardHeader>
         <CardContent>
@@ -554,7 +547,8 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
         </CardContent>
       </Card>
 
-      {/* Recent Points */}
+      {/* Recent Points - SNCO/Staff only */}
+      {(userRole === 'snco' || userRole === 'staff') && (
       <Card>
         <CardHeader>
           <CardTitle>Recent Points</CardTitle>
@@ -688,6 +682,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
           )}
         </CardContent>
       </Card>
+      )}
       </div>
 
       {canAdmin && (

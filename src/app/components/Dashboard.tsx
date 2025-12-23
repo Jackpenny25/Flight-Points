@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
 import TopNav from './TopNav';
 import { Button } from './ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
+import { Input } from './ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileSpreadsheet } from 'lucide-react';
 import { PointsManager } from './PointsManager';
 import { Leaderboards } from './Leaderboards';
+import { AdminPointGivers } from './AdminPointGivers';
 import { CadetsManager } from './CadetsManager';
 import { AttendanceManager } from './AttendanceManager';
 import { DataIntegrity } from './DataIntegrity';
 import { ReportsExport } from './ReportsExport';
+import { projectId } from '../../../utils/supabase/info';
 
 interface DashboardProps {
   user: any;
@@ -24,9 +28,10 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const canGivePoints = userRole === 'pointgiver' || userRole === 'snco' || userRole === 'staff';
   const canManageCadets = userRole === 'snco' || userRole === 'staff';
 
-  const tabCount = 1 + (canGivePoints ? 2 : 0) + (canManageCadets ? 3 : 0);
+  // tabCount not currently used; remove to avoid premature reference
 
   const [activeTab, setActiveTab] = useState<string>('leaderboards');
+  const [adminPendingCount, setAdminPendingCount] = useState<number>(0);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -55,16 +60,56 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
   );
   const ADMIN_PIN = '5394';
-  const ensureAdminPin = () => {
-    if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
-    const pin = prompt('Enter 4-digit admin PIN');
-    if (pin === ADMIN_PIN) {
+  const [pinDialogOpen, setPinDialogOpen] = useState<boolean>(false);
+  const [pinInput, setPinInput] = useState<string>('');
+  const [pinError, setPinError] = useState<string>('');
+
+  const openPinDialog = () => {
+    if (adminUnlocked) return;
+    setPinError('');
+    setPinInput('');
+    setPinDialogOpen(true);
+  };
+
+  const lockAdmin = () => {
+    if (!adminUnlocked) return;
+    sessionStorage.removeItem('adminPinVerified');
+    setAdminUnlocked(false);
+  };
+
+  const submitPin = () => {
+    if (pinInput === ADMIN_PIN) {
       sessionStorage.setItem('adminPinVerified', 'true');
       setAdminUnlocked(true);
-      return true;
+      setPinDialogOpen(false);
+      setPinError('');
+      setPinInput('');
+    } else {
+      setPinError('Incorrect PIN');
     }
-    return false;
   };
+
+  // Poll pending signup requests count for SNCO/Staff to show a badge on the NCO's tab
+  useEffect(() => {
+    if (!canManageCadets) return;
+    const url = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests-count`;
+    let timer: any;
+    const fetchCount = async () => {
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          }
+        });
+        const data = await res.json();
+        if (typeof data.count === 'number') setAdminPendingCount(data.count);
+      } catch {}
+    };
+    fetchCount();
+    timer = setInterval(fetchCount, 20000);
+    return () => clearInterval(timer);
+  }, [canManageCadets, accessToken]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50">
@@ -74,20 +119,40 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
               <img
-                src="/logo.png"
+                src={adminUnlocked ? '/logo-black.jpg' : '/logo.png'}
                 alt="2427 Squadron"
                 className="h-12 w-12 object-contain cursor-pointer"
-                title="Click to unlock admin"
-                onClick={() => ensureAdminPin()}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                title={adminUnlocked ? 'Click to lock admin' : 'Click to unlock admin'}
+                onClick={() => (adminUnlocked ? lockAdmin() : openPinDialog())}
+                onError={(e) => {
+                  const step = e.currentTarget.getAttribute('data-failed') || '';
+                  if (adminUnlocked) {
+                    // Try JPG → JPEG → PNG → regular logo
+                    if (step === '') {
+                      e.currentTarget.setAttribute('data-failed', 'jpg');
+                      e.currentTarget.src = '/logo-black.jpeg';
+                      return;
+                    }
+                    if (step === 'jpg') {
+                      e.currentTarget.setAttribute('data-failed', 'jpeg');
+                      e.currentTarget.src = '/logo-black.png';
+                      return;
+                    }
+                    if (step === 'jpeg') {
+                      e.currentTarget.setAttribute('data-failed', 'png');
+                      e.currentTarget.src = '/logo.png';
+                      return;
+                    }
+                  }
+                  // Hide if all fallbacks fail
+                  e.currentTarget.style.display = 'none';
+                }}
               />
               <div>
                 <h1 className="text-xl font-bold text-primary">2427 (Biggin Hill) Squadron</h1>
                 <p className="text-sm text-muted-foreground">RAF Air Cadets - Flight Points</p>
               </div>
-              <span className={`text-xs px-2 py-1 rounded ml-2 ${adminUnlocked ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                {adminUnlocked ? 'Admin: Unlocked' : 'Admin: Locked'}
-              </span>
+              {/* Admin text indicator removed; logo color indicates unlock state */}
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
@@ -103,10 +168,42 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         </div>
       </header>
 
+      {/* Admin PIN Dialog */}
+      <Dialog open={pinDialogOpen} onOpenChange={setPinDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Admin Unlock</DialogTitle>
+            <DialogDescription>Enter the 4-digit admin PIN to unlock actions.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value)}
+              placeholder="PIN"
+              maxLength={4}
+              inputMode="numeric"
+              autoFocus
+            />
+            {pinError && <p className="text-sm text-red-600">{pinError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPinDialogOpen(false)}>Cancel</Button>
+            <Button onClick={submitPin}>Unlock</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* taskbar below header */}
       {userRole !== 'cadet' && (
         <div className="mt-4">
-          <TopNav active={activeTab} onSelect={(t) => setActiveTab(t)} />
+          <TopNav 
+            active={activeTab} 
+            onSelect={(t) => setActiveTab(t)} 
+            showAdmin={canManageCadets && adminUnlocked}
+            canGivePoints={canGivePoints}
+            canManageCadets={canManageCadets}
+            adminPendingCount={adminUnlocked && canManageCadets ? adminPendingCount : 0}
+          />
         </div>
       )}
 
@@ -142,46 +239,16 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               <TabsContent value="integrity">
                 <DataIntegrity accessToken={accessToken} />
               </TabsContent>
+
+              {adminUnlocked && (
+                <TabsContent value="admin">
+                  <AdminPointGivers accessToken={accessToken} />
+                </TabsContent>
+              )}
             </>
           )}
 
-          {/* centered tab triggers underneath the content */}
-          <div className="flex justify-center mt-6">
-            <TabsList className="flex items-center gap-3">
-              <TabsTrigger value="leaderboards">
-                <TrendingUp className="size-4 mr-2" />
-                Leaderboards
-              </TabsTrigger>
-              {canGivePoints && (
-                <>
-                  <TabsTrigger value="points">
-                    <Award className="size-4 mr-2" />
-                    Points
-                  </TabsTrigger>
-                  <TabsTrigger value="attendance">
-                    <CalendarDays className="size-4 mr-2" />
-                    Attendance
-                  </TabsTrigger>
-                </>
-              )}
-              {canManageCadets && (
-                <>
-                  <TabsTrigger value="cadets">
-                    <Users className="size-4 mr-2" />
-                    Cadets
-                  </TabsTrigger>
-                  <TabsTrigger value="reports">
-                    <FileSpreadsheet className="size-4 mr-2" />
-                    Reports
-                  </TabsTrigger>
-                  <TabsTrigger value="integrity">
-                    <Shield className="size-4 mr-2" />
-                    Integrity
-                  </TabsTrigger>
-                </>
-              )}
-            </TabsList>
-          </div>
+          {/* bottom tab triggers removed; use TopNav above */}
         </Tabs>
       </main>
     </div>

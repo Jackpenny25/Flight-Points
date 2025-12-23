@@ -645,14 +645,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             <div className="ml-2">
               <Button variant="ghost" onClick={() => { setLoading(true); fetchCadets(); }}>Sync</Button>
             </div>
-            <div className="ml-2 flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={handleLogoClick}>
-                <span className="font-bold tracking-wider">2427</span>
-              </Button>
-              <span className={`text-xs px-2 py-1 rounded ${adminUnlocked ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                {adminUnlocked ? 'Admin: Unlocked' : 'Admin: Locked'}
-              </span>
-            </div>
+            {/* Admin controls removed; use header logo as unlock indicator */}
             
           </div>
         </CardHeader>

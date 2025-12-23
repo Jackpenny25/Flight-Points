@@ -658,10 +658,10 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
   };
 
   return (
-    <div className="grid gap-6 md:grid-cols-3">
+    <div className={`space-y-6 ${(userRole === 'snco' || userRole === 'staff') ? 'grid gap-6 md:grid-cols-3' : ''}`}>
 
       {/* Bulk Attendance (for large groups) */}
-      <Card className="md:col-span-2">
+      <Card className={(userRole === 'snco' || userRole === 'staff') ? 'md:col-span-2' : 'max-w-4xl mx-auto'}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UserCheck className="size-5" />
@@ -874,7 +874,8 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
 
 
 
-      {/* Recent Attendance */}
+      {/* Recent Attendance - SNCO/Staff only */}
+      {(userRole === 'snco' || userRole === 'staff') && (
       <Card>
         <CardHeader>
           <CardTitle>Recent Attendance</CardTitle>
@@ -910,6 +911,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

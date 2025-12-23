@@ -26,10 +26,7 @@ app.get("/", (c) => {
   return c.json({ message: "Hono server is running", routes: ["health", "cadets", "points", "attendance"] });
 });
 
-// Catch-all for debugging
-app.all("*", (c) => {
-  return c.json({ error: "Route not found", path: c.req.path, method: c.req.method }, 404);
-});
+// Catch-all removed: defined routes must take precedence
 
 // Health check endpoint
 app.get("/make-server-73a3871f/health", (c) => {
@@ -806,6 +803,178 @@ Deno.serve(async (req: Request) => {
         },
       });
     }
+
+    // Direct: Auth signup (redundant path to ensure availability)
+    if (pathname.includes('/auth/signup') && req.method === 'POST') {
+      try {
+        const body = await req.json();
+        const { email, password, name, role } = body || {};
+        if (!email || !password) {
+          return new Response(JSON.stringify({ error: 'Email and password are required' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        );
+        const { data, error } = await supabase.auth.admin.createUser({
+          email,
+          password,
+          user_metadata: { name, role: role || 'cadet' },
+          email_confirm: true,
+        });
+        if (error) {
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+        return new Response(JSON.stringify({ user: data.user }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.error('Signup error:', e);
+        return new Response(JSON.stringify({ error: 'Internal server error during signup' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
+
+    // Collect signup requests (no immediate account creation)
+    if (pathname.includes('/auth/request-signup') && req.method === 'POST') {
+      try {
+        const body = await req.json();
+        const { email, password, name } = body || {};
+        if (!email || !password || !name) {
+          return new Response(JSON.stringify({ error: 'Name, email and password are required' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+        const id = crypto.randomUUID();
+        const rec = { id, email, name, password, status: 'pending', createdAt: new Date().toISOString() };
+        await kv.set(`signup:${id}`, rec);
+        return new Response(JSON.stringify({ request: { id, email, name, status: 'pending' } }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.error('Request-signup error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to create signup request' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
+
+    // List signup requests (SNCO/Staff only)
+    if (pathname.includes('/auth/requests') && req.method === 'GET') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        );
+        const { data: { user }, error } = await supabase.auth.getUser(accessToken);
+        if (error || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const role = (user.user_metadata?.role || '').toLowerCase();
+        if (role !== 'snco' && role !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const items = await kv.getByPrefix('signup:');
+        const list = (items || []).map((r: any) => ({ id: r.id, email: r.email, name: r.name, status: r.status, createdAt: r.createdAt }));
+        return new Response(JSON.stringify({ requests: list }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to fetch requests' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
+
+    // Count signup requests
+    if (pathname.includes('/auth/requests-count') && req.method === 'GET') {
+      try {
+        const items = await kv.getByPrefix('signup:');
+        return new Response(JSON.stringify({ count: (items || []).length }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ count: 0 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
+
+    // Approve signup request (SNCO/Staff) -> create user
+    if (pathname.match(/\/auth\/requests\/[^/]+\/approve$/) && req.method === 'POST') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const sb = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        );
+        const { data: { user: approver }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !approver) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const approverRole = (approver.user_metadata?.role || '').toLowerCase();
+        if (approverRole !== 'snco' && approverRole !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const id = pathname.split('/').slice(-2, -1)[0];
+        const body = await req.json();
+        const role = (body?.role || 'cadet').toLowerCase();
+        const rec = await kv.get(`signup:${id}`);
+        if (!rec) {
+          return new Response(JSON.stringify({ error: 'Request not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        );
+        const { data, error } = await supabase.auth.admin.createUser({
+          email: rec.email,
+          password: rec.password,
+          user_metadata: { name: rec.name, role },
+          email_confirm: true,
+        });
+        if (error) {
+          return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+        await kv.del(`signup:${id}`);
+        return new Response(JSON.stringify({ user: data.user }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        console.error('Approve error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to approve request' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Reject/delete signup request
+    if (pathname.match(/\/auth\/requests\/[^/]+$/) && req.method === 'DELETE') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const sb = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        );
+        const { data: { user: approver }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !approver) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const approverRole = (approver.user_metadata?.role || '').toLowerCase();
+        if (approverRole !== 'snco' && approverRole !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const id = pathname.split('/').pop()!;
+        await kv.del(`signup:${id}`);
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to delete request' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
     
     // Clear all cadets (emergency reset)
     if (pathname.includes('/cadets/clear-all') && req.method === 'POST') {
@@ -1027,6 +1196,98 @@ Deno.serve(async (req: Request) => {
       } catch (e) {
         console.error('Leaderboards error:', e);
         return new Response(JSON.stringify({ error: 'Failed to fetch leaderboards', details: String(e) }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
+
+    // Admin: point givers summary (read-only)
+    if (pathname.includes('/admin/point-givers') && req.method === 'GET') {
+      try {
+        const points = await kv.getByPrefix('point:');
+        const attendance = await kv.getByPrefix('attendance:');
+
+        const contributors: Record<string, any> = {};
+
+        // Aggregate points by givenBy
+        for (const p of points) {
+          const key = (p.givenBy || 'Unknown').trim();
+          if (!contributors[key]) {
+            contributors[key] = {
+              name: key,
+              totalPointsGiven: 0,
+              totalPointEntries: 0,
+              lastPointAt: null as string | null,
+              recentPoints: [] as any[],
+              totalAttendanceSubmitted: 0,
+              lastAttendanceAt: null as string | null,
+            };
+          }
+          contributors[key].totalPointsGiven += Number(p.points || 0);
+          contributors[key].totalPointEntries += 1;
+          const d = p.date || p.createdAt || null;
+          if (d && (!contributors[key].lastPointAt || new Date(d).getTime() > new Date(contributors[key].lastPointAt!).getTime())) {
+            contributors[key].lastPointAt = d;
+          }
+          // collect recent points per contributor (limit later)
+          contributors[key].recentPoints.push({
+            id: p.id,
+            cadetName: p.cadetName,
+            flight: p.flight,
+            points: p.points,
+            type: p.type,
+            reason: p.reason,
+            date: p.date,
+          });
+        }
+
+        // Aggregate attendance by submittedBy
+        for (const a of attendance) {
+          const key = (a.submittedBy || 'Unknown').trim();
+          if (!contributors[key]) {
+            contributors[key] = {
+              name: key,
+              totalPointsGiven: 0,
+              totalPointEntries: 0,
+              lastPointAt: null as string | null,
+              recentPoints: [] as any[],
+              totalAttendanceSubmitted: 0,
+              lastAttendanceAt: null as string | null,
+            };
+          }
+          contributors[key].totalAttendanceSubmitted += 1;
+          const d = a.date || a.createdAt || null;
+          if (d && (!contributors[key].lastAttendanceAt || new Date(d).getTime() > new Date(contributors[key].lastAttendanceAt!).getTime())) {
+            contributors[key].lastAttendanceAt = d;
+          }
+        }
+
+        // Finalize recent points per contributor: sort by date desc and limit 5
+        Object.values(contributors).forEach((c: any) => {
+          c.recentPoints = (c.recentPoints || [])
+            .sort((x: any, y: any) => new Date(y.date || 0).getTime() - new Date(x.date || 0).getTime())
+            .slice(0, 5);
+        });
+
+        // Global recent points (non-attendance) top 20
+        const recentPointsGlobal = (points || [])
+          .filter((p: any) => p.type !== 'attendance')
+          .sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+          .slice(0, 20);
+
+        // Convert contributors map to array and sort by totalPointsGiven desc
+        const list = Object.values(contributors)
+          .map((c: any) => c)
+          .sort((a: any, b: any) => b.totalPointsGiven - a.totalPointsGiven);
+
+        return new Response(JSON.stringify({ contributors: list, recentPointsGlobal }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.error('Admin point-givers error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to fetch point givers', details: String(e) }), {
           status: 500,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
