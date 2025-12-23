@@ -514,12 +514,32 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
 
   const fetchAttendance = async () => {
     try {
-      // Get attendance records from localStorage
-      const attendanceData = JSON.parse(localStorage.getItem('attendance') || '[]');
-      setAttendance(attendanceData);
+      // Fetch from server instead of localStorage
+      const headers: Record<string, string> = {};
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/attendance`,
+        { headers }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const attendanceData = data.attendance || [];
+        setAttendance(attendanceData);
+        // Also save to localStorage for offline access
+        try { localStorage.setItem('attendance', JSON.stringify(attendanceData)); } catch (e) { /* noop */ }
+      } else {
+        // Fallback to localStorage if server fails
+        const localData = JSON.parse(localStorage.getItem('attendance') || '[]');
+        setAttendance(localData);
+      }
     } catch (error) {
-      console.error('Error fetching attendance from localStorage:', error);
-      toast.error('Failed to load attendance records from local storage');
+      console.error('Error fetching attendance:', error);
+      // Fallback to localStorage
+      const localData = JSON.parse(localStorage.getItem('attendance') || '[]');
+      setAttendance(localData);
+      toast.error('Failed to load attendance records from server, using local data');
     } finally {
       setLoading(false);
     }
