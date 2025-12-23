@@ -27,6 +27,8 @@ interface CadetsManagerProps {
 }
 
 export function CadetsManager({ accessToken }: CadetsManagerProps) {
+  const ADMIN_PIN = '5394';
+
   const [cadets, setCadets] = useState<Cadet[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -55,6 +57,18 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   const [editName, setEditName] = useState('');
   const [editFlight, setEditFlight] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
+
+  const ensureAdminPin = () => {
+    if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
+    const pin = prompt('Enter 4-digit admin PIN');
+    if (pin === ADMIN_PIN) {
+      sessionStorage.setItem('adminPinVerified', 'true');
+      toast.success('Admin PIN accepted');
+      return true;
+    }
+    toast.error('Incorrect PIN');
+    return false;
+  };
 
   useEffect(() => {
     fetchCadets();
@@ -145,6 +159,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   };
 
   const confirmCsvImport = async (entries?: Array<{ name: string; flight: string }>) => {
+    if (!ensureAdminPin()) return;
     const rows = entries || csvPreviewEntries;
     setCsvImporting(true);
 
@@ -240,6 +255,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   };
 
   const handleMoveCadet = async (cadetId: string, newFlight: string) => {
+    if (!ensureAdminPin()) return;
     try {
       // Get existing cadets from local storage
       const existingCadets = JSON.parse(localStorage.getItem('cadets') || '[]');
@@ -270,6 +286,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   };
 
   const submitEditCadet = async () => {
+    if (!ensureAdminPin()) return;
     if (!editingCadet) return;
     setEditSubmitting(true);
 
@@ -326,6 +343,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     }
   };
   const confirmBulkRemove = async () => {
+    if (!ensureAdminPin()) return;
     if (bulkRemoveConfirmText !== 'DELETE') {
       toast.error('Type DELETE to confirm');
       return;
@@ -488,6 +506,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   };
 
   const handleDeleteCadet = async (cadetId: string, cadetName: string) => {
+    if (!ensureAdminPin()) return;
     if (!confirm(`Are you sure you want to remove ${cadetName} from the system?`)) {
       return;
     }

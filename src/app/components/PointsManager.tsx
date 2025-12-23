@@ -30,6 +30,8 @@ interface PointsManagerProps {
 }
 
 export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
+  const ADMIN_PIN = '5394';
+
   const [points, setPoints] = useState<Point[]>([]);
   const [cadets, setCadets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +53,18 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
     type: 'general',
     flight: '',
   });
+
+  const ensureAdminPin = () => {
+    if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
+    const pin = prompt('Enter 4-digit admin PIN');
+    if (pin === ADMIN_PIN) {
+      sessionStorage.setItem('adminPinVerified', 'true');
+      toast.success('Admin PIN accepted');
+      return true;
+    }
+    toast.error('Incorrect PIN');
+    return false;
+  };
 
   useEffect(() => {
     fetchPoints();
@@ -275,6 +289,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
   };
 
   const handleDeletePoint = async (pointId: string) => {
+    if (!ensureAdminPin()) return;
     if (!confirm('Are you sure you want to delete this point entry?')) {
       return;
     }
@@ -316,6 +331,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
   };
 
   const handleUpdatePoint = async () => {
+    if (!ensureAdminPin()) return;
     if (!editingId) return;
     if (editValues.points === '') {
       toast.error('Points value is required');
@@ -356,6 +372,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
   };
 
   const handleClearCadetPoints = async (cadetName: string) => {
+    if (!ensureAdminPin()) return;
     if (!confirm(`Clear all points for ${cadetName}?`)) return;
 
     try {
