@@ -28,6 +28,9 @@ interface CadetsManagerProps {
 
 export function CadetsManager({ accessToken }: CadetsManagerProps) {
   const ADMIN_PIN = '5394';
+  const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
+    typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
+  );
 
   const [cadets, setCadets] = useState<Cadet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +66,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     const pin = prompt('Enter 4-digit admin PIN');
     if (pin === ADMIN_PIN) {
       sessionStorage.setItem('adminPinVerified', 'true');
+      setAdminUnlocked(true);
       toast.success('Admin PIN accepted');
       return true;
     }
@@ -70,13 +74,9 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     return false;
   };
 
-  const unlockAdmin = () => {
+  const handleLogoClick = () => {
+    // Clicking the 2427 logo prompts to unlock admin
     ensureAdminPin();
-  };
-
-  const lockAdmin = () => {
-    sessionStorage.removeItem('adminPinVerified');
-    toast.success('Admin PIN cleared for this session');
   };
 
   useEffect(() => {
@@ -645,11 +645,13 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             <div className="ml-2">
               <Button variant="ghost" onClick={() => { setLoading(true); fetchCadets(); }}>Sync</Button>
             </div>
-            <div className="ml-2">
-              <Button variant="outline" size="sm" onClick={unlockAdmin}>Unlock Admin</Button>
-            </div>
-            <div className="ml-2">
-              <Button variant="outline" size="sm" onClick={lockAdmin}>Lock Admin</Button>
+            <div className="ml-2 flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={handleLogoClick}>
+                <span className="font-bold tracking-wider">2427</span>
+              </Button>
+              <span className={`text-xs px-2 py-1 rounded ${adminUnlocked ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                {adminUnlocked ? 'Admin: Unlocked' : 'Admin: Locked'}
+              </span>
             </div>
             
           </div>

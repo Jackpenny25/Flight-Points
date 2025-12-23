@@ -31,6 +31,9 @@ interface PointsManagerProps {
 
 export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
   const ADMIN_PIN = '5394';
+  const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
+    typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
+  );
 
   const [points, setPoints] = useState<Point[]>([]);
   const [cadets, setCadets] = useState<any[]>([]);
@@ -59,6 +62,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
     const pin = prompt('Enter 4-digit admin PIN');
     if (pin === ADMIN_PIN) {
       sessionStorage.setItem('adminPinVerified', 'true');
+      setAdminUnlocked(true);
       toast.success('Admin PIN accepted');
       return true;
     }
@@ -66,13 +70,8 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
     return false;
   };
 
-  const unlockAdmin = () => {
+  const handleLogoClick = () => {
     ensureAdminPin();
-  };
-
-  const lockAdmin = () => {
-    sessionStorage.removeItem('adminPinVerified');
-    toast.success('Admin PIN cleared for this session');
   };
 
   useEffect(() => {
@@ -444,8 +443,12 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
               <CardDescription>Award or deduct points for cadets (supports multiple names)</CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={unlockAdmin}>Unlock Admin</Button>
-              <Button variant="outline" size="sm" onClick={lockAdmin}>Lock Admin</Button>
+              <Button variant="ghost" size="sm" onClick={handleLogoClick}>
+                <span className="font-bold tracking-wider">2427</span>
+              </Button>
+              <span className={`text-xs px-2 py-1 rounded ${adminUnlocked ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                {adminUnlocked ? 'Admin: Unlocked' : 'Admin: Locked'}
+              </span>
             </div>
           </div>
         </CardHeader>
