@@ -887,7 +887,7 @@ Deno.serve(async (req: Request) => {
           const id = deleteMatch[1];
           try {
             console.log('Deleting cadet:', id);
-            await kv.delete(`cadet:${id}`);
+            await kv.del(`cadet:${id}`);
             console.log('Successfully deleted:', id);
             return new Response(JSON.stringify({ success: true }), {
               status: 200,

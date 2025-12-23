@@ -493,13 +493,30 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     }
 
     try {
-      // Get existing cadets from local storage
+      // Delete from server first
+      const delHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) delHeaders['Authorization'] = `Bearer ${accessToken}`;
+      else delHeaders['Authorization'] = `Bearer ${publicAnonKey}`;
+      
+      const deleteRes = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets/${cadetId}`,
+        { method: 'DELETE', headers: delHeaders }
+      );
+
+      console.log('Delete response:', deleteRes.status, deleteRes.ok);
+      
+      if (!deleteRes.ok) {
+        const errBody = await deleteRes.text();
+        console.error('Server delete failed:', deleteRes.status, errBody);
+        toast.warning('Could not sync deletion to server, deleting locally only');
+      } else {
+        const delBody = await deleteRes.json();
+        console.log('Delete success:', delBody);
+      }
+
+      // Delete from local storage
       const existingCadets = JSON.parse(localStorage.getItem('cadets') || '[]');
-      
-      // Filter out the cadet to be deleted
       const updatedCadets = existingCadets.filter((cadet: Cadet) => cadet.id !== cadetId);
-      
-      // Save back to localStorage
       localStorage.setItem('cadets', JSON.stringify(updatedCadets));
       
       // Update state
@@ -507,7 +524,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
       toast.success('Cadet removed successfully');
     } catch (error) {
       console.error('Error deleting cadet:', error);
-      toast.error('Failed to remove cadet');
+      toast.error(`Failed to remove cadet: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
