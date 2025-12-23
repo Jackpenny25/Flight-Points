@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { projectId } from '../../../utils/supabase/info';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -43,6 +43,14 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
   const [pointType, setPointType] = useState('general');
   const [duplicateWarning, setDuplicateWarning] = useState<string[]>([]);
   const [invalidNames, setInvalidNames] = useState<string[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState({
+    cadetName: '',
+    points: '',
+    reason: '',
+    type: 'general',
+    flight: '',
+  });
 
   useEffect(() => {
     fetchPoints();
@@ -296,13 +304,111 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
     }
   };
 
-  const canDelete = userRole === 'staff' || userRole === 'snco';
+  const startEditPoint = (point: Point) => {
+    setEditingId(point.id);
+    setEditValues({
+      cadetName: point.cadetName,
+      points: String(point.points),
+      reason: point.reason,
+      type: point.type,
+      flight: point.flight,
+    });
+  };
+
+  const handleUpdatePoint = async () => {
+    if (!editingId) return;
+    if (editValues.points === '') {
+      toast.error('Points value is required');
+      return;
+    }
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/points/${editingId}`,
+        {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({
+            cadetName: editValues.cadetName,
+            points: parseFloat(editValues.points),
+            reason: editValues.reason,
+            type: editValues.type,
+            flight: editValues.flight,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update point');
+      }
+
+      toast.success('Point updated');
+      setEditingId(null);
+      fetchPoints();
+    } catch (error) {
+      console.error('Error updating point:', error);
+      toast.error('Failed to update point');
+    }
+  };
+
+  const handleClearCadetPoints = async (cadetName: string) => {
+    if (!confirm(`Clear all points for ${cadetName}?`)) return;
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/points/clear-cadet`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ cadetName }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to clear points');
+      }
+
+      toast.success(`Cleared points for ${cadetName}`);
+      fetchPoints();
+    } catch (error) {
+      console.error('Error clearing cadet points:', error);
+      toast.error('Failed to clear points');
+    }
+  };
+
+  const canAdmin = userRole === 'staff' || userRole === 'snco';
+  const canDelete = canAdmin;
 
   // Get unique flights from cadets
   const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
 
+  const cadetTotals = useMemo(() => {
+    const totals: Record<string, { points: number; flight: string }> = {};
+    points.forEach((p) => {
+      const key = p.cadetName || 'Unknown';
+      if (!totals[key]) {
+        totals[key] = { points: 0, flight: p.flight || 'unknown' };
+      }
+      totals[key].points += p.points;
+      totals[key].flight = p.flight || totals[key].flight;
+    });
+
+    return Object.entries(totals)
+      .map(([name, info]) => ({ name, points: info.points, flight: info.flight }))
+      .sort((a, b) => b.points - a.points);
+  }, [points]);
+
   return (
-    <div className="grid gap-6 md:grid-cols-2">
+    <div className="space-y-6">
+      <div className="grid gap-6 md:grid-cols-2">
       {/* Add Points Form */}
       <Card>
         <CardHeader>
@@ -426,40 +532,172 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
             <div className="space-y-4 max-h-[600px] overflow-y-auto">
               {points.slice(0, 10).map((point) => (
                 <div key={point.id} className="p-4 border rounded-lg bg-gray-50">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <p className="font-medium">{point.cadetName}</p>
-                      <p className="text-sm text-gray-600">{formatFlight(point.flight)}</p>
+                  {editingId === point.id ? (
+                    <div className="space-y-3">
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label>Cadet</Label>
+                          <Input
+                            value={editValues.cadetName}
+                            onChange={(e) => setEditValues({ ...editValues, cadetName: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Flight</Label>
+                          <Select
+                            value={editValues.flight}
+                            onValueChange={(val) => setEditValues({ ...editValues, flight: val })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Flight" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {flights.map((flight) => (
+                                <SelectItem key={flight} value={flight}>
+                                  {formatFlight(flight)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label>Type</Label>
+                          <Select
+                            value={editValues.type}
+                            onValueChange={(val) => setEditValues({ ...editValues, type: val })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="general">General</SelectItem>
+                              <SelectItem value="good">Good Behavior</SelectItem>
+                              <SelectItem value="bad">Bad Behavior</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Points</Label>
+                          <Input
+                            type="number"
+                            step="0.5"
+                            value={editValues.points}
+                            onChange={(e) => setEditValues({ ...editValues, points: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label>Reason</Label>
+                        <Textarea
+                          rows={2}
+                          value={editValues.reason}
+                          onChange={(e) => setEditValues({ ...editValues, reason: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={handleUpdatePoint}>Save</Button>
+                        <Button variant="outline" size="sm" onClick={() => setEditingId(null)}>Cancel</Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={point.points >= 0 ? 'default' : 'destructive'}>
-                        {point.points >= 0 ? '+' : ''}{point.points} pts
-                      </Badge>
-                      {canDelete && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeletePoint(point.id)}
-                        >
-                          <Trash2 className="size-4 text-red-600" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-sm text-gray-700 mb-1">{point.reason}</p>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <Badge variant="outline" className="text-xs">
-                      {point.type}
-                    </Badge>
-                    <span>• Given by {point.givenBy}</span>
-                    <span>• {new Date(point.date).toLocaleDateString()}</span>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <p className="font-medium">{point.cadetName}</p>
+                          <p className="text-sm text-gray-600">{formatFlight(point.flight)}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={point.points >= 0 ? 'default' : 'destructive'}>
+                            {point.points >= 0 ? '+' : ''}{point.points} pts
+                          </Badge>
+                          {canAdmin && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => startEditPoint(point)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeletePoint(point.id)}
+                              >
+                                <Trash2 className="size-4 text-red-600" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-700 mb-1">{point.reason}</p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <Badge variant="outline" className="text-xs">
+                          {point.type}
+                        </Badge>
+                        <span>• Given by {point.givenBy}</span>
+                        <span>• {new Date(point.date).toLocaleDateString()}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+      </div>
+
+      {canAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Cadet Totals & Clear</CardTitle>
+            <CardDescription>SNCO/staff tools to adjust points</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {cadetTotals.length === 0 ? (
+              <div className="text-center py-6 text-gray-500">No cadet points yet</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cadet</TableHead>
+                      <TableHead>Flight</TableHead>
+                      <TableHead className="text-right">Points</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {cadetTotals.map((c) => (
+                      <TableRow key={c.name}>
+                        <TableCell className="font-medium">{c.name}</TableCell>
+                        <TableCell>{formatFlight(c.flight)}</TableCell>
+                        <TableCell className="text-right">{c.points}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={c.points === 0}
+                            onClick={() => handleClearCadetPoints(c.name)}
+                          >
+                            Clear total
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

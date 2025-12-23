@@ -848,6 +848,94 @@ Deno.serve(async (req: Request) => {
     
     // Handle points endpoint directly (bypass Hono)
     if (pathname.includes('/points')) {
+      // Clear all points for a cadet
+      if (pathname.includes('/points/clear-cadet') && req.method === 'POST') {
+        try {
+          const body = await req.json();
+          const cadetName = (body.cadetName || '').trim();
+          if (!cadetName) {
+            return new Response(JSON.stringify({ error: 'cadetName is required' }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            });
+          }
+
+          const points = await kv.getByPrefix('point:');
+          const toDelete = points.filter((p: any) => (p.cadetName || '').toLowerCase() === cadetName.toLowerCase());
+
+          for (const p of toDelete) {
+            await kv.del(`point:${p.id}`);
+          }
+
+          return new Response(JSON.stringify({ deleted: toDelete.length }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        } catch (e) {
+          console.error('Points clear error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to clear points', details: String(e) }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+      }
+
+      // Single point operations
+      const pointIdMatch = pathname.match(/\/points\/([^/]+)$/);
+
+      if (pointIdMatch && req.method === 'DELETE') {
+        const pointId = decodeURIComponent(pointIdMatch[1]);
+        try {
+          await kv.del(`point:${pointId}`);
+          return new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        } catch (e) {
+          console.error('Points delete error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to delete point', details: String(e) }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+      }
+
+      if (pointIdMatch && req.method === 'PUT') {
+        const pointId = decodeURIComponent(pointIdMatch[1]);
+        try {
+          const body = await req.json();
+          const existing = await kv.get(`point:${pointId}`);
+          if (!existing) {
+            return new Response(JSON.stringify({ error: 'Point not found' }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            });
+          }
+
+          const updated = {
+            ...existing,
+            cadetName: body.cadetName ?? existing.cadetName,
+            points: body.points !== undefined ? Number(body.points) : existing.points,
+            type: body.type ?? existing.type,
+            reason: body.reason ?? existing.reason,
+            flight: body.flight ?? existing.flight,
+          };
+
+          await kv.set(`point:${pointId}`, updated);
+
+          return new Response(JSON.stringify(updated), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        } catch (e) {
+          console.error('Points update error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to update point', details: String(e) }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+      }
+
       if (req.method === 'GET') {
         try {
           const points = await kv.getByPrefix('point:');
@@ -856,7 +944,7 @@ Deno.serve(async (req: Request) => {
             const bDate = new Date(b.date || 0).getTime();
             return bDate - aDate;
           });
-          return new Response(JSON.stringify(sorted.slice(0, 50)), {
+          return new Response(JSON.stringify({ points: sorted.slice(0, 50) }), {
             status: 200,
             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
           });
