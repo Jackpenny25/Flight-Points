@@ -245,6 +245,79 @@ app.get("/make-server-73a3871f/points", verifyAuth, async (c) => {
   }
 });
 
+// Get points for logged-in cadet
+app.get("/make-server-73a3871f/my-points", verifyAuth, async (c) => {
+  console.log('=== MY POINTS ENDPOINT HIT ===');
+  try {
+    const user = c.get('user');
+    const cadetName = user.user_metadata?.cadetName;
+    const cadetId = user.user_metadata?.cadetId;
+    
+    console.log('My points request - cadetName:', cadetName, 'cadetId:', cadetId);
+    
+    if (!cadetName && !cadetId) {
+      return c.json({ error: 'No cadet profile associated with this account' }, 404);
+    }
+    
+    const allPoints = await kv.getByPrefix('point:');
+    console.log('Total points in system:', allPoints.length);
+    
+    // Filter points for this cadet - check both cadetName match and cadetId if available
+    const myPoints = allPoints.filter((p: any) => {
+      const nameMatch = p.cadetName === cadetName;
+      // Also try matching if the point's cadetName contains our name or vice versa (for partial matches)
+      const partialMatch = cadetName && p.cadetName && (
+        p.cadetName.includes(cadetName) || cadetName.includes(p.cadetName)
+      );
+      console.log('Point:', p.cadetName, 'vs user:', cadetName, 'nameMatch:', nameMatch, 'partialMatch:', partialMatch);
+      return nameMatch || partialMatch;
+    });
+    
+    console.log('My points found:', myPoints.length);
+    
+    // Sort by date, newest first
+    myPoints.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    // Calculate total
+    const total = myPoints.reduce((sum: number, p: any) => sum + (p.points || 0), 0);
+    
+    return c.json({ points: myPoints, total, cadetName });
+  } catch (error) {
+    console.log('Error fetching my points:', error);
+    return c.json({ error: 'Failed to fetch points' }, 500);
+  }
+});
+
+// Public endpoint to get points for a cadet by name or id (uses anon key header)
+app.get("/make-server-73a3871f/data/my-points", async (c) => {
+  try {
+    const url = new URL(c.req.url);
+    const cadetName = url.searchParams.get('name') || '';
+    const cadetId = url.searchParams.get('cadetId') || '';
+
+    if (!cadetName && !cadetId) {
+      return c.json({ error: 'Missing name or cadetId' }, 400);
+    }
+
+    const allPoints = await kv.getByPrefix('point:');
+
+    const myPoints = allPoints.filter((p: any) => {
+      const byId = cadetId && p.cadetId && p.cadetId === cadetId;
+      const exact = cadetName && p.cadetName === cadetName;
+      const partial = cadetName && p.cadetName && (p.cadetName.includes(cadetName) || cadetName.includes(p.cadetName));
+      return byId || exact || partial;
+    });
+
+    myPoints.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const total = myPoints.reduce((sum: number, p: any) => sum + (p.points || 0), 0);
+
+    return c.json({ points: myPoints, total, cadetName: cadetName || undefined });
+  } catch (error) {
+    console.log('Error fetching public my-points:', error);
+    return c.json({ error: 'Failed to fetch points' }, 500);
+  }
+});
+
 // Add points (point givers and staff/SNCO)
 app.post("/make-server-73a3871f/points", verifyAuth, async (c) => {
   try {
@@ -380,13 +453,21 @@ app.get("/make-server-73a3871f/leaderboards", verifyAuth, async (c) => {
       .filter((point: any) => point.type !== 'attendance')
       .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 20);
-    
+
+    // Determine joint winners (ties)
+    const maxCadetPts = cadetLeaderboard.length ? cadetLeaderboard[0].points : null;
+    const maxFlightPts = flightLeaderboard.length ? flightLeaderboard[0].points : null;
+    const winnersCadets = maxCadetPts !== null ? cadetLeaderboard.filter((e: any) => e.points === maxCadetPts) : [];
+    const winnersFlights = maxFlightPts !== null ? flightLeaderboard.filter((e: any) => e.points === maxFlightPts) : [];
+
     return c.json({
       cadetLeaderboard,
       flightLeaderboard,
       recentPoints,
       winningCadet: cadetLeaderboard[0] || null,
       winningFlight: flightLeaderboard[0] || null,
+      winnersCadets,
+      winnersFlights,
     });
   } catch (error) {
     console.log('Error fetching leaderboards:', error);
@@ -791,6 +872,15 @@ Deno.serve(async (req: Request) => {
   try {
     const url = new URL(req.url);
     const pathname = url.pathname;
+    console.log('=== INCOMING REQUEST ===', {
+      method: req.method,
+      pathname,
+      url: req.url,
+      headers: {
+        authorization: req.headers.get('Authorization'),
+        contentType: req.headers.get('Content-Type'),
+      }
+    });
     
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
@@ -802,6 +892,84 @@ Deno.serve(async (req: Request) => {
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         },
       });
+    }
+
+    // PUBLIC ENDPOINTS (no auth required) - check these FIRST
+    
+    // Public: cadets list (check before /cadets to avoid catch-all)
+    if (pathname.endsWith('/data/cadets') && req.method === 'GET') {
+      console.log('🟢 MATCHED /data/cadets endpoint');
+      try {
+        const cadets = await kv.getByPrefix('cadet:');
+        console.log('✅ Returning', cadets.length, 'cadets');
+        return new Response(JSON.stringify({ cadets }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.error('❌ /data/cadets error:', e);
+        return new Response(JSON.stringify({ cadets: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
+
+    // Public My Points endpoint handled at top-level to bypass gateway auth quirks
+    if (pathname.endsWith('/data/my-points') && req.method === 'GET') {
+      console.log('🟢 MATCHED /data/my-points endpoint');
+      try {
+        const cadetName = url.searchParams.get('name') || '';
+        const cadetId = url.searchParams.get('cadetId') || '';
+
+        if (!cadetName && !cadetId) {
+          return new Response(JSON.stringify({ error: 'Missing name or cadetId' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+
+        const allPoints = await kv.getByPrefix('point:');
+        const myPoints = allPoints.filter((p: any) => {
+          const byId = cadetId && p.cadetId && p.cadetId === cadetId;
+          const exact = cadetName && p.cadetName === cadetName;
+          const partial = cadetName && p.cadetName && (p.cadetName.includes(cadetName) || cadetName.includes(p.cadetName));
+          return byId || exact || partial;
+        });
+
+        myPoints.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const total = myPoints.reduce((sum: number, p: any) => sum + (p.points || 0), 0);
+
+        return new Response(JSON.stringify({ points: myPoints, total, cadetName: cadetName || undefined }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.error('❌ /data/my-points error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to fetch points' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
+
+    // Public: pending signups count
+    if (pathname.endsWith('/data/signups-count') && req.method === 'GET') {
+      console.log('🟢 MATCHED /data/signups-count endpoint');
+      try {
+        const items = await kv.getByPrefix('signup:');
+        console.log('✅ Returning count:', items.length);
+        return new Response(JSON.stringify({ count: (items || []).length }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.log('❌ /data/signups-count error:', e);
+        return new Response(JSON.stringify({ count: 0 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
     }
 
     // Direct: Auth signup (redundant path to ensure availability)
@@ -848,17 +1016,68 @@ Deno.serve(async (req: Request) => {
     if (pathname.includes('/auth/request-signup') && req.method === 'POST') {
       try {
         const body = await req.json();
-        const { email, password, name } = body || {};
+        const { email, password, name, joinCode, flight } = body || {};
         if (!email || !password || !name) {
           return new Response(JSON.stringify({ error: 'Name, email and password are required' }), {
             status: 400,
             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
           });
         }
+        // Validate flight (optional but preferred): must be one of '1','2','3','4'
+        let flightNorm: string | null = null;
+        if (flight != null) {
+          const fStr = String(flight).trim();
+          if (['1','2','3','4'].includes(fStr)) {
+            flightNorm = fStr;
+          } else {
+            // If provided but invalid, reject
+            return new Response(JSON.stringify({ error: 'Invalid flight. Choose 1, 2, 3 or 4.' }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            });
+          }
+        }
+        // Validate active join code
+        const jc = await kv.get('joincode:current');
+        if (!jc || !jc.code || !jc.expiresAt) {
+          return new Response(JSON.stringify({ error: 'Signup is currently closed. Ask an SNCO for the join code.' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+        const now = Date.now();
+        const expires = new Date(jc.expiresAt).getTime();
+        if (now > expires) {
+          return new Response(JSON.stringify({ error: 'Join code expired.' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+        if (!joinCode || String(joinCode).trim().toUpperCase() !== String(jc.code).trim().toUpperCase()) {
+          return new Response(JSON.stringify({ error: 'Invalid join code.' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+        // Basic per-email throttle (max 5 requests per hour)
+        const throttleKey = `throttle:${(email || '').toLowerCase()}`;
+        const t = await kv.get(throttleKey);
+        const windowMs = 60 * 60 * 1000; // 1 hour
+        const limit = 5;
+        const nowMs = Date.now();
+        if (t && t.resetAt && nowMs < new Date(t.resetAt).getTime() && (t.count || 0) >= limit) {
+          return new Response(JSON.stringify({ error: 'Too many signup attempts. Try again later.' }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+        const nextCount = t && nowMs < new Date(t.resetAt).getTime() ? (t.count || 0) + 1 : 1;
+        const nextReset = t && nowMs < new Date(t.resetAt).getTime() ? t.resetAt : new Date(nowMs + windowMs).toISOString();
+        await kv.set(throttleKey, { count: nextCount, resetAt: nextReset });
         const id = crypto.randomUUID();
-        const rec = { id, email, name, password, status: 'pending', createdAt: new Date().toISOString() };
+        const rec = { id, email, name, password, flight: flightNorm, status: 'pending', createdAt: new Date().toISOString() };
         await kv.set(`signup:${id}`, rec);
-        return new Response(JSON.stringify({ request: { id, email, name, status: 'pending' } }), {
+        return new Response(JSON.stringify({ request: { id, email, name, flight: flightNorm, status: 'pending' } }), {
           status: 201,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
@@ -866,6 +1085,66 @@ Deno.serve(async (req: Request) => {
         console.error('Request-signup error:', e);
         return new Response(JSON.stringify({ error: 'Failed to create signup request' }), {
           status: 500,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
+
+    // Admin: get current join code (SNCO/Staff)
+    if (pathname.includes('/admin/join-code') && req.method === 'GET') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        const { data: { user }, error } = await sb.auth.getUser(accessToken);
+        if (error || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const role = (user.user_metadata?.role || '').toLowerCase();
+        if (role !== 'snco' && role !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const jc = await kv.get('joincode:current');
+        return new Response(JSON.stringify({ joinCode: jc?.code || null, expiresAt: jc?.expiresAt || null, durationSeconds: jc?.durationSeconds || null }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to fetch join code' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Admin: create/rotate join code with duration (SNCO/Staff)
+    if (pathname.includes('/admin/join-code') && req.method === 'POST') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        const { data: { user }, error } = await sb.auth.getUser(accessToken);
+        if (error || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const role = (user.user_metadata?.role || '').toLowerCase();
+        if (role !== 'snco' && role !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const body = await req.json();
+        const durationSeconds = Math.max(60, Number(body?.durationSeconds || 3600)); // min 1 min, default 1 hour
+        // Generate a 6-character alphanumeric code
+        const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+        const expiresAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
+        await kv.set('joincode:current', { code, expiresAt, durationSeconds, createdAt: new Date().toISOString(), createdBy: user.user_metadata?.name || user.email });
+        return new Response(JSON.stringify({ joinCode: code, expiresAt, durationSeconds }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to create join code' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Count signup requests (public, no auth - check BEFORE /auth/requests)
+    if (pathname.match(/\/auth\/requests-count$/) && req.method === 'GET') {
+      try {
+        const items = await kv.getByPrefix('signup:');
+        return new Response(JSON.stringify({ count: (items || []).length }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ count: 0 }), {
+          status: 200,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
       }
@@ -885,7 +1164,7 @@ Deno.serve(async (req: Request) => {
         const role = (user.user_metadata?.role || '').toLowerCase();
         if (role !== 'snco' && role !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         const items = await kv.getByPrefix('signup:');
-        const list = (items || []).map((r: any) => ({ id: r.id, email: r.email, name: r.name, status: r.status, createdAt: r.createdAt }));
+        const list = (items || []).map((r: any) => ({ id: r.id, email: r.email, name: r.name, flight: r.flight || null, status: r.status, createdAt: r.createdAt }));
         return new Response(JSON.stringify({ requests: list }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
@@ -893,22 +1172,6 @@ Deno.serve(async (req: Request) => {
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Failed to fetch requests' }), {
           status: 500,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        });
-      }
-    }
-
-    // Count signup requests
-    if (pathname.includes('/auth/requests-count') && req.method === 'GET') {
-      try {
-        const items = await kv.getByPrefix('signup:');
-        return new Response(JSON.stringify({ count: (items || []).length }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        });
-      } catch (e) {
-        return new Response(JSON.stringify({ count: 0 }), {
-          status: 200,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
       }
@@ -930,9 +1193,21 @@ Deno.serve(async (req: Request) => {
         const id = pathname.split('/').slice(-2, -1)[0];
         const body = await req.json();
         const role = (body?.role || 'cadet').toLowerCase();
+        const cadetId = String(body?.cadetId || '').trim() || null;
         const rec = await kv.get(`signup:${id}`);
         if (!rec) {
           return new Response(JSON.stringify({ error: 'Request not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+        let cadetMeta: { cadetId?: string; cadetName?: string; flight?: string } = {};
+        if (cadetId) {
+          const cadet = await kv.get(`cadet:${cadetId}`);
+          if (!cadet) {
+            return new Response(JSON.stringify({ error: 'Selected cadet not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          }
+          cadetMeta = { cadetId: cadet.id, cadetName: cadet.name, flight: cadet.flight };
+        } else if (rec.flight) {
+          // Preserve requested flight if no cadet mapping provided
+          cadetMeta = { flight: rec.flight };
         }
         const supabase = createClient(
           Deno.env.get('SUPABASE_URL') ?? '',
@@ -941,7 +1216,7 @@ Deno.serve(async (req: Request) => {
         const { data, error } = await supabase.auth.admin.createUser({
           email: rec.email,
           password: rec.password,
-          user_metadata: { name: rec.name, role },
+          user_metadata: { name: rec.name, role, ...cadetMeta },
           email_confirm: true,
         });
         if (error) {
@@ -1130,7 +1405,22 @@ Deno.serve(async (req: Request) => {
         try {
           const body = await req.json();
           const { cadetName, points, type, reason, flight } = body;
-          
+
+          // Try to resolve the requesting user (giver) from the Authorization header
+          let giver = 'Unknown';
+          try {
+            const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+            if (accessToken) {
+              const sb = getSupabaseAdmin();
+              const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+              if (!authErr && user) {
+                giver = user.user_metadata?.name || user.email || giver;
+              }
+            }
+          } catch (e) {
+            console.error('Failed to resolve giver from token:', e);
+          }
+
           const id = crypto.randomUUID();
           const entry = {
             id,
@@ -1140,10 +1430,12 @@ Deno.serve(async (req: Request) => {
             reason: reason || '',
             flight: flight || 'unknown',
             date: new Date().toISOString(),
+            givenBy: giver,
+            createdAt: new Date().toISOString(),
           };
-          
+
           await kv.set(`point:${id}`, entry);
-          
+
           return new Response(JSON.stringify(entry), {
             status: 201,
             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
@@ -1183,12 +1475,19 @@ Deno.serve(async (req: Request) => {
           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
           .slice(0, 20);
 
+        const maxCadetPts = cadetLeaderboard.length ? cadetLeaderboard[0].points : null;
+        const maxFlightPts = flightLeaderboard.length ? flightLeaderboard[0].points : null;
+        const winnersCadets = maxCadetPts !== null ? cadetLeaderboard.filter((e: any) => e.points === maxCadetPts) : [];
+        const winnersFlights = maxFlightPts !== null ? flightLeaderboard.filter((e: any) => e.points === maxFlightPts) : [];
+
         return new Response(JSON.stringify({
           cadetLeaderboard,
           flightLeaderboard,
           recentPoints,
           winningCadet: cadetLeaderboard[0] || null,
           winningFlight: flightLeaderboard[0] || null,
+          winnersCadets,
+          winnersFlights,
         }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
@@ -1293,6 +1592,7 @@ Deno.serve(async (req: Request) => {
         });
       }
     }
+    
     
     // Handle cadets endpoint directly (bypass Hono for now)
     if (pathname.includes('/cadets')) {

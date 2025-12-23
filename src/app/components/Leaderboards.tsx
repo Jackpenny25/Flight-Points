@@ -76,18 +76,25 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Trophy className="size-6 text-yellow-600" />
-                Winning Flight
+                {data.winnersFlights && data.winnersFlights.length > 1 ? 'Joint Winning Flights' : 'Winning Flight'}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {data.winningFlight ? (
+              {data.winnersFlights && data.winnersFlights.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {data.winnersFlights.map((f: any) => (
+                      <Badge key={f.flight} variant="default" className="text-lg font-bold px-3 py-1 bg-yellow-600">
+                        {formatFlight(f.flight)}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-2xl font-semibold text-yellow-800">{data.winnersFlights[0].points} points</p>
+                </div>
+              ) : data.winningFlight ? (
                 <div>
-                  <p className="text-3xl font-bold text-yellow-900">
-                    {formatFlight(data.winningFlight.flight)}
-                  </p>
-                  <p className="text-xl text-yellow-700">
-                    {data.winningFlight.points} points
-                  </p>
+                  <p className="text-4xl font-extrabold text-yellow-900">{formatFlight(data.winningFlight.flight)}</p>
+                  <p className="text-2xl font-semibold text-yellow-800">{data.winningFlight.points} points</p>
                 </div>
               ) : (
                 <p className="text-gray-500">No data yet</p>
@@ -99,18 +106,25 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Award className="size-6 text-blue-600" />
-                Winning Cadet
+                {data.winnersCadets && data.winnersCadets.length > 1 ? 'Joint Winning Cadets' : 'Winning Cadet'}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {data.winningCadet ? (
+              {data.winnersCadets && data.winnersCadets.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {data.winnersCadets.map((c: any) => (
+                      <Badge key={c.name} variant="default" className="text-lg font-bold px-3 py-1">
+                        {c.name}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-2xl font-semibold text-blue-800">{data.winnersCadets[0].points} points</p>
+                </div>
+              ) : data.winningCadet ? (
                 <div>
-                  <p className="text-3xl font-bold text-blue-900">
-                    {data.winningCadet.name}
-                  </p>
-                  <p className="text-xl text-blue-700">
-                    {data.winningCadet.points} points
-                  </p>
+                  <p className="text-4xl font-extrabold text-blue-900">{data.winningCadet.name}</p>
+                  <p className="text-2xl font-semibold text-blue-800">{data.winningCadet.points} points</p>
                 </div>
               ) : (
                 <p className="text-gray-500">No data yet</p>
@@ -141,12 +155,14 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
                     {data.flightLeaderboard.map((entry: any, index: number) => (
                       <TableRow key={entry.flight}>
                         <TableCell className="font-medium">
-                          {index === 0 && <Trophy className="inline size-4 text-yellow-600 mr-1" />}
+                          {entry.points === data.flightLeaderboard[0].points && (
+                            <Trophy className="inline size-4 text-yellow-600 mr-1" />
+                          )}
                           #{index + 1}
                         </TableCell>
                         <TableCell className="font-medium">{formatFlight(entry.flight)}</TableCell>
                         <TableCell className="text-right">
-                          <Badge variant={index === 0 ? 'default' : 'secondary'}>
+                          <Badge variant={entry.points === data.flightLeaderboard[0].points ? 'default' : 'secondary'}>
                             {entry.points}
                           </Badge>
                         </TableCell>
@@ -180,12 +196,14 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
                     {data.cadetLeaderboard.slice(0, 10).map((entry: any, index: number) => (
                       <TableRow key={entry.name}>
                         <TableCell className="font-medium">
-                          {index === 0 && <Award className="inline size-4 text-blue-600 mr-1" />}
+                          {entry.points === data.cadetLeaderboard[0].points && (
+                            <Award className="inline size-4 text-blue-600 mr-1" />
+                          )}
                           #{index + 1}
                         </TableCell>
                         <TableCell className="font-medium">{entry.name}</TableCell>
                         <TableCell className="text-right">
-                          <Badge variant={index === 0 ? 'default' : 'secondary'}>
+                          <Badge variant={entry.points === data.cadetLeaderboard[0].points ? 'default' : 'secondary'}>
                             {entry.points}
                           </Badge>
                         </TableCell>

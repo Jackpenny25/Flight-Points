@@ -5,6 +5,7 @@ import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 
@@ -24,6 +25,8 @@ export function Login({ onLogin }: LoginProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [info, setInfo] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+  const [flight, setFlight] = useState('');
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +40,11 @@ export function Login({ onLogin }: LoginProps) {
       });
 
       if (error) {
-        setError(error.message);
+        let displayError = error.message;
+        if (error.message.includes('Invalid login credentials')) {
+          displayError = `Invalid login credentials. Or your signup request hasn't yet been accepted — please wait or ask Sgt Penny J or your flight point giver.`;
+        }
+        setError(displayError);
         setLoading(false);
         return;
       }
@@ -67,7 +74,7 @@ export function Login({ onLogin }: LoginProps) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${publicAnonKey}`,
         },
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({ email, password, name, joinCode, flight }),
       });
       const result = await response.json();
       if (!response.ok) {
@@ -75,7 +82,7 @@ export function Login({ onLogin }: LoginProps) {
         setLoading(false);
         return;
       }
-      setInfo('Signup request sent. Ask an SNCO to approve your access and assign a role.');
+      setInfo('Signup request sent. Ask an Sgt Penny J or your point giver to approve your access');
       setName('');
       setEmail('');
       setPassword('');
@@ -100,7 +107,7 @@ export function Login({ onLogin }: LoginProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="signin" className="w-full">
+          <Tabs defaultValue="signin" className="w-full" onValueChange={() => setError('')}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign In</TabsTrigger>
               <TabsTrigger value="signup">Sign Up</TabsTrigger>
@@ -174,13 +181,41 @@ export function Login({ onLogin }: LoginProps) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    minLength={6}
+                    minLength={4}
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-joincode">Join Code</Label>
+                  <Input
+                    id="signup-joincode"
+                    type="text"
+                    placeholder="Ask Sgt Penny J or point giver for the code"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Flight</Label>
+                  <Select value={flight} onValueChange={(v)=>setFlight(v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select your flight" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 Flight</SelectItem>
+                      <SelectItem value="2">2 Flight</SelectItem>
+                      <SelectItem value="3">3 Flight</SelectItem>
+                      <SelectItem value="4">4 Flight</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 {/* Role selection removed; SNCOs will assign upon approval */}
                 {error && (
                   <div className="text-sm text-red-600 bg-red-50 p-3 rounded">
                     {error}
+                    <div className="mt-2 text-xs">
+                      Please ask Sgt Penny J or your flight point giver for help.
+                    </div>
                   </div>
                 )}
                 {info && (

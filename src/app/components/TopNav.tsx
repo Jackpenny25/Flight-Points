@@ -38,7 +38,16 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
   })
 
   // Add admin tab if unlocked
-  const allItems = showAdmin ? [...visibleItems, { key: 'admin', label: "NCO's", icon: Shield, badgeCount: adminPendingCount || 0 }] : visibleItems
+  const allItems = showAdmin 
+    ? [
+        ...visibleItems, 
+        { key: 'admin', label: 'NCOs', icon: Shield },
+        ...(adminPendingCount && adminPendingCount > 0 
+          ? [{ key: 'signups', label: 'Signups', icon: Users, badgeCount: adminPendingCount }]
+          : [{ key: 'signups', label: 'Signups', icon: Users }]
+        )
+      ] 
+    : visibleItems
 
   return (
     <nav className="w-full bg-transparent px-4 py-3">
@@ -57,19 +66,17 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
                 <button
                   key={it.key}
                   onClick={() => handleClick(it.key)}
-                  className={`${base} ${isActive ? activeCls : inactiveCls}`}
+                  className={`${base} ${isActive ? activeCls : inactiveCls} relative`}
                   aria-label={it.label}
                   aria-pressed={isActive}
                 >
                   <Icon className={`w-4 h-4 ${isActive ? 'opacity-100' : 'opacity-80'}`} />
-                  <span className="hidden sm:inline flex items-center gap-2">
-                    {it.label}
-                    {it.key === 'admin' && badgeCount && badgeCount > 0 && (
-                      <span className="inline-flex items-center justify-center min-w-5 h-5 text-[11px] px-1 rounded-full bg-red-600 text-white">
-                        {badgeCount > 99 ? '99+' : badgeCount}
-                      </span>
-                    )}
-                  </span>
+                  <span className="hidden sm:inline">{it.label}</span>
+                  {it.key === 'signups' && badgeCount && badgeCount > 0 && (
+                    <span className="absolute -top-2 -right-2 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full bg-red-600 text-white">
+                      {badgeCount > 99 ? '99+' : badgeCount}
+                    </span>
+                  )}
                 </button>
               )
             })}

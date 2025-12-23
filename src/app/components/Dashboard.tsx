@@ -13,7 +13,9 @@ import { CadetsManager } from './CadetsManager';
 import { AttendanceManager } from './AttendanceManager';
 import { DataIntegrity } from './DataIntegrity';
 import { ReportsExport } from './ReportsExport';
-import { projectId } from '../../../utils/supabase/info';
+import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import AdminSignups from './AdminSignups';
+import { MyPoints } from './MyPoints';
 
 interface DashboardProps {
   user: any;
@@ -24,6 +26,7 @@ interface DashboardProps {
 export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const userRole = user?.user_metadata?.role || 'cadet';
   const userName = user?.user_metadata?.name || user?.email || 'User';
+  const cadetName = user?.user_metadata?.cadetName;
   
   const canGivePoints = userRole === 'pointgiver' || userRole === 'snco' || userRole === 'staff';
   const canManageCadets = userRole === 'snco' || userRole === 'staff';
@@ -92,19 +95,22 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   // Poll pending signup requests count for SNCO/Staff to show a badge on the NCO's tab
   useEffect(() => {
     if (!canManageCadets) return;
-    const url = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests-count`;
+    const url = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/data/signups-count`;
     let timer: any;
     const fetchCount = async () => {
       try {
         const res = await fetch(url, {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
+            'Authorization': `Bearer ${publicAnonKey}`,
           }
         });
         const data = await res.json();
+        console.log('Pending signups count:', data.count);
         if (typeof data.count === 'number') setAdminPendingCount(data.count);
-      } catch {}
+      } catch (e) {
+        console.error('Failed to fetch pending signups count:', e);
+      }
     };
     fetchCount();
     timer = setInterval(fetchCount, 20000);
@@ -207,12 +213,45 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         </div>
       )}
 
+      {/* Cadet navigation */}
+      {userRole === 'cadet' && cadetName && (
+        <div className="mt-4 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex gap-2 bg-white p-2 rounded-lg shadow-sm border">
+            <Button
+              variant={activeTab === 'leaderboards' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setActiveTab('leaderboards')}
+              className="flex-1"
+            >
+              <TrendingUp className="size-4 mr-2" />
+              Leaderboards
+            </Button>
+            <Button
+              variant={activeTab === 'mypoints' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setActiveTab('mypoints')}
+              className="flex-1"
+            >
+              <Award className="size-4 mr-2" />
+              My Points
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v)} className="space-y-6">
           <TabsContent value="leaderboards">
             <Leaderboards accessToken={accessToken} />
           </TabsContent>
+
+          {/* Show My Points tab for cadets with cadetName */}
+          {userRole === 'cadet' && cadetName && (
+            <TabsContent value="mypoints">
+              <MyPoints accessToken={accessToken} cadetName={cadetName} />
+            </TabsContent>
+          )}
 
           {canGivePoints && (
             <>
@@ -243,6 +282,12 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               {adminUnlocked && (
                 <TabsContent value="admin">
                   <AdminPointGivers accessToken={accessToken} />
+                </TabsContent>
+              )}
+
+              {adminUnlocked && (
+                <TabsContent value="signups">
+                  <AdminSignups accessToken={accessToken} />
                 </TabsContent>
               )}
             </>
