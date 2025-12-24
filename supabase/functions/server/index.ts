@@ -271,6 +271,7 @@ app.post("/make-server-73a3871f/tickets", verifyAuth, async (c) => {
       cadetName,
       flight,
       submittedBy: user.user_metadata?.name || user.email,
+      comments: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -340,8 +341,14 @@ app.put("/make-server-73a3871f/tickets/:id", verifyAuth, async (c) => {
     // SNCO/Staff actions
     const action = (body.action || '').toLowerCase();
     if (action === 'approve') {
-      const awardPoints = Number(body.points || existing.requestedPoints || 0);
-      const reason = body.reason || `Ticket approved: ${existing.category}`;
+      const awardPoints = Number(body.points);
+      if (!Number.isFinite(awardPoints) || awardPoints <= 0) {
+        return c.json({ error: 'Points are required to approve a ticket' }, 400);
+      }
+      const reason = (body.reason || '').toString().trim();
+      if (!reason) {
+        return c.json({ error: 'Reason is required to approve a ticket' }, 400);
+      }
       const updated = {
         ...existing,
         status: 'approved',
@@ -352,6 +359,21 @@ app.put("/make-server-73a3871f/tickets/:id", verifyAuth, async (c) => {
       };
       await kv.set(`ticket:${id}`, updated);
 
+      // Create notification for cadet
+      const notifId = crypto.randomUUID();
+      const notification = {
+        id: notifId,
+        userId: existing.submittedBy,
+        cadetId: existing.cadetId,
+        cadetName: existing.cadetName,
+        type: 'ticket_approved',
+        ticketId: id,
+        message: `Your ticket "${existing.category}" was approved for ${awardPoints} points. ${reason}`,
+        read: false,
+        createdAt: new Date().toISOString(),
+      };
+      await kv.set(`notification:${notifId}`, notification);
+
       if (awardPoints && !isNaN(awardPoints)) {
         // Create a points entry
         const pointId = crypto.randomUUID();
@@ -360,7 +382,7 @@ app.put("/make-server-73a3871f/tickets/:id", verifyAuth, async (c) => {
           cadetName: existing.cadetName,
           date: new Date().toISOString(),
           flight: existing.flight || 'unknown',
-          reason: reason || `Ticket: ${existing.category}`,
+          reason: reason,
           points: awardPoints,
           type: 'good',
           givenBy: user.user_metadata?.name || user.email,
@@ -383,6 +405,62 @@ app.put("/make-server-73a3871f/tickets/:id", verifyAuth, async (c) => {
         updatedAt: new Date().toISOString(),
       };
       await kv.set(`ticket:${id}`, updated);
+
+      // Create notification for cadet
+      const notifId = crypto.randomUUID();
+      const notification = {
+        id: notifId,
+        userId: existing.submittedBy,
+        cadetId: existing.cadetId,
+        cadetName: existing.cadetName,
+        type: 'ticket_rejected',
+        ticketId: id,
+        message: `Your ticket "${existing.category}" was not approved. ${reason}`,
+        read: false,
+        createdAt: new Date().toISOString(),
+      };
+      await kv.set(`notification:${notifId}`, notification);
+
+      return c.json({ ticket: updated });
+    }
+
+    // Add comment to ticket
+    if (action === 'comment') {
+      const comment = (body.comment || '').toString().trim();
+      if (!comment) return c.json({ error: 'Comment cannot be empty' }, 400);
+      
+      const commentObj = {
+        id: crypto.randomUUID(),
+        author: user.user_metadata?.name || user.email,
+        role: user.user_metadata?.role || 'cadet',
+        text: comment,
+        createdAt: new Date().toISOString(),
+      };
+      
+      const updated = {
+        ...existing,
+        comments: [...(existing.comments || []), commentObj],
+        updatedAt: new Date().toISOString(),
+      };
+      await kv.set(`ticket:${id}`, updated);
+
+      // Create notification for cadet if comment is from staff
+      if (role === 'snco' || role === 'staff') {
+        const notifId = crypto.randomUUID();
+        const notification = {
+          id: notifId,
+          userId: existing.submittedBy,
+          cadetId: existing.cadetId,
+          cadetName: existing.cadetName,
+          type: 'ticket_comment',
+          ticketId: id,
+          message: `${commentObj.author} commented on your ticket "${existing.category}": ${comment.substring(0, 100)}${comment.length > 100 ? '...' : ''}`,
+          read: false,
+          createdAt: new Date().toISOString(),
+        };
+        await kv.set(`notification:${notifId}`, notification);
+      }
+
       return c.json({ ticket: updated });
     }
 
@@ -390,6 +468,89 @@ app.put("/make-server-73a3871f/tickets/:id", verifyAuth, async (c) => {
   } catch (error) {
     console.log('Error updating ticket:', error);
     return c.json({ error: 'Failed to update ticket' }, 500);
+  }
+});
+
+// Get notifications for current user
+app.get("/make-server-73a3871f/notifications", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const userName = user.user_metadata?.name || user.email;
+    const cadetId = user.user_metadata?.cadetId || null;
+    const cadetName = user.user_metadata?.cadetName || user.user_metadata?.name || user.email;
+    
+    console.log('🔔 Fetching notifications for:', { userName, cadetId, cadetName });
+    
+    const allNotifications = await kv.getByPrefix('notification:');
+    const myNotifications = allNotifications.filter((n: any) => {
+      const match = (n.userId === userName) || 
+                    (cadetId && n.cadetId === cadetId) ||
+                    (n.cadetName === cadetName) ||
+                    (n.submittedBy === userName);
+      
+      if (match) {
+        console.log('✅ Notification matched:', { nUserId: n.userId, nCadetId: n.cadetId, nCadetName: n.cadetName, nSubmittedBy: n.submittedBy });
+      }
+      return match;
+    });
+    
+    console.log('🔔 Found', myNotifications.length, 'notifications');
+    
+    myNotifications.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    return c.json({ notifications: myNotifications });
+  } catch (error) {
+    console.log('Error fetching notifications:', error);
+    return c.json({ error: 'Failed to fetch notifications' }, 500);
+  }
+});
+
+// Mark notification as read
+app.post("/make-server-73a3871f/notifications/:id/read", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const notif = await kv.get(`notification:${id}`);
+    
+    if (!notif) {
+      return c.json({ error: 'Notification not found' }, 404);
+    }
+    
+    const updated = { ...notif, read: true };
+    await kv.set(`notification:${id}`, updated);
+    
+    return c.json({ notification: updated });
+  } catch (error) {
+    console.log('Error marking notification as read:', error);
+    return c.json({ error: 'Failed to mark notification as read' }, 500);
+  }
+});
+
+// Mark all notifications as read
+app.post("/make-server-73a3871f/notifications/read-all", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const userName = user.user_metadata?.name || user.email;
+    const cadetId = user.user_metadata?.cadetId || null;
+    const cadetName = user.user_metadata?.cadetName || user.user_metadata?.name || user.email;
+    
+    const allNotifications = await kv.getByPrefix('notification:');
+    const myNotifications = allNotifications.filter((n: any) => {
+      return (n.userId === userName) || 
+             (cadetId && n.cadetId === cadetId) ||
+             (n.cadetName === cadetName);
+    });
+    
+    for (const notif of myNotifications) {
+      if (!notif.read) {
+        await kv.set(`notification:${notif.id}`, { ...notif, read: true });
+      }
+    }
+    
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Error marking all notifications as read:', error);
+    return c.json({ error: 'Failed to mark all notifications as read' }, 500);
   }
 });
 
@@ -1145,6 +1306,26 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Public: open tickets count
+    if (pathname.endsWith('/data/tickets-count') && req.method === 'GET') {
+      console.log('🟢 MATCHED /data/tickets-count endpoint');
+      try {
+        const items = await kv.getByPrefix('ticket:');
+        const open = (items || []).filter((t: any) => t.status === 'open');
+        console.log('✅ Returning open tickets count:', open.length);
+        return new Response(JSON.stringify({ count: open.length }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.log('❌ /data/tickets-count error:', e);
+        return new Response(JSON.stringify({ count: 0 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
+
     // Direct: Auth signup (redundant path to ensure availability)
     if (pathname.includes('/auth/signup') && req.method === 'POST') {
       try {
@@ -1532,21 +1713,61 @@ Deno.serve(async (req: Request) => {
 
           const action = (body.action || '').toLowerCase();
           if (action === 'approve') {
-            const pts = Number(body.points || 0);
-            const reason = body.reason || `Ticket approved: ${existing.category}`;
+            const pts = Number(body.points);
+            if (!Number.isFinite(pts) || pts <= 0) {
+              return new Response(JSON.stringify({ error: 'Points are required to approve a ticket' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+            }
+            const reason = (body.reason || '').toString().trim();
+            if (!reason) {
+              return new Response(JSON.stringify({ error: 'Reason is required to approve a ticket' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+            }
             const updated = { ...existing, status: 'approved', decisionReason: reason, approvedAt: new Date().toISOString(), approvedBy: user.user_metadata?.name || user.email, updatedAt: new Date().toISOString() };
             await kv.set(`ticket:${id}`, updated);
             if (pts && !isNaN(pts)) {
               const pointId = crypto.randomUUID();
-              const point = { id: pointId, cadetName: existing.cadetName, date: new Date().toISOString(), flight: existing.flight || 'unknown', reason, points: pts, type: 'good', givenBy: user.user_metadata?.name || user.email, createdAt: new Date().toISOString() };
+              const point = { id: pointId, cadetName: existing.cadetName, date: new Date().toISOString(), flight: existing.flight || 'unknown', reason: reason, points: pts, type: 'good', givenBy: user.user_metadata?.name || user.email, createdAt: new Date().toISOString() };
               await kv.set(`point:${pointId}`, point);
             }
+
+            // Create notification for cadet
+            const notifId = crypto.randomUUID();
+            const notification = {
+              id: notifId,
+              userId: existing.submittedBy,
+              cadetId: existing.cadetId,
+              cadetName: existing.cadetName,
+              type: 'ticket_approved',
+              ticketId: id,
+              message: `Your ticket "${existing.category}" was approved for ${pts} points. ${reason}`,
+              read: false,
+              createdAt: new Date().toISOString(),
+            };
+            await kv.set(`notification:${notifId}`, notification);
+            console.log('[TICKETS] Created notification for approval:', notification);
+
             return new Response(JSON.stringify({ ticket: updated }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
           }
           if (action === 'reject') {
             const reason = body.reason || 'Rejected';
             const updated = { ...existing, status: 'rejected', decisionReason: reason, rejectedAt: new Date().toISOString(), rejectedBy: user.user_metadata?.name || user.email, updatedAt: new Date().toISOString() };
             await kv.set(`ticket:${id}`, updated);
+
+            // Create notification for cadet
+            const notifId = crypto.randomUUID();
+            const notification = {
+              id: notifId,
+              userId: existing.submittedBy,
+              cadetId: existing.cadetId,
+              cadetName: existing.cadetName,
+              type: 'ticket_rejected',
+              ticketId: id,
+              message: `Your ticket "${existing.category}" was not approved. ${reason}`,
+              read: false,
+              createdAt: new Date().toISOString(),
+            };
+            await kv.set(`notification:${notifId}`, notification);
+            console.log('[TICKETS] Created notification for rejection:', notification);
+
             return new Response(JSON.stringify({ ticket: updated }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
           }
           return new Response(JSON.stringify({ error: 'Unsupported action' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
@@ -1577,6 +1798,99 @@ Deno.serve(async (req: Request) => {
         } catch (e) {
           console.error('Tickets GET error:', e);
           return new Response(JSON.stringify({ error: 'Failed to fetch tickets' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+      }
+    }
+
+    // Handle notifications endpoint directly (bypass Hono)
+    if (pathname.includes('/notifications')) {
+      // Mark all notifications as read (must check before single id match)
+      if (req.method === 'POST' && pathname.endsWith('/notifications/read-all')) {
+        try {
+          const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+          if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+          const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+          if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const myUserId = user.id;
+          const myCadetId = user.user_metadata?.cadetId || null;
+          const myCadetName = user.user_metadata?.cadetName || user.user_metadata?.name || user.email;
+
+          const notifications = await kv.getByPrefix('notification:');
+          const toUpdate = notifications.filter((n: any) => {
+            const match = (n.userId === myUserId) || (n.cadetId && myCadetId && n.cadetId === myCadetId) || (n.cadetName && myCadetName && n.cadetName === myCadetName) || (n.submittedBy === (user.user_metadata?.name || user.email));
+            return match && !n.read;
+          });
+
+          for (const n of toUpdate) {
+            const updated = { ...n, read: true, readAt: new Date().toISOString() };
+            await kv.set(`notification:${n.id}`, updated);
+          }
+
+          return new Response(JSON.stringify({ updated: toUpdate.length }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        } catch (e) {
+          console.error('Notifications read-all error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to mark notifications as read', details: String(e) }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+      }
+
+      // Get notifications for current user
+      if (req.method === 'GET' && pathname.endsWith('/notifications')) {
+        try {
+          const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+          if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+          const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+          if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const myUserId = user.id;
+          const myCadetId = user.user_metadata?.cadetId || null;
+          const myCadetName = user.user_metadata?.cadetName || user.user_metadata?.name || user.email;
+
+          console.log('[NOTIFICATIONS] Fetching for user:', { myUserId, myCadetId, myCadetName });
+
+          const notifications = await kv.getByPrefix('notification:');
+          console.log('[NOTIFICATIONS] Total notifications in KV:', notifications.length);
+          
+          const filtered = notifications.filter((n: any) => {
+            const match = (n.userId === myUserId) || (n.cadetId && myCadetId && n.cadetId === myCadetId) || (n.cadetName && myCadetName && n.cadetName === myCadetName) || (n.submittedBy === (user.user_metadata?.name || user.email));
+            if (match) {
+              console.log('[NOTIFICATIONS] Matched notification:', n);
+            }
+            return match;
+          });
+
+          console.log('[NOTIFICATIONS] Filtered count:', filtered.length);
+
+          filtered.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          return new Response(JSON.stringify({ notifications: filtered }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        } catch (e) {
+          console.error('Notifications GET error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to fetch notifications', details: String(e) }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+      }
+
+      // Mark single notification as read
+      const notifIdMatch = pathname.match(/\/notifications\/([^/]+)\/read$/);
+      if (notifIdMatch && req.method === 'POST') {
+        try {
+          const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+          if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+          const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+          if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const notifId = decodeURIComponent(notifIdMatch[1]);
+          const existing = await kv.get(`notification:${notifId}`);
+          if (!existing) return new Response(JSON.stringify({ error: 'Notification not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const updated = { ...existing, read: true, readAt: new Date().toISOString() };
+          await kv.set(`notification:${notifId}`, updated);
+          return new Response(JSON.stringify({ notification: updated }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        } catch (e) {
+          console.error('Notification read error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to mark notification as read' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         }
       }
     }

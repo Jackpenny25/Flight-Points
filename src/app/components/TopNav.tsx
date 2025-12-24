@@ -18,16 +18,17 @@ type Props = {
   canGivePoints?: boolean
   canManageCadets?: boolean
   adminPendingCount?: number
+  ticketsCount?: number
 }
 
-export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canManageCadets, adminPendingCount }: Props) {
+export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canManageCadets, adminPendingCount, ticketsCount }: Props) {
   const handleClick = (key: string) => {
     // prefer prop handler, but keep event dispatch for backward compatibility
     if (onSelect) onSelect(key)
     window.dispatchEvent(new CustomEvent('navigateTab', { detail: { tab: key } }))
   }
 
-  // Filter items based on permissions
+  // Filter items based on permissions and add badge counts
   const visibleItems = items.filter((item) => {
     // Leaderboards is always visible
     if (item.key === 'leaderboards') return true
@@ -36,6 +37,11 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
     // Tickets, Cadets, Reports, Integrity require canManageCadets
     if (item.key === 'tickets' || item.key === 'cadets' || item.key === 'reports' || item.key === 'integrity') return canManageCadets
     return false
+  }).map(item => {
+    if (item.key === 'tickets' && ticketsCount && ticketsCount > 0) {
+      return { ...item, badgeCount: ticketsCount }
+    }
+    return item
   })
 
   // Add admin tab if unlocked
@@ -73,7 +79,7 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
                 >
                   <Icon className={`w-4 h-4 ${isActive ? 'opacity-100' : 'opacity-80'}`} />
                   <span className="hidden sm:inline">{it.label}</span>
-                  {it.key === 'signups' && badgeCount && badgeCount > 0 && (
+                  {(it.key === 'signups' || it.key === 'tickets') && badgeCount && badgeCount > 0 && (
                     <span className="absolute -top-2 -right-2 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full bg-red-600 text-white">
                       {badgeCount > 99 ? '99+' : badgeCount}
                     </span>

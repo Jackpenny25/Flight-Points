@@ -16,6 +16,7 @@ import { ReportsExport } from './ReportsExport';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 import AdminSignups from './AdminSignups';
 import { MyPoints } from './MyPoints';
+import { NotificationCenter } from './NotificationCenter';
 import { Tickets } from './Tickets';
 import { TicketsAdmin } from './TicketsAdmin';
 
@@ -37,6 +38,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
 
   const [activeTab, setActiveTab] = useState<string>('leaderboards');
   const [adminPendingCount, setAdminPendingCount] = useState<number>(0);
+  const [ticketsCount, setTicketsCount] = useState<number>(0);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -119,6 +121,31 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     return () => clearInterval(timer);
   }, [canManageCadets, accessToken]);
 
+  // Poll open tickets count for SNCO/Staff to show a badge on the Tickets tab
+  useEffect(() => {
+    if (!canManageCadets) return;
+    const url = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/data/tickets-count`;
+    let timer: any;
+    const fetchCount = async () => {
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`,
+          }
+        });
+        const data = await res.json();
+        console.log('Open tickets count:', data.count);
+        if (typeof data.count === 'number') setTicketsCount(data.count);
+      } catch (e) {
+        console.error('Failed to fetch open tickets count:', e);
+      }
+    };
+    fetchCount();
+    timer = setInterval(fetchCount, 20000);
+    return () => clearInterval(timer);
+  }, [canManageCadets, accessToken]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50">
       {/* Header */}
@@ -163,6 +190,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               {/* Admin text indicator removed; logo color indicates unlock state */}
             </div>
             <div className="flex items-center gap-4">
+              {userRole === 'cadet' && <NotificationCenter accessToken={accessToken} />}
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">{userName}</p>
                 <p className="text-xs text-gray-500 capitalize">{userRole}</p>
@@ -211,6 +239,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
             canGivePoints={canGivePoints}
             canManageCadets={canManageCadets}
             adminPendingCount={adminUnlocked && canManageCadets ? adminPendingCount : 0}
+            ticketsCount={canManageCadets ? ticketsCount : 0}
           />
         </div>
       )}

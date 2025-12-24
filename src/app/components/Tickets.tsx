@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Button } from './ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { MessageSquare } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 import { toast } from 'sonner';
 
@@ -22,11 +24,13 @@ export function Tickets({ accessToken }: TicketsProps) {
   const [submitting, setSubmitting] = useState(false);
   const [tickets, setTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTicket, setSelectedTicket] = useState<any>(null);
+  const [commentText, setCommentText] = useState('');
 
   const fetchTickets = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/tickets`, {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/tickets`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       const data = await res.json();
@@ -67,7 +71,7 @@ export function Tickets({ accessToken }: TicketsProps) {
         uploadedUrl = upData.url || null;
       }
 
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/tickets`, {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/tickets`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -93,6 +97,26 @@ export function Tickets({ accessToken }: TicketsProps) {
   const statusBadge = (s: string) => {
     const map: Record<string, string> = { open: 'bg-blue-100 text-blue-800', approved: 'bg-green-100 text-green-800', rejected: 'bg-red-100 text-red-800' };
     return <Badge variant="outline" className={map[s] || ''}>{s}</Badge>;
+  };
+
+  const addComment = async () => {
+    if (!commentText.trim() || !selectedTicket) return;
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/tickets/${selectedTicket.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ action: 'comment', comment: commentText }),
+      });
+      if (!res.ok) throw new Error('Failed to add comment');
+      toast.success('Comment added');
+      setCommentText('');
+      await fetchTickets();
+      const updated = tickets.find(t => t.id === selectedTicket.id);
+      if (updated) setSelectedTicket(updated);
+    } catch (e) {
+      console.error('Comment error', e);
+      toast.error('Failed to add comment');
+    }
   };
 
   return (
@@ -152,6 +176,7 @@ export function Tickets({ accessToken }: TicketsProps) {
                     <TableHead>Category</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Evidence</TableHead>
+                    <TableHead>Comments</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -168,6 +193,12 @@ export function Tickets({ accessToken }: TicketsProps) {
                           <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedTicket(t)}>
+                          <MessageSquare className="w-4 h-4 mr-1" />
+                          {(t.comments || []).length}
+                        </Button>
+                      </TableCell>
                       <TableCell>{statusBadge(t.status)}</TableCell>
                     </TableRow>
                   ))}
@@ -177,6 +208,49 @@ export function Tickets({ accessToken }: TicketsProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Comments Dialog */}
+      <Dialog open={!!selectedTicket} onOpenChange={(open) => !open && setSelectedTicket(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Ticket: {selectedTicket?.category}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Your ticket "{selectedTicket?.category}"</p>
+              <p className="text-sm mt-2">{selectedTicket?.description}</p>
+            </div>
+            <div className="border-t pt-4">
+              <h4 className="font-semibold mb-3">Comments & Updates ({(selectedTicket?.comments || []).length})</h4>
+              <div className="space-y-3 max-h-60 overflow-y-auto mb-4">
+                {(selectedTicket?.comments || []).map((comment: any) => (
+                  <div key={comment.id} className="bg-slate-50 p-3 rounded">
+                    <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                      <span className="font-medium">{comment.author}</span>
+                      <span>{new Date(comment.createdAt).toLocaleString('en-GB')}</span>
+                    </div>
+                    <p className="text-sm">{comment.text}</p>
+                  </div>
+                ))}
+                {(selectedTicket?.comments || []).length === 0 && (
+                  <p className="text-sm text-muted-foreground">No comments yet. Check back later for updates!</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Textarea 
+                  placeholder="Add a comment or question..." 
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  rows={2}
+                />
+                <Button onClick={addComment} disabled={!commentText.trim()}>
+                  Send
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
