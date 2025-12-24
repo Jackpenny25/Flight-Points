@@ -245,6 +245,154 @@ app.get("/make-server-73a3871f/points", verifyAuth, async (c) => {
   }
 });
 
+// Ticket Routes
+// Create a ticket (any authenticated user; primarily cadets)
+app.post("/make-server-73a3871f/tickets", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const cadetId = user.user_metadata?.cadetId || null;
+    const cadetName = user.user_metadata?.cadetName || user.user_metadata?.name || user.email;
+    const flight = user.user_metadata?.flight || null;
+
+    const { category, description, requestedPoints, evidenceUrl } = await c.req.json();
+    if (!category || !description) {
+      return c.json({ error: 'Category and description are required' }, 400);
+    }
+
+    const id = crypto.randomUUID();
+    const ticket = {
+      id,
+      status: 'open',
+      category,
+      description,
+      requestedPoints: requestedPoints !== undefined ? Number(requestedPoints) : null,
+      evidenceUrl: evidenceUrl || null,
+      cadetId,
+      cadetName,
+      flight,
+      submittedBy: user.user_metadata?.name || user.email,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await kv.set(`ticket:${id}`, ticket);
+    return c.json({ ticket });
+  } catch (error) {
+    console.log('Error creating ticket:', error);
+    return c.json({ error: 'Failed to create ticket' }, 500);
+  }
+});
+
+// List tickets - cadets see their own; SNCO/Staff see all
+app.get("/make-server-73a3871f/tickets", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const role = (user.user_metadata?.role || 'cadet').toLowerCase();
+    const myCadetId = user.user_metadata?.cadetId || null;
+    const myCadetName = user.user_metadata?.cadetName || user.user_metadata?.name || user.email;
+
+    const tickets = await kv.getByPrefix('ticket:');
+    let results = tickets;
+    if (role !== 'snco' && role !== 'staff') {
+      results = tickets.filter((t: any) => (t.cadetId && myCadetId && t.cadetId === myCadetId) || (t.cadetName && myCadetName && t.cadetName === myCadetName) || (t.submittedBy === (user.user_metadata?.name || user.email)));
+    }
+
+    results.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return c.json({ tickets: results });
+  } catch (error) {
+    console.log('Error listing tickets:', error);
+    return c.json({ error: 'Failed to fetch tickets' }, 500);
+  }
+});
+
+// Update ticket: cadet can edit description while open; SNCO/Staff can approve/reject and optionally award points
+app.put("/make-server-73a3871f/tickets/:id", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const role = (user.user_metadata?.role || 'cadet').toLowerCase();
+    const id = c.req.param('id');
+    const existingArr = await kv.getByPrefix(`ticket:${id}`);
+    const existing = existingArr.find((t: any) => t.id === id) || await kv.get(`ticket:${id}`);
+    if (!existing) return c.json({ error: 'Ticket not found' }, 404);
+
+    const body = await c.req.json();
+
+    // Cadet edits (only while open)
+    if (role !== 'snco' && role !== 'staff') {
+      if (existing.status !== 'open') return c.json({ error: 'Ticket is not editable' }, 400);
+      const myId = user.user_metadata?.cadetId || null;
+      const myName = user.user_metadata?.cadetName || user.user_metadata?.name || user.email;
+      const isOwner = (existing.cadetId && myId && existing.cadetId === myId) || (existing.cadetName && myName && existing.cadetName === myName) || (existing.submittedBy === (user.user_metadata?.name || user.email));
+      if (!isOwner) return c.json({ error: 'Forbidden' }, 403);
+
+      const updated = {
+        ...existing,
+        category: body.category ?? existing.category,
+        description: body.description ?? existing.description,
+        requestedPoints: body.requestedPoints !== undefined ? Number(body.requestedPoints) : existing.requestedPoints,
+        evidenceUrl: body.evidenceUrl ?? existing.evidenceUrl,
+        updatedAt: new Date().toISOString(),
+      };
+      await kv.set(`ticket:${id}`, updated);
+      return c.json({ ticket: updated });
+    }
+
+    // SNCO/Staff actions
+    const action = (body.action || '').toLowerCase();
+    if (action === 'approve') {
+      const awardPoints = Number(body.points || existing.requestedPoints || 0);
+      const reason = body.reason || `Ticket approved: ${existing.category}`;
+      const updated = {
+        ...existing,
+        status: 'approved',
+        decisionReason: reason,
+        approvedAt: new Date().toISOString(),
+        approvedBy: user.user_metadata?.name || user.email,
+        updatedAt: new Date().toISOString(),
+      };
+      await kv.set(`ticket:${id}`, updated);
+
+      if (awardPoints && !isNaN(awardPoints)) {
+        // Create a points entry
+        const pointId = crypto.randomUUID();
+        const point = {
+          id: pointId,
+          cadetName: existing.cadetName,
+          date: new Date().toISOString(),
+          flight: existing.flight || 'unknown',
+          reason: reason || `Ticket: ${existing.category}`,
+          points: awardPoints,
+          type: 'good',
+          givenBy: user.user_metadata?.name || user.email,
+          createdAt: new Date().toISOString(),
+        };
+        await kv.set(`point:${pointId}`, point);
+      }
+
+      return c.json({ ticket: updated });
+    }
+
+    if (action === 'reject') {
+      const reason = body.reason || 'Rejected';
+      const updated = {
+        ...existing,
+        status: 'rejected',
+        decisionReason: reason,
+        rejectedAt: new Date().toISOString(),
+        rejectedBy: user.user_metadata?.name || user.email,
+        updatedAt: new Date().toISOString(),
+      };
+      await kv.set(`ticket:${id}`, updated);
+      return c.json({ ticket: updated });
+    }
+
+    return c.json({ error: 'Unsupported action' }, 400);
+  } catch (error) {
+    console.log('Error updating ticket:', error);
+    return c.json({ error: 'Failed to update ticket' }, 500);
+  }
+});
+
 // Get points for logged-in cadet
 app.get("/make-server-73a3871f/my-points", verifyAuth, async (c) => {
   console.log('=== MY POINTS ENDPOINT HIT ===');

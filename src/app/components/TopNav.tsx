@@ -5,6 +5,7 @@ const items = [
   { key: 'leaderboards', label: 'Leaderboards', icon: ArrowUpRight },
   { key: 'points', label: 'Points', icon: Award },
   { key: 'attendance', label: 'Attendance', icon: Calendar },
+  { key: 'tickets', label: 'Tickets', icon: FileText },
   { key: 'cadets', label: 'Cadets', icon: Users },
   { key: 'reports', label: 'Reports', icon: FileText },
   { key: 'integrity', label: 'Integrity', icon: Shield },
@@ -32,8 +33,8 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
     if (item.key === 'leaderboards') return true
     // Points and Attendance require canGivePoints
     if (item.key === 'points' || item.key === 'attendance') return canGivePoints
-    // Cadets, Reports, Integrity require canManageCadets
-    if (item.key === 'cadets' || item.key === 'reports' || item.key === 'integrity') return canManageCadets
+    // Tickets, Cadets, Reports, Integrity require canManageCadets
+    if (item.key === 'tickets' || item.key === 'cadets' || item.key === 'reports' || item.key === 'integrity') return canManageCadets
     return false
   })
 

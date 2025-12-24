@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from './ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileSpreadsheet } from 'lucide-react';
+import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileSpreadsheet, FileText } from 'lucide-react';
 import { PointsManager } from './PointsManager';
 import { Leaderboards } from './Leaderboards';
 import { AdminPointGivers } from './AdminPointGivers';
@@ -16,6 +16,8 @@ import { ReportsExport } from './ReportsExport';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 import AdminSignups from './AdminSignups';
 import { MyPoints } from './MyPoints';
+import { Tickets } from './Tickets';
+import { TicketsAdmin } from './TicketsAdmin';
 
 interface DashboardProps {
   user: any;
@@ -235,6 +237,15 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               <Award className="size-4 mr-2" />
               My Points
             </Button>
+            <Button
+              variant={activeTab === 'tickets' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setActiveTab('tickets')}
+              className="flex-1"
+            >
+              <FileText className="size-4 mr-2" />
+              Tickets
+            </Button>
           </div>
         </div>
       )}
@@ -250,6 +261,13 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           {userRole === 'cadet' && cadetName && (
             <TabsContent value="mypoints">
               <MyPoints accessToken={accessToken} cadetName={cadetName} />
+            </TabsContent>
+          )}
+
+          {/* Cadet tickets */}
+          {userRole === 'cadet' && (
+            <TabsContent value="tickets">
+              <Tickets accessToken={accessToken} />
             </TabsContent>
           )}
 
@@ -284,6 +302,11 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                   <AdminPointGivers accessToken={accessToken} />
                 </TabsContent>
               )}
+
+              {/* Admin tickets review (SNCO/Staff) */}
+              <TabsContent value="tickets">
+                <TicketsAdmin accessToken={accessToken} />
+              </TabsContent>
 
               {adminUnlocked && (
                 <TabsContent value="signups">
