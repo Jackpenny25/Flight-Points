@@ -81,6 +81,7 @@ export function TicketsAdmin({ accessToken }: Props) {
                     <TableHead>Category</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Requested</TableHead>
+                    <TableHead>Evidence</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -94,6 +95,13 @@ export function TicketsAdmin({ accessToken }: Props) {
                       <TableCell>{t.category}</TableCell>
                       <TableCell className="max-w-[360px] truncate" title={t.description}>{t.description}</TableCell>
                       <TableCell>{t.requestedPoints ?? '-'}</TableCell>
+                      <TableCell>
+                        {t.evidenceUrl ? (
+                          <a href={t.evidenceUrl} target="_blank" rel="noreferrer" className="text-primary underline">View</a>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>{badge(t.status)}</TableCell>
                       <TableCell className="text-right">
                         {t.status === 'open' ? (

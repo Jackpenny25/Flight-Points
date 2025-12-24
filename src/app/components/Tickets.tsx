@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Button } from './ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
-import { projectId } from '../../../utils/supabase/info';
+import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { createClient } from '@supabase/supabase-js';
 
 interface TicketsProps {
   accessToken: string;
@@ -17,6 +18,7 @@ export function Tickets({ accessToken }: TicketsProps) {
   const [description, setDescription] = useState('');
   const [requestedPoints, setRequestedPoints] = useState<string>('');
   const [evidenceUrl, setEvidenceUrl] = useState('');
+  const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [tickets, setTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,18 +48,38 @@ export function Tickets({ accessToken }: TicketsProps) {
     if (!description.trim()) return;
     setSubmitting(true);
     try {
+      // Optional: upload file to Supabase Storage
+      let uploadedUrl: string | null = null;
+      if (file) {
+        // Ensure bucket exists
+        await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/storage/init`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }).catch(() => {});
+
+        const supabase = createClient(`https://${projectId}.supabase.co`, publicAnonKey, {
+          global: { headers: { Authorization: `Bearer ${accessToken}` } },
+        });
+        const path = `tickets/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name.replace(/[^a-zA-Z0-9._-]+/g, '_')}`;
+        const { error: upErr } = await supabase.storage.from('ticket-evidence').upload(path, file, { cacheControl: '3600', upsert: false });
+        if (upErr) throw upErr;
+        const { data: pub } = supabase.storage.from('ticket-evidence').getPublicUrl(path);
+        uploadedUrl = pub?.publicUrl || null;
+      }
+
       const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/tickets`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ category, description, requestedPoints: requestedPoints ? parseFloat(requestedPoints) : null, evidenceUrl }),
+        body: JSON.stringify({ category, description, requestedPoints: requestedPoints ? parseFloat(requestedPoints) : null, evidenceUrl: uploadedUrl || evidenceUrl }),
       });
       if (!res.ok) throw new Error('Submit failed');
       setDescription('');
       setRequestedPoints('');
       setEvidenceUrl('');
+      setFile(null);
       fetchTickets();
     } catch (e) {
       console.error('Submit ticket error', e);
@@ -102,8 +124,12 @@ export function Tickets({ accessToken }: TicketsProps) {
                 <Input type="number" step="0.5" value={requestedPoints} onChange={(e) => setRequestedPoints(e.target.value)} placeholder="e.g. 5" />
               </div>
               <div>
-                <label className="text-sm font-medium">Evidence URL (optional)</label>
-                <Input type="url" value={evidenceUrl} onChange={(e) => setEvidenceUrl(e.target.value)} placeholder="Link to evidence (if any)" />
+                <label className="text-sm font-medium">Evidence</label>
+                <div className="flex gap-2">
+                  <Input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">You can upload a photo, or paste a link below.</p>
+                <Input className="mt-2" type="url" value={evidenceUrl} onChange={(e) => setEvidenceUrl(e.target.value)} placeholder="Optional link to evidence" />
               </div>
             </div>
             <Button type="submit" disabled={submitting}>{submitting ? 'Submitting...' : 'Submit Ticket'}</Button>
@@ -130,6 +156,7 @@ export function Tickets({ accessToken }: TicketsProps) {
                     <TableHead>Category</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Requested</TableHead>
+                    <TableHead>Evidence</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -140,6 +167,13 @@ export function Tickets({ accessToken }: TicketsProps) {
                       <TableCell>{t.category}</TableCell>
                       <TableCell className="max-w-[420px] truncate" title={t.description}>{t.description}</TableCell>
                       <TableCell>{t.requestedPoints ?? '-'}</TableCell>
+                      <TableCell>
+                        {t.evidenceUrl ? (
+                          <a href={t.evidenceUrl} target="_blank" rel="noreferrer" className="text-primary underline">View</a>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>{statusBadge(t.status)}</TableCell>
                     </TableRow>
                   ))}

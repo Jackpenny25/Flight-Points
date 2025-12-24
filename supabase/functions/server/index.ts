@@ -393,6 +393,31 @@ app.put("/make-server-73a3871f/tickets/:id", verifyAuth, async (c) => {
   }
 });
 
+// Storage: ensure evidence bucket exists (SNCO/Staff/Cadet authenticated)
+app.post("/make-server-73a3871f/storage/init", verifyAuth, async (c) => {
+  try {
+    const admin = getSupabaseAdmin();
+    const bucket = 'ticket-evidence';
+
+    // Check bucket
+    const { data: list, error: listErr } = await admin.storage.listBuckets();
+    if (listErr) console.log('List buckets error (non-fatal):', listErr);
+    const exists = (list || []).some((b: any) => b.name === bucket);
+
+    if (!exists) {
+      const { error: createErr } = await admin.storage.createBucket(bucket, { public: true });
+      if (createErr && !String(createErr.message || '').includes('already exists')) {
+        return c.json({ error: 'Failed to create bucket' }, 500);
+      }
+    }
+
+    return c.json({ ok: true, bucket });
+  } catch (error) {
+    console.log('Error ensuring storage bucket:', error);
+    return c.json({ error: 'Failed to ensure storage bucket' }, 500);
+  }
+});
+
 // Get points for logged-in cadet
 app.get("/make-server-73a3871f/my-points", verifyAuth, async (c) => {
   console.log('=== MY POINTS ENDPOINT HIT ===');
