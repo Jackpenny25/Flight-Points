@@ -16,7 +16,7 @@ interface TicketsProps {
 export function Tickets({ accessToken }: TicketsProps) {
   const [category, setCategory] = useState('Badge');
   const [description, setDescription] = useState('');
-  const [requestedPoints, setRequestedPoints] = useState<string>('');
+  // Removed requested points; SNCO/Staff will decide points on approval
   const [evidenceUrl, setEvidenceUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -73,11 +73,11 @@ export function Tickets({ accessToken }: TicketsProps) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ category, description, requestedPoints: requestedPoints ? parseFloat(requestedPoints) : null, evidenceUrl: uploadedUrl || evidenceUrl }),
+        body: JSON.stringify({ category, description, evidenceUrl: uploadedUrl || evidenceUrl }),
       });
       if (!res.ok) throw new Error('Submit failed');
       setDescription('');
-      setRequestedPoints('');
+      
       setEvidenceUrl('');
       setFile(null);
       fetchTickets();
@@ -118,19 +118,13 @@ export function Tickets({ accessToken }: TicketsProps) {
               <label className="text-sm font-medium">Description</label>
               <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="Describe what you earned and when" required />
             </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium">Requested Points (optional)</label>
-                <Input type="number" step="0.5" value={requestedPoints} onChange={(e) => setRequestedPoints(e.target.value)} placeholder="e.g. 5" />
-              </div>
-              <div>
+            <div>
                 <label className="text-sm font-medium">Evidence</label>
                 <div className="flex gap-2">
                   <Input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">You can upload a photo, or paste a link below.</p>
                 <Input className="mt-2" type="url" value={evidenceUrl} onChange={(e) => setEvidenceUrl(e.target.value)} placeholder="Optional link to evidence" />
-              </div>
             </div>
             <Button type="submit" disabled={submitting}>{submitting ? 'Submitting...' : 'Submit Ticket'}</Button>
           </form>
@@ -155,7 +149,6 @@ export function Tickets({ accessToken }: TicketsProps) {
                     <TableHead>Date</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead>Requested</TableHead>
                     <TableHead>Evidence</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
@@ -166,7 +159,6 @@ export function Tickets({ accessToken }: TicketsProps) {
                       <TableCell>{new Date(t.createdAt).toLocaleDateString('en-GB')}</TableCell>
                       <TableCell>{t.category}</TableCell>
                       <TableCell className="max-w-[420px] truncate" title={t.description}>{t.description}</TableCell>
-                      <TableCell>{t.requestedPoints ?? '-'}</TableCell>
                       <TableCell>
                         {t.evidenceUrl ? (
                           <a href={t.evidenceUrl} target="_blank" rel="noreferrer" className="text-primary underline">View</a>

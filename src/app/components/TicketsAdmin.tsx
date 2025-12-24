@@ -80,7 +80,6 @@ export function TicketsAdmin({ accessToken }: Props) {
                     <TableHead>Flight</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead>Requested</TableHead>
                     <TableHead>Evidence</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -94,7 +93,6 @@ export function TicketsAdmin({ accessToken }: Props) {
                       <TableCell>{t.flight || '-'}</TableCell>
                       <TableCell>{t.category}</TableCell>
                       <TableCell className="max-w-[360px] truncate" title={t.description}>{t.description}</TableCell>
-                      <TableCell>{t.requestedPoints ?? '-'}</TableCell>
                       <TableCell>
                         {t.evidenceUrl ? (
                           <a href={t.evidenceUrl} target="_blank" rel="noreferrer" className="text-primary underline">View</a>
