@@ -1463,6 +1463,124 @@ Deno.serve(async (req: Request) => {
       }
     }
     
+    // Handle tickets endpoint directly (bypass Hono)
+    if (pathname.includes('/tickets')) {
+      // Create ticket
+      if (req.method === 'POST') {
+        try {
+          const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+          if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+          const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+          if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const body = await req.json();
+          const { category, description, evidenceUrl } = body || {};
+          if (!category || !description) return new Response(JSON.stringify({ error: 'Category and description are required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const id = crypto.randomUUID();
+          const ticket = {
+            id,
+            status: 'open',
+            category,
+            description,
+            requestedPoints: null,
+            evidenceUrl: evidenceUrl || null,
+            cadetId: user.user_metadata?.cadetId || null,
+            cadetName: user.user_metadata?.cadetName || user.user_metadata?.name || user.email,
+            flight: user.user_metadata?.flight || null,
+            submittedBy: user.user_metadata?.name || user.email,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          await kv.set(`ticket:${id}`, ticket);
+          return new Response(JSON.stringify({ ticket }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        } catch (e) {
+          console.error('Tickets POST error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to create ticket' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+      }
+
+      // Resolve ticket id if present
+      const ticketIdMatch = pathname.match(/\/tickets\/([^/]+)$/);
+
+      // Update ticket
+      if (ticketIdMatch && req.method === 'PUT') {
+        try {
+          const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+          if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+          const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+          if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const id = decodeURIComponent(ticketIdMatch[1]);
+          const existing = (await kv.get(`ticket:${id}`)) as any;
+          if (!existing) return new Response(JSON.stringify({ error: 'Ticket not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const role = (user.user_metadata?.role || 'cadet').toLowerCase();
+          const body = await req.json();
+          if (role !== 'snco' && role !== 'staff') {
+            if (existing.status !== 'open') return new Response(JSON.stringify({ error: 'Ticket is not editable' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+            const myId = user.user_metadata?.cadetId || null;
+            const myName = user.user_metadata?.cadetName || user.user_metadata?.name || user.email;
+            const isOwner = (existing.cadetId && myId && existing.cadetId === myId) || (existing.cadetName && myName && existing.cadetName === myName) || (existing.submittedBy === (user.user_metadata?.name || user.email));
+            if (!isOwner) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+            const updated = { ...existing, category: body.category ?? existing.category, description: body.description ?? existing.description, evidenceUrl: body.evidenceUrl ?? existing.evidenceUrl, updatedAt: new Date().toISOString() };
+            await kv.set(`ticket:${id}`, updated);
+            return new Response(JSON.stringify({ ticket: updated }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          }
+
+          const action = (body.action || '').toLowerCase();
+          if (action === 'approve') {
+            const pts = Number(body.points || 0);
+            const reason = body.reason || `Ticket approved: ${existing.category}`;
+            const updated = { ...existing, status: 'approved', decisionReason: reason, approvedAt: new Date().toISOString(), approvedBy: user.user_metadata?.name || user.email, updatedAt: new Date().toISOString() };
+            await kv.set(`ticket:${id}`, updated);
+            if (pts && !isNaN(pts)) {
+              const pointId = crypto.randomUUID();
+              const point = { id: pointId, cadetName: existing.cadetName, date: new Date().toISOString(), flight: existing.flight || 'unknown', reason, points: pts, type: 'good', givenBy: user.user_metadata?.name || user.email, createdAt: new Date().toISOString() };
+              await kv.set(`point:${pointId}`, point);
+            }
+            return new Response(JSON.stringify({ ticket: updated }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          }
+          if (action === 'reject') {
+            const reason = body.reason || 'Rejected';
+            const updated = { ...existing, status: 'rejected', decisionReason: reason, rejectedAt: new Date().toISOString(), rejectedBy: user.user_metadata?.name || user.email, updatedAt: new Date().toISOString() };
+            await kv.set(`ticket:${id}`, updated);
+            return new Response(JSON.stringify({ ticket: updated }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          }
+          return new Response(JSON.stringify({ error: 'Unsupported action' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        } catch (e) {
+          console.error('Tickets PUT error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to update ticket' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+      }
+
+      // List tickets
+      if (req.method === 'GET') {
+        try {
+          const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+          if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+          const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+          if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          const role = (user.user_metadata?.role || 'cadet').toLowerCase();
+          const myCadetId = user.user_metadata?.cadetId || null;
+          const myCadetName = user.user_metadata?.cadetName || user.user_metadata?.name || user.email;
+          const tickets = await kv.getByPrefix('ticket:');
+          let results = tickets;
+          if (role !== 'snco' && role !== 'staff') {
+            results = tickets.filter((t: any) => (t.cadetId && myCadetId && t.cadetId === myCadetId) || (t.cadetName && myCadetName && t.cadetName === myCadetName) || (t.submittedBy === (user.user_metadata?.name || user.email)));
+          }
+          results.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          return new Response(JSON.stringify({ tickets: results }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        } catch (e) {
+          console.error('Tickets GET error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to fetch tickets' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+      }
+    }
+
     // Handle points endpoint directly (bypass Hono)
     if (pathname.includes('/points')) {
       // Clear all points for a cadet
@@ -1620,6 +1738,23 @@ Deno.serve(async (req: Request) => {
             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
           });
         }
+      }
+    }
+
+    // Storage init (ensure bucket) direct handler
+    if (pathname.includes('/storage/init') && req.method === 'POST') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const admin = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        const bucket = 'ticket-evidence';
+        const { data: list } = await admin.storage.listBuckets();
+        const exists = (list || []).some((b: any) => b.name === bucket);
+        if (!exists) await admin.storage.createBucket(bucket, { public: true });
+        return new Response(JSON.stringify({ ok: true, bucket }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        console.error('storage/init error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to ensure bucket' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
       }
     }
 

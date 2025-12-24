@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from './ui/badge';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 import { createClient } from '@supabase/supabase-js';
+import { toast } from 'sonner';
 
 interface TicketsProps {
   accessToken: string;
@@ -76,6 +77,7 @@ export function Tickets({ accessToken }: TicketsProps) {
         body: JSON.stringify({ category, description, evidenceUrl: uploadedUrl || evidenceUrl }),
       });
       if (!res.ok) throw new Error('Submit failed');
+      toast.success('Ticket submitted');
       setDescription('');
       
       setEvidenceUrl('');
@@ -83,6 +85,7 @@ export function Tickets({ accessToken }: TicketsProps) {
       fetchTickets();
     } catch (e) {
       console.error('Submit ticket error', e);
+      toast.error('Failed to submit ticket');
     } finally {
       setSubmitting(false);
     }
