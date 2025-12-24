@@ -1758,6 +1758,37 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Upload ticket evidence via service role (bypasses RLS) - expects multipart form with 'file'
+    if (pathname.includes('/upload/ticket-evidence') && req.method === 'POST') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const form = await req.formData();
+        const file = form.get('file') as unknown as File | null;
+        if (!file) return new Response(JSON.stringify({ error: 'Missing file' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const bucket = 'ticket-evidence';
+        // Ensure bucket exists
+        const { data: list } = await sb.storage.listBuckets();
+        const exists = (list || []).some((b: any) => b.name === bucket);
+        if (!exists) await sb.storage.createBucket(bucket, { public: true });
+
+        const sanitized = (file as any).name ? String((file as any).name).replace(/[^a-zA-Z0-9._-]+/g, '_') : `evidence_${Date.now()}`;
+        const path = `tickets/${crypto.randomUUID()}_${sanitized}`;
+        const { error: upErr } = await sb.storage.from(bucket).upload(path, file, { cacheControl: '3600', upsert: false, contentType: (file as any).type || 'application/octet-stream' });
+        if (upErr) return new Response(JSON.stringify({ error: String(upErr.message || upErr) }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const { data: pub } = sb.storage.from(bucket).getPublicUrl(path);
+        return new Response(JSON.stringify({ url: pub?.publicUrl || null, path }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        console.error('upload/ticket-evidence error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to upload evidence' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
     // Handle leaderboards directly (bypass Hono)
     if (pathname.includes('/leaderboards') && req.method === 'GET') {
       try {

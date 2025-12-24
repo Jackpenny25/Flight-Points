@@ -7,7 +7,6 @@ import { Button } from './ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
-import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
 interface TicketsProps {
@@ -52,20 +51,20 @@ export function Tickets({ accessToken }: TicketsProps) {
       // Optional: upload file to Supabase Storage
       let uploadedUrl: string | null = null;
       if (file) {
-        // Ensure bucket exists
-        await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/storage/init`, {
+        // Upload via server to bypass Storage RLS
+        const fd = new FormData();
+        fd.append('file', file);
+        const up = await fetch(`https://${projectId}.supabase.co/functions/v1/server/upload/ticket-evidence`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${accessToken}` },
-        }).catch(() => {});
-
-        const supabase = createClient(`https://${projectId}.supabase.co`, publicAnonKey, {
-          global: { headers: { Authorization: `Bearer ${accessToken}` } },
+          body: fd,
         });
-        const path = `tickets/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name.replace(/[^a-zA-Z0-9._-]+/g, '_')}`;
-        const { error: upErr } = await supabase.storage.from('ticket-evidence').upload(path, file, { cacheControl: '3600', upsert: false });
-        if (upErr) throw upErr;
-        const { data: pub } = supabase.storage.from('ticket-evidence').getPublicUrl(path);
-        uploadedUrl = pub?.publicUrl || null;
+        if (!up.ok) {
+          const err = await up.json().catch(() => ({}));
+          throw new Error(err.error || 'Upload failed');
+        }
+        const upData = await up.json();
+        uploadedUrl = upData.url || null;
       }
 
       const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/tickets`, {
