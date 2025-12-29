@@ -19,6 +19,7 @@ import { MyPoints } from './MyPoints';
 import { NotificationCenter } from './NotificationCenter';
 import { Tickets } from './Tickets';
 import { TicketsAdmin } from './TicketsAdmin';
+import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
 interface DashboardProps {
   user: any;
@@ -190,7 +191,39 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               {/* Admin text indicator removed; logo color indicates unlock state */}
             </div>
             <div className="flex items-center gap-4">
-              {userRole === 'cadet' && <NotificationCenter accessToken={accessToken} />}
+                {userRole === 'cadet' && <NotificationCenter accessToken={accessToken} />}
+                <PrivacyPolicyModal />
+                {/* Retention cleanup (staff/SNCO only) */}
+                {canManageCadets && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                      if (!confirm('Run data retention cleanup now? This will permanently delete records older than 4 years.')) return;
+                      try {
+                        const url = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/retention/cleanup`;
+                        const res = await fetch(url, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${accessToken}`,
+                          }
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                          alert('Cleanup failed: ' + (data.error || res.statusText));
+                          return;
+                        }
+                        alert('Cleanup completed. Deleted: ' + JSON.stringify(data.deleted));
+                      } catch (e) {
+                        console.error('Cleanup request failed', e);
+                        alert('Cleanup request failed');
+                      }
+                    }}
+                  >
+                    Run Retention Cleanup
+                  </Button>
+                )}
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">{userName}</p>
                 <p className="text-xs text-gray-500 capitalize">{userRole}</p>

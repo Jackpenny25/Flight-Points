@@ -421,6 +421,34 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
           <Button variant="ghost" size="sm" onClick={() => { openEditCadet(cadet); }}>
             <Edit2 className="size-4" />
           </Button>
+          {/* Mark left / clear left button */}
+          <Button variant={cadet.leftAt ? 'outline' : 'ghost'} size="sm" onClick={async () => {
+            if (!ensureAdminPin()) return;
+            const isMarkingLeft = !cadet.leftAt;
+            if (!confirm(isMarkingLeft ? `Mark ${cadet.name} as left?` : `Mark ${cadet.name} as active (clear left date)?`)) return;
+            try {
+              const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+              if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+              const body: any = isMarkingLeft ? { leftAt: new Date().toISOString() } : { leftAt: null };
+              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets/${cadet.id}`, { method: 'PUT', headers, body: JSON.stringify(body) });
+              if (res.ok) {
+                // update local copy
+                const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
+                const updated = (Array.isArray(existing) ? existing : []).map((c: any) => c.id === cadet.id ? { ...c, leftAt: body.leftAt } : c);
+                localStorage.setItem('cadets', JSON.stringify(updated));
+                setCadets(updated);
+                toast.success(isMarkingLeft ? 'Cadet marked as left' : 'Cadet marked active');
+              } else {
+                const err = await res.json().catch(() => ({ error: res.statusText }));
+                toast.error('Failed to update cadet: ' + (err.error || res.statusText));
+              }
+            } catch (e) {
+              console.error('Failed to mark left:', e);
+              toast.error('Failed to update cadet');
+            }
+          }}>
+            {cadet.leftAt ? 'Mark Active' : 'Mark Left'}
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => handleDeleteCadet(cadet.id, cadet.name)}>
             <Trash2 className="size-4 text-red-600" />
           </Button>

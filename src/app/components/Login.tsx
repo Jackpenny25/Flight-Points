@@ -8,6 +8,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
 const supabase = createClient(
   `https://${projectId}.supabase.co`,
@@ -233,7 +234,7 @@ export function Login({ onLogin }: LoginProps) {
       </Card>
 
       {/* Allow guest cadet access without creating an account */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 text-center">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 text-center space-y-4">
         <p className="text-sm text-gray-600 mb-2">Cadets can continue without creating an account — only SNCOs and Point Givers need accounts.</p>
         <div className="mt-2 flex items-center justify-center gap-3">
           <Input placeholder="Guest name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
@@ -243,6 +244,13 @@ export function Login({ onLogin }: LoginProps) {
           >
             Continue as Cadet (no account)
           </Button>
+        </div>
+        
+        {/* Privacy Policy Link */}
+        <div className="flex items-center justify-center gap-2">
+          <PrivacyPolicyModal />
+          <span className="text-xs text-gray-500">|</span>
+          <p className="text-xs text-gray-500">By signing up, you agree to our Privacy Policy</p>
         </div>
       </div>
     </div>

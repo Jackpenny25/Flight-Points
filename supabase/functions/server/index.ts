@@ -205,7 +205,7 @@ app.put("/make-server-73a3871f/cadets/:id", verifyAuth, async (c) => {
     }
 
     const cadetId = c.req.param('id');
-    const { name, flight } = await c.req.json();
+    const { name, flight, leftAt, lastActive } = await c.req.json();
 
     const existing = await kv.getByPrefix(`cadet:${cadetId}`);
     const cadet = existing.find((c: any) => c.id === cadetId);
@@ -218,6 +218,10 @@ app.put("/make-server-73a3871f/cadets/:id", verifyAuth, async (c) => {
       ...cadet,
       name: name !== undefined ? name : cadet.name,
       flight: flight !== undefined ? flight : cadet.flight,
+      // leftAt can be set to a timestamp string or null to clear
+      leftAt: leftAt !== undefined ? leftAt : cadet.leftAt,
+      // lastActive can be updated to track cadet activity
+      lastActive: lastActive !== undefined ? lastActive : cadet.lastActive,
       updatedAt: new Date().toISOString(),
       updatedBy: user.user_metadata?.name || user.email,
     };
@@ -2348,5 +2352,152 @@ Deno.serve(async (req: Request) => {
       status: 500,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
+  }
+});
+
+// Retention cleanup: delete personal data older than 4 years
+app.post("/make-server-73a3871f/retention/cleanup", async (c) => {
+  try {
+    // Allow invocation either by an authenticated staff/SNCO user (Bearer user token)
+    // or by a scheduled job using the Supabase service role key (Bearer SERVICE_ROLE_KEY).
+    const authHeader = c.req.header('Authorization') || '';
+    const bearer = authHeader.split(' ')[1] || '';
+
+    let allowed = false;
+    let invokedBy = 'unknown';
+
+    // If the request uses the service role key, allow immediately
+    const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    if (serviceRole && bearer === serviceRole) {
+      allowed = true;
+      invokedBy = 'service_role';
+    }
+
+    // If not using service role, validate user token and require staff/SNCO role
+    let invokingUser: any = null;
+    if (!allowed && bearer) {
+      const supabase = getSupabaseAdmin();
+      const { data: { user }, error } = await supabase.auth.getUser(bearer);
+      if (!error && user) {
+        invokingUser = user;
+        const role = (user.user_metadata?.role || 'cadet').toLowerCase();
+        if (role === 'staff' || role === 'snco') {
+          allowed = true;
+          invokedBy = user.email || user.user_metadata?.name || 'staff_user';
+        }
+      }
+    }
+
+    if (!allowed) {
+      return c.json({ error: 'Unauthorized - must be staff/SNCO or service role' }, 403);
+    }
+
+    // Retention rules:
+    // - If cadet has `leftAt`, delete cadet and related records 1 year after `leftAt`.
+    // - Else if cadet has `lastActive`, delete cadet and related records 2 years after `lastActive`.
+    // - Else fallback: delete records older than 4 years from creation.
+    const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+    const TWO_YEARS_MS = 2 * ONE_YEAR_MS;
+    const FOUR_YEARS_MS = 4 * ONE_YEAR_MS;
+
+    const now = Date.now();
+
+    const deleted: Record<string, number> = {};
+    const prefixes = ['cadet:', 'point:', 'ticket:', 'attendance:', 'notification:'];
+    for (const p of prefixes) deleted[p] = 0;
+
+    // First, evaluate cadets to determine which cadet IDs to delete
+    const cadets = await kv.getByPrefix('cadet:');
+    const cadetIdsToDelete = new Set<string>();
+    for (const cadet of cadets) {
+      try {
+        const id = cadet?.id;
+        if (!id) continue;
+        const leftAt = cadet?.leftAt ? Date.parse(cadet.leftAt) : null;
+        const lastActive = cadet?.lastActive ? Date.parse(cadet.lastActive) : null;
+        const createdAt = cadet?.createdAt ? Date.parse(cadet.createdAt) : null;
+
+        let shouldDelete = false;
+        if (leftAt && !isNaN(leftAt) && (now - leftAt) >= ONE_YEAR_MS) {
+          shouldDelete = true;
+        } else if (lastActive && !isNaN(lastActive) && (now - lastActive) >= TWO_YEARS_MS) {
+          shouldDelete = true;
+        } else if (createdAt && !isNaN(createdAt) && (now - createdAt) >= FOUR_YEARS_MS) {
+          shouldDelete = true;
+        }
+
+        if (shouldDelete) {
+          await kv.del(`cadet:${id}`);
+          cadetIdsToDelete.add(id);
+          deleted['cadet:']++;
+        }
+      } catch (e) {
+        console.error('Error evaluating cadet for retention', e);
+      }
+    }
+
+    // Next, delete related records for cadets deleted, and also apply fallback rules for orphaned or old items
+    for (const prefix of ['point:', 'ticket:', 'attendance:', 'notification:']) {
+      const items = await kv.getByPrefix(prefix);
+      for (const item of items) {
+        try {
+          const itemId = item?.id;
+          if (!itemId) continue;
+
+          const itemDate = item?.createdAt ? Date.parse(item.createdAt) : item?.date ? Date.parse(item.date) : null;
+
+          // If item is linked to a cadet that was deleted, remove it
+          if (item?.cadetId && cadetIdsToDelete.has(item.cadetId)) {
+            await kv.del(`${prefix}${itemId}`);
+            deleted[prefix]++;
+            continue;
+          }
+
+          // If item has cadetId and cadet still exists, apply cadet-based rules if possible
+          if (item?.cadetId && !cadetIdsToDelete.has(item.cadetId)) {
+            const cadet = await kv.get(`cadet:${item.cadetId}`);
+            if (cadet) {
+              const leftAt = cadet?.leftAt ? Date.parse(cadet.leftAt) : null;
+              const lastActive = cadet?.lastActive ? Date.parse(cadet.lastActive) : null;
+              let shouldDelete = false;
+              if (leftAt && !isNaN(leftAt) && (now - leftAt) >= ONE_YEAR_MS) shouldDelete = true;
+              else if (lastActive && !isNaN(lastActive) && (now - lastActive) >= TWO_YEARS_MS) shouldDelete = true;
+              if (shouldDelete) {
+                await kv.del(`${prefix}${itemId}`);
+                deleted[prefix]++;
+              }
+              continue;
+            }
+          }
+
+          // Fallback: delete items older than 4 years from creation
+          if (itemDate && !isNaN(itemDate) && (now - itemDate) >= FOUR_YEARS_MS) {
+            await kv.del(`${prefix}${itemId}`);
+            deleted[prefix]++;
+          }
+        } catch (e) {
+          console.error('Error evaluating item for retention', e);
+        }
+      }
+    }
+
+    // Record an audit entry in the KV store
+    try {
+      const auditId = new Date().toISOString();
+      const audit = {
+        id: auditId,
+        timestamp: auditId,
+        triggeredBy: invokedBy,
+        deleted,
+      };
+      await kv.set(`deletion_audit:${auditId}`, audit);
+    } catch (e) {
+      console.error('Failed to write deletion audit record', e);
+    }
+
+    return c.json({ success: true, deleted, invokedBy });
+  } catch (error) {
+    console.error('Retention cleanup failed:', error);
+    return c.json({ error: 'Retention cleanup failed' }, 500);
   }
 });

@@ -1,0 +1,28 @@
+name: Retention Cleanup
+
+on:
+  schedule:
+    - cron: '0 3 1 * *' # At 03:00 on day-of-month 1 (monthly)
+  workflow_dispatch: {}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run retention cleanup
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -e
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in Secrets"
+            exit 1
+          fi
+          URL="$SUPABASE_URL/functions/v1/server/make-server-73a3871f/retention/cleanup"
+          echo "Calling $URL"
+          curl -s -X POST "$URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -o cleanup-result.json || true
+          cat cleanup-result.json
