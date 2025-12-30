@@ -152,15 +152,17 @@ export function Login({ onLogin }: LoginProps) {
             <TabsContent value="signup">
               <form onSubmit={handleSignUp} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="signup-name">Full Name</Label>
+                  <Label htmlFor="signup-name">Username (First and Last Name)</Label>
                   <Input
                     id="signup-name"
                     type="text"
-                    placeholder="John Smith"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Format: "Surname Initial" (e.g., Smith J, Jones A). Admin may request changes if format is incorrect.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-email">Email</Label>

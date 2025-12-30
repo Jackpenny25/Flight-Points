@@ -31,6 +31,8 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const userRole = user?.user_metadata?.role || 'cadet';
   const userName = user?.user_metadata?.name || user?.email || 'User';
   const cadetName = user?.user_metadata?.cadetName;
+  const suggestedName = user?.user_metadata?.suggestedName;
+  const requireNameChange = user?.user_metadata?.requireNameChange === true;
   
   const canGivePoints = userRole === 'pointgiver' || userRole === 'snco' || userRole === 'staff';
   const canManageCadets = userRole === 'snco' || userRole === 'staff';
@@ -40,6 +42,18 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<string>('leaderboards');
   const [adminPendingCount, setAdminPendingCount] = useState<number>(0);
   const [ticketsCount, setTicketsCount] = useState<number>(0);
+  
+  // Name change dialog state
+  const [nameChangeDialogOpen, setNameChangeDialogOpen] = useState<boolean>(false);
+  const [newName, setNewName] = useState<string>(suggestedName || userName);
+  const [nameChangeError, setNameChangeError] = useState<string>('');
+
+  useEffect(() => {
+    // Show name change dialog if admin requires it or suggests it
+    if (suggestedName && !sessionStorage.getItem('nameChangeDismissed')) {
+      setNameChangeDialogOpen(true);
+    }
+  }, [suggestedName]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -381,6 +395,109 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           {/* bottom tab triggers removed; use TopNav above */}
         </Tabs>
       </main>
+
+      {/* Name Change Dialog */}
+      <Dialog open={nameChangeDialogOpen} onOpenChange={(open) => {
+        if (!requireNameChange) {
+          // Allow dismissing if it's just a suggestion
+          setNameChangeDialogOpen(open);
+          if (!open) sessionStorage.setItem('nameChangeDismissed', 'true');
+        }
+      }}>
+        <DialogContent className={requireNameChange ? "sm:max-w-md" : "sm:max-w-md"}>
+          <DialogHeader>
+            <DialogTitle>
+              {requireNameChange ? '⚠️ Name Change Required' : '💡 Name Suggestion'}
+            </DialogTitle>
+            <DialogDescription>
+              {requireNameChange ? (
+                <>
+                  An admin has requested that you change your username to follow the correct format.
+                  <br /><br />
+                  <strong>Required format:</strong> "Surname Initial" (e.g., Smith J, Penny J)
+                </>
+              ) : (
+                <>
+                  An admin has suggested a corrected version of your username.
+                  <br /><br />
+                  <strong>Suggested format:</strong> "Surname Initial" (e.g., Smith J, Penny J)
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-muted-foreground mb-2">Current name: <strong>{userName}</strong></p>
+              {suggestedName && (
+                <p className="text-sm text-green-700 mb-2">Admin suggestion: <strong>{suggestedName}</strong></p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">New Username</label>
+              <Input
+                placeholder="Enter corrected name..."
+                value={newName}
+                onChange={(e) => {
+                  setNewName(e.target.value);
+                  setNameChangeError('');
+                }}
+              />
+              {nameChangeError && (
+                <p className="text-sm text-red-600">{nameChangeError}</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            {!requireNameChange && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setNameChangeDialogOpen(false);
+                  sessionStorage.setItem('nameChangeDismissed', 'true');
+                }}
+              >
+                Dismiss
+              </Button>
+            )}
+            <Button
+              onClick={async () => {
+                if (!newName.trim()) {
+                  setNameChangeError('Please enter a name');
+                  return;
+                }
+                try {
+                  const response = await fetch(
+                    `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/update-name`,
+                    {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`,
+                      },
+                      body: JSON.stringify({ name: newName.trim() }),
+                    }
+                  );
+                  
+                  if (!response.ok) {
+                    const error = await response.json();
+                    setNameChangeError(error.error || 'Failed to update name');
+                    return;
+                  }
+                  
+                  // Success - reload to get updated user data
+                  alert('Name updated successfully! Please log in again.');
+                  onLogout();
+                } catch (err) {
+                  console.error('Name update error:', err);
+                  setNameChangeError('Failed to update name');
+                }
+              }}
+            >
+              Update Name
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

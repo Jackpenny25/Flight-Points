@@ -1552,11 +1552,14 @@ Deno.serve(async (req: Request) => {
         const body = await req.json();
         const role = (body?.role || 'cadet').toLowerCase();
         const cadetId = String(body?.cadetId || '').trim() || null;
+        const suggestedName = String(body?.suggestedName || '').trim() || null;
+        const forceNameChange = body?.forceNameChange === true;
+        
         const rec = await kv.get(`signup:${id}`);
         if (!rec) {
           return new Response(JSON.stringify({ error: 'Request not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         }
-        let cadetMeta: { cadetId?: string; cadetName?: string; flight?: string } = {};
+        let cadetMeta: { cadetId?: string; cadetName?: string; flight?: string; suggestedName?: string; requireNameChange?: boolean } = {};
         if (cadetId) {
           const cadet = await kv.get(`cadet:${cadetId}`);
           if (!cadet) {
@@ -1567,6 +1570,13 @@ Deno.serve(async (req: Request) => {
           // Preserve requested flight if no cadet mapping provided
           cadetMeta = { flight: rec.flight };
         }
+        
+        // Add name suggestion metadata if provided
+        if (suggestedName) {
+          cadetMeta.suggestedName = suggestedName;
+          cadetMeta.requireNameChange = forceNameChange;
+        }
+        
         const supabase = createClient(
           Deno.env.get('SUPABASE_URL') ?? '',
           Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -1606,6 +1616,50 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Failed to delete request' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Update user's name
+    if (pathname.includes('/auth/update-name') && req.method === 'POST') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        
+        const sb = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        );
+        
+        const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        
+        const body = await req.json();
+        const newName = String(body?.name || '').trim();
+        
+        if (!newName) {
+          return new Response(JSON.stringify({ error: 'Name is required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+        
+        // Update user metadata to remove the name change requirement and update the name
+        const updatedMetadata = {
+          ...user.user_metadata,
+          name: newName,
+          suggestedName: undefined,
+          requireNameChange: undefined,
+        };
+        
+        const { error: updateErr } = await sb.auth.admin.updateUserById(user.id, {
+          user_metadata: updatedMetadata,
+        });
+        
+        if (updateErr) {
+          return new Response(JSON.stringify({ error: updateErr.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+        
+        return new Response(JSON.stringify({ success: true, name: newName }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        console.error('Update name error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to update name' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
       }
     }
     

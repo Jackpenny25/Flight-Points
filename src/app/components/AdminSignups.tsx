@@ -16,6 +16,8 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
   const [pending, setPending] = useState<Array<{id:string;name:string;email:string;createdAt:string;flight?:string|null}>>([]);
   const [roleSelections, setRoleSelections] = useState<Record<string,string>>({});
   const [cadetSelections, setCadetSelections] = useState<Record<string,string>>({});
+  const [nameSuggestions, setNameSuggestions] = useState<Record<string,string>>({});
+  const [forceNameChange, setForceNameChange] = useState<Record<string,boolean>>({});
   const [cadets, setCadets] = useState<Array<{id:string;name:string;flight:string}>>([]);
   const [joinCodeInfo, setJoinCodeInfo] = useState<{joinCode:string|null;expiresAt:string|null;durationSeconds:number|null} | null>(null);
   const [duration, setDuration] = useState<number>(1); // in hours
@@ -129,6 +131,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                     <TableHead>Email</TableHead>
                     <TableHead>Flight</TableHead>
                     <TableHead>Cadet Mapping</TableHead>
+                    <TableHead>Suggested Name</TableHead>
                     <TableHead>Requested</TableHead>
                     <TableHead className="text-right">Role</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -137,7 +140,9 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                 <TableBody>
                   {pending.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell>{r.name}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{r.name}</div>
+                      </TableCell>
                       <TableCell>{r.email}</TableCell>
                       <TableCell>{r.flight ? formatFlight(r.flight) : '—'}</TableCell>
                       <TableCell>
@@ -168,6 +173,30 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                           </Select>
                         </div>
                       </TableCell>
+                      <TableCell>
+                        <div className="space-y-2 max-w-[200px]">
+                          <Input
+                            placeholder="Corrected name..."
+                            value={nameSuggestions[r.id] || ''}
+                            onChange={(e) => setNameSuggestions(prev => ({...prev, [r.id]: e.target.value}))}
+                            className="text-sm"
+                          />
+                          <label className="flex items-center gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={forceNameChange[r.id] || false}
+                              onChange={(e) => setForceNameChange(prev => ({...prev, [r.id]: e.target.checked}))}
+                              className="rounded"
+                            />
+                            Force change
+                          </label>
+                          {nameSuggestions[r.id] && (
+                            <p className="text-xs text-amber-600">
+                              {forceNameChange[r.id] ? '⚠️ User must change name' : 'ℹ️ Suggestion only'}
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end">
@@ -190,8 +219,19 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                               alert('Please select a cadet to map this account to.');
                               return;
                             }
+                            const requestBody: any = { 
+                              role: roleSelections[r.id] || 'cadet', 
+                              cadetId 
+                            };
+                            
+                            // Include name suggestion if provided
+                            if (nameSuggestions[r.id]?.trim()) {
+                              requestBody.suggestedName = nameSuggestions[r.id].trim();
+                              requestBody.forceNameChange = forceNameChange[r.id] || false;
+                            }
+                            
                             await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/approve`,{
-                              method:'POST', headers, body: JSON.stringify({ role: roleSelections[r.id] || 'cadet', cadetId })
+                              method:'POST', headers, body: JSON.stringify(requestBody)
                             });
                             fetchData();
                           }}>Approve</Button>
