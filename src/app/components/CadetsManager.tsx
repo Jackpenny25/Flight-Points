@@ -79,6 +79,19 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     ensureAdminPin();
   };
 
+  // Admin PIN is triggered via the header logo; keep prompt native so Enter submits naturally
+
+  function formatDisplayName(name: string) {
+    if (!name) return '';
+    const parts = name.split(' ');
+    const last = parts[parts.length - 1];
+    if (last && last.length <= 2 && parts.length > 1) {
+      parts[parts.length - 1] = `\u00A0${last}`;
+      return parts.join(' ');
+    }
+    return name;
+  }
+
   useEffect(() => {
     fetchCadets();
     
@@ -412,46 +425,14 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             else next.add(cadet.id);
             setSelectedCadetIds(next);
           }} />
-          <div>
-            <div className="font-medium">{cadet.name}</div>
-            <div className="text-xs text-gray-500">{formatFlight(cadet.flight)}</div>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium truncate max-w-[220px]">{formatDisplayName(cadet.name)}</div>
+            <div className="text-sm text-gray-500">{formatFlight(cadet.flight)}</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => { openEditCadet(cadet); }}>
-            <Edit2 className="size-4" />
-          </Button>
-          {/* Mark left / clear left button */}
-          <Button variant={cadet.leftAt ? 'outline' : 'ghost'} size="sm" onClick={async () => {
-            if (!ensureAdminPin()) return;
-            const isMarkingLeft = !cadet.leftAt;
-            if (!confirm(isMarkingLeft ? `Mark ${cadet.name} as left?` : `Mark ${cadet.name} as active (clear left date)?`)) return;
-            try {
-              const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-              if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-              const body: any = isMarkingLeft ? { leftAt: new Date().toISOString() } : { leftAt: null };
-              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets/${cadet.id}`, { method: 'PUT', headers, body: JSON.stringify(body) });
-              if (res.ok) {
-                // update local copy
-                const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
-                const updated = (Array.isArray(existing) ? existing : []).map((c: any) => c.id === cadet.id ? { ...c, leftAt: body.leftAt } : c);
-                localStorage.setItem('cadets', JSON.stringify(updated));
-                setCadets(updated);
-                toast.success(isMarkingLeft ? 'Cadet marked as left' : 'Cadet marked active');
-              } else {
-                const err = await res.json().catch(() => ({ error: res.statusText }));
-                toast.error('Failed to update cadet: ' + (err.error || res.statusText));
-              }
-            } catch (e) {
-              console.error('Failed to mark left:', e);
-              toast.error('Failed to update cadet');
-            }
-          }}>
-            {cadet.leftAt ? 'Mark Active' : 'Mark Left'}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => handleDeleteCadet(cadet.id, cadet.name)}>
-            <Trash2 className="size-4 text-red-600" />
-          </Button>
+          <Button size="sm" variant="ghost" onClick={() => { setEditingCadet(cadet); setEditName(cadet.name); setEditFlight(cadet.flight); setEditOpen(true); }}><Edit2 size={14} /></Button>
+          <Button size="sm" variant="destructive" onClick={() => handleDeleteCadet(cadet.id, cadet.name)}><Trash2 size={14} /></Button>
         </div>
       </div>
     );
@@ -470,8 +451,8 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     return (
       <div ref={drop as any} className="bg-blue-50 rounded p-3 min-h-[200px]">
         <h4 className="font-semibold mb-2">{formatFlight(flight)} ({items.length})</h4>
-        <div>
-          {items.sort((a,b) => a.name.localeCompare(b.name)).map(c => (
+        <div className="space-y-2">
+          {items.map((c) => (
             <CadetCard key={c.id} cadet={c} />
           ))}
         </div>
@@ -593,7 +574,14 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     return acc;
   }, {} as Record<string, Cadet[]>);
 
-  const flights = Object.keys(cadetsByFlight).sort();
+  // Ensure we always show at least three flight headings (1,2,3)
+  const defaultFlights = ['1', '2', '3'];
+  for (const f of defaultFlights) {
+    if (!cadetsByFlight[f]) cadetsByFlight[f] = [];
+  }
+
+  // Build sorted flights array (numeric sort)
+  const flights = Object.keys(cadetsByFlight).sort((a, b) => Number(a) - Number(b));
 
   return (
     <div className="space-y-6">
@@ -666,10 +654,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
               </Button>
             </div>
 
-            <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
-            <div className="ml-3">
-              <Button variant="outline" onClick={() => csvInputRef.current?.click()}>Import CSV</Button>
-            </div>
+            {/* CSV import button moved to admin-only card at bottom */}
             <div className="ml-2">
               <Button variant="ghost" onClick={() => { setLoading(true); fetchCadets(); }}>Sync</Button>
             </div>
@@ -696,6 +681,41 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        {/* Edit Cadet Dialog (always rendered) */}
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Cadet</DialogTitle>
+              <DialogDescription>Edit cadet name and flight</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={(e) => { e.preventDefault(); submitEditCadet(); }}>
+              <div className="space-y-3 py-2">
+                <div className="space-y-2">
+                  <Label>Full Name</Label>
+                  <Input value={editName} onChange={(e) => setEditName(e.target.value)} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Flight</Label>
+                  <Select value={editFlight} onValueChange={(v: any) => setEditFlight(v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select flight" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">{formatFlight('1')}</SelectItem>
+                      <SelectItem value="2">{formatFlight('2')}</SelectItem>
+                      <SelectItem value="3">{formatFlight('3')}</SelectItem>
+                      <SelectItem value="4">{formatFlight('4')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setEditOpen(false); setEditingCadet(null); }}>Cancel</Button>
+                <Button type="submit" disabled={editSubmitting}>{editSubmitting ? 'Saving...' : 'Save'}</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
         <CardContent>
           {loading ? (
             <div className="text-center py-8 text-gray-500">Loading cadets...</div>
@@ -709,9 +729,9 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             <div className="flex gap-4">
               <div className="flex-1 overflow-x-auto">
                 <DndProvider backend={HTML5Backend}>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-cols-min">
                     {flights.map((flight) => (
-                      <div key={flight}>
+                      <div key={flight} className="min-w-[220px]">
                         <FlightColumn flight={flight} items={cadetsByFlight[flight] || []} />
                       </div>
                     ))}
@@ -719,116 +739,101 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                 </DndProvider>
               </div>
 
-              <div className="w-80">
-                <h4 className="text-sm font-semibold mb-2">CSV Import Preview</h4>
-                <div className="border rounded p-3">
-                  <p className="text-xs text-gray-600">Use the 'Import CSV' button to preview rows before importing.</p>
-
-                  <div className="mt-2 mb-2 flex items-center gap-2">
-                    <Label className="text-sm">Assign flight for missing rows</Label>
-                    <Select value={csvImportFlight} onValueChange={(v: any) => setCsvImportFlight(v)}>
-                      <SelectTrigger id="csv-import-flight" className="w-24">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">{formatFlight('1')}</SelectItem>
-                        <SelectItem value="2">{formatFlight('2')}</SelectItem>
-                        <SelectItem value="3">{formatFlight('3')}</SelectItem>
-                        <SelectItem value="4">{formatFlight('4')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <div className="text-xs text-gray-500">Applied to rows without a flight value</div>
-                  </div>
-
-                  {csvPreviewEntries.length > 0 ? (
-                    <div className="mt-2 max-h-48 overflow-y-auto text-sm">
-                      {csvPreviewEntries.map((r, i) => (
-                        <div key={i} className="py-1 border-b last:border-b-0">{r.name} — {formatFlight((r.flight === 'Unassigned' || !r.flight) ? csvImportFlight : r.flight)}</div>
-                      ))}
-
-                      {csvImportFailures.length > 0 && (
-                        <div className="mt-3 p-2 bg-red-50 border border-red-100 rounded text-sm text-red-700">
-                          <div className="font-semibold mb-1">Import Failures ({csvImportFailures.length})</div>
-                          <div className="space-y-1 max-h-40 overflow-y-auto">
-                            {csvImportFailures.map((f, idx) => (
-                              <div key={idx} className="text-xs">{f.name} — <span className="font-mono">{f.reason}</span></div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="mt-2 flex gap-2">
-                        <Button size="sm" onClick={() => confirmCsvImport()} disabled={csvImporting}>{csvImporting ? 'Importing...' : 'Confirm Import'}</Button>
-                        <Button size="sm" variant="outline" onClick={() => { setCsvPreviewEntries([]); setCsvPreviewOpen(false); setCsvImportFailures([]); }}>Cancel</Button>
-                      </div>
-
-                      {!accessToken && <div className="text-xs text-yellow-700 mt-2">Not signed in: imported rows will be stored locally only.</div>}
-
-                      {/* Edit Cadet Dialog (reused for editing) */}
-                      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Edit Cadet</DialogTitle>
-                            <DialogDescription>Edit cadet name and flight</DialogDescription>
-                          </DialogHeader>
-                          <form onSubmit={(e) => { e.preventDefault(); submitEditCadet(); }}>
-                            <div className="space-y-3 py-2">
-                              <div className="space-y-2">
-                                <Label>Full Name</Label>
-                                <Input value={editName} onChange={(e) => setEditName(e.target.value)} required />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Flight</Label>
-                                <Select value={editFlight} onValueChange={(v: any) => setEditFlight(v)}>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select flight" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="1">{formatFlight('1')}</SelectItem>
-                                    <SelectItem value="2">{formatFlight('2')}</SelectItem>
-                                    <SelectItem value="3">{formatFlight('3')}</SelectItem>
-                                    <SelectItem value="4">{formatFlight('4')}</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <DialogFooter>
-                              <Button variant="outline" onClick={() => { setEditOpen(false); setEditingCadet(null); }}>Cancel</Button>
-                              <Button type="submit" disabled={editSubmitting}>{editSubmitting ? 'Saving...' : 'Save'}</Button>
-                            </DialogFooter>
-                          </form>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-gray-400 mt-2">No preview loaded</div>
-                  )}
-                </div>
-              </div>
+              {/* CSV import moved to admin-only card below */}
             </div>
           )}
         </CardContent>
       </Card>
 
-      <Card className="bg-blue-50 border-blue-200">
-        <CardHeader>
-          <CardTitle className="text-blue-900">Summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4 text-center">
-            <div>
-              <p className="text-3xl font-bold text-blue-900">{cadets.length}</p>
-              <p className="text-sm text-blue-700">Total Cadets</p>
+      {adminUnlocked && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>CSV Import (Admin)</CardTitle>
+            <CardDescription>Preview and import cadets from CSV</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="border rounded p-3">
+              <p className="text-xs text-gray-600">Use the 'Import CSV' button to preview rows before importing.</p>
+
+              <div className="mt-2 mb-2 flex items-center gap-2">
+                <Label className="text-sm">Assign flight for missing rows</Label>
+                <Select value={csvImportFlight} onValueChange={(v: any) => setCsvImportFlight(v)}>
+                  <SelectTrigger id="csv-import-flight" className="w-24">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">{formatFlight('1')}</SelectItem>
+                    <SelectItem value="2">{formatFlight('2')}</SelectItem>
+                    <SelectItem value="3">{formatFlight('3')}</SelectItem>
+                    <SelectItem value="4">{formatFlight('4')}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="text-xs text-gray-500">Applied to rows without a flight value</div>
+              </div>
+
+              {csvPreviewEntries.length > 0 ? (
+                <div className="mt-2 max-h-48 overflow-y-auto text-sm">
+                  {csvPreviewEntries.map((r, i) => (
+                    <div key={i} className="py-1 border-b last:border-b-0">{r.name} — {formatFlight((r.flight === 'Unassigned' || !r.flight) ? csvImportFlight : r.flight)}</div>
+                  ))}
+
+                  {csvImportFailures.length > 0 && (
+                    <>
+                      <div className="font-semibold mb-1">Import Failures ({csvImportFailures.length})</div>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {csvImportFailures.map((f, idx) => (
+                          <div key={idx} className="text-xs">{f.name} — <span className="font-mono">{f.reason}</span></div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  <div className="mt-2 flex gap-2">
+                    <Button size="sm" onClick={() => confirmCsvImport()} disabled={csvImporting}>{csvImporting ? 'Importing...' : 'Confirm Import'}</Button>
+                    <Button size="sm" variant="outline" onClick={() => { setCsvPreviewEntries([]); setCsvImportFailures([]); }}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-500">No preview loaded</div>
+              )}
+
+              {/* Select button moved to the bottom to avoid accidental clicks */}
+
+              {csvPreviewEntries.length > 0 ? (
+                <div className="mt-2 max-h-48 overflow-y-auto text-sm">
+                  {csvPreviewEntries.map((r, i) => (
+                    <div key={i} className="py-1 border-b last:border-b-0">{r.name} — {formatFlight((r.flight === 'Unassigned' || !r.flight) ? csvImportFlight : r.flight)}</div>
+                  ))}
+
+                  {csvImportFailures.length > 0 && (
+                    <>
+                      <div className="font-semibold mb-1">Import Failures ({csvImportFailures.length})</div>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {csvImportFailures.map((f, idx) => (
+                          <div key={idx} className="text-xs">{f.name} — <span className="font-mono">{f.reason}</span></div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  <div className="mt-2 flex gap-2">
+                    <Button size="sm" onClick={() => confirmCsvImport()} disabled={csvImporting}>{csvImporting ? 'Importing...' : 'Confirm Import'}</Button>
+                    <Button size="sm" variant="outline" onClick={() => { setCsvPreviewEntries([]); setCsvImportFailures([]); }}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-500">No preview loaded</div>
+              )}
+              <div className="mt-4">
+                <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+                <Button onClick={() => csvInputRef.current?.click()}>Select CSV file</Button>
+              </div>
             </div>
-            <div>
-              <p className="text-3xl font-bold text-blue-900">{flights.length}</p>
-              <p className="text-sm text-blue-700">Flights</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
+
     </div>
   );
 }
- 
 

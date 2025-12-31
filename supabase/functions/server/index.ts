@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
@@ -207,8 +208,7 @@ app.put("/make-server-73a3871f/cadets/:id", verifyAuth, async (c) => {
     const cadetId = c.req.param('id');
     const { name, flight, leftAt, lastActive } = await c.req.json();
 
-    const existing = await kv.getByPrefix(`cadet:${cadetId}`);
-    const cadet = existing.find((c: any) => c.id === cadetId);
+    const cadet = await kv.get(`cadet:${cadetId}`);
 
     if (!cadet) {
       return c.json({ error: 'Cadet not found' }, 404);
@@ -1448,6 +1448,109 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Lookup email by username (public) - resolves `user_metadata.name` to an email
+    if (pathname.includes('/auth/lookup-email') && req.method === 'POST') {
+      try {
+        const body = await req.json();
+        const username = String(body?.username || '').trim();
+        if (!username) {
+          return new Response(JSON.stringify({ error: 'Username is required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        const sb = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        );
+
+        // Try to list users (paginated). Request a reasonably large page to cover most orgs.
+        const perPage = 1000;
+        const { data, error } = await sb.auth.admin.listUsers({ page: 1, perPage });
+        if (error) {
+          console.error('Lookup email listUsers error:', error);
+          return new Response(JSON.stringify({ error: 'Failed to lookup username' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        const users = (data && (data as any).users) || (data as any) || [];
+        const found = (users as any[]).find((u: any) => ((u.user_metadata?.name || '') as string).toLowerCase() === username.toLowerCase());
+        if (!found) {
+          return new Response(JSON.stringify({ error: 'User not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        return new Response(JSON.stringify({ email: found.email }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        console.error('Lookup-email error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to lookup username' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // List all Supabase users (SNCO/Staff) - helpful for admin to manage accounts
+    if (pathname.includes('/auth/users') && req.method === 'GET') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const role = (user.user_metadata?.role || '').toLowerCase();
+        if (role !== 'snco' && role !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const { data, error } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const users = (data && (data as any).users) || (data as any) || [];
+        return new Response(JSON.stringify({ users }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        console.error('List users error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to list users' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Update a Supabase user's metadata (SNCO/Staff)
+    if (pathname.match(/\/auth\/users\/[^/]+$/) && req.method === 'PUT') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const role = (user.user_metadata?.role || '').toLowerCase();
+        if (role !== 'snco' && role !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const targetId = pathname.split('/').pop();
+        const body = await req.json();
+        const newRole = body?.role;
+        const newName = body?.name;
+        const newUsername = body?.username;
+        const newFlight = body?.flight;
+        const newCadetId = body?.cadetId || null;
+        const newPassword = body?.password || null;
+
+        // Build metadata update
+        const userMetaUpdate: any = {};
+        if (newName !== undefined) userMetaUpdate.name = newName;
+        if (newUsername !== undefined) userMetaUpdate.username = newUsername;
+        if (newRole !== undefined) userMetaUpdate.role = newRole;
+        if (newFlight !== undefined) userMetaUpdate.flight = newFlight;
+        if (newCadetId) {
+          const cadet = await kv.get(`cadet:${newCadetId}`);
+          if (cadet) {
+            userMetaUpdate.cadetId = cadet.id;
+            userMetaUpdate.cadetName = cadet.name;
+          }
+        }
+
+        const updatePayload: any = { user_metadata: userMetaUpdate, email_confirm: true };
+        if (newPassword) updatePayload.password = newPassword;
+
+        const { data: updated, error: updateErr } = await sb.auth.admin.updateUserById(targetId as string, updatePayload as any);
+        if (updateErr) return new Response(JSON.stringify({ error: updateErr.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        return new Response(JSON.stringify({ user: (updated && (updated as any).user) || null }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        console.error('Update user error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to update user' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
     // Admin: get current join code (SNCO/Staff)
     if (pathname.includes('/admin/join-code') && req.method === 'GET') {
       try {
@@ -1522,7 +1625,21 @@ Deno.serve(async (req: Request) => {
         const role = (user.user_metadata?.role || '').toLowerCase();
         if (role !== 'snco' && role !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         const items = await kv.getByPrefix('signup:');
-        const list = (items || []).map((r: any) => ({ id: r.id, email: r.email, name: r.name, flight: r.flight || null, status: r.status, createdAt: r.createdAt }));
+        // Also fetch existing Supabase users so the admin UI can surface any already-created accounts
+        const { data: usersData, error: usersErr } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const users = (usersData && (usersData as any).users) || (usersData as any) || [];
+        const list = (items || []).map((r: any) => {
+          const matched = (users || []).find((u: any) => (u.email || '').toLowerCase() === (r.email || '').toLowerCase());
+          return ({
+            id: r.id,
+            email: r.email,
+            name: r.name,
+            flight: r.flight || null,
+            status: r.status,
+            createdAt: r.createdAt,
+            existingAccounts: matched ? [{ id: matched.id, email: matched.email, user_metadata: matched.user_metadata, created_at: matched.created_at }] : [],
+          });
+        });
         return new Response(JSON.stringify({ requests: list }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
@@ -1588,6 +1705,29 @@ Deno.serve(async (req: Request) => {
           email_confirm: true,
         });
         if (error) {
+          // If a user already exists with that email, attempt to update the existing account
+          try {
+            const { data: usersData2, error: listErr } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+            const users2 = (usersData2 && (usersData2 as any).users) || (usersData2 as any) || [];
+            const existing = (users2 || []).find((u: any) => (u.email || '').toLowerCase() === (rec.email || '').toLowerCase());
+            if (existing) {
+              const updatePayload: any = {
+                user_metadata: { ...(existing.user_metadata || {}), name: rec.name, role, ...cadetMeta },
+                email_confirm: true,
+              };
+              // If we have a password from the signup request, set it so the cadet can sign in immediately
+              if (rec.password) updatePayload.password = rec.password;
+
+              const { data: updatedData, error: updateErr } = await supabase.auth.admin.updateUserById(existing.id, updatePayload as any);
+              if (updateErr) {
+                return new Response(JSON.stringify({ error: updateErr.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+              }
+              await kv.del(`signup:${id}`);
+              return new Response(JSON.stringify({ user: (updatedData && (updatedData as any).user) || existing }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+            }
+          } catch (ee) {
+            console.error('Error handling existing user during approve:', ee);
+          }
           return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         }
         await kv.del(`signup:${id}`);
@@ -1595,6 +1735,53 @@ Deno.serve(async (req: Request) => {
       } catch (e) {
         console.error('Approve error:', e);
         return new Response(JSON.stringify({ error: 'Failed to approve request' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Link an existing Supabase account to a signup request (SNCO/Staff)
+    if (pathname.match(/\/auth\/requests\/[^/]+\/link$/) && req.method === 'POST') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const sb = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        );
+        const { data: { user: approver }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !approver) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const approverRole = (approver.user_metadata?.role || '').toLowerCase();
+        if (approverRole !== 'snco' && approverRole !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const id = pathname.split('/').slice(-2, -1)[0];
+        const body = await req.json();
+        const userId = String(body?.userId || '').trim();
+        const setPassword = body?.password || null;
+        const role = (body?.role || 'cadet').toLowerCase();
+        const cadetId = String(body?.cadetId || '').trim() || null;
+
+        const rec = await kv.get(`signup:${id}`);
+        if (!rec) return new Response(JSON.stringify({ error: 'Request not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        let cadetMeta: { cadetId?: string; cadetName?: string; flight?: string; suggestedName?: string; requireNameChange?: boolean } = {};
+        if (cadetId) {
+          const cadet = await kv.get(`cadet:${cadetId}`);
+          if (!cadet) return new Response(JSON.stringify({ error: 'Selected cadet not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          cadetMeta = { cadetId: cadet.id, cadetName: cadet.name, flight: cadet.flight };
+        } else if (rec.flight) {
+          cadetMeta = { flight: rec.flight };
+        }
+
+        const updatePayload: any = { user_metadata: { name: rec.name, role, ...cadetMeta }, email_confirm: true };
+        if (setPassword) updatePayload.password = setPassword;
+
+        const { data: updated, error: updateErr } = await sb.auth.admin.updateUserById(userId, updatePayload as any);
+        if (updateErr) return new Response(JSON.stringify({ error: updateErr.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        await kv.del(`signup:${id}`);
+        return new Response(JSON.stringify({ user: (updated && (updated as any).user) || { id: userId } }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        console.error('Link existing error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to link existing account' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
       }
     }
 

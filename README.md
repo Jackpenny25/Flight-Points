@@ -10,4 +10,4 @@ If you are not the repository owner or authorised maintainer:
 
 Authorized maintainers only: contact the repository owner for guidance and explicit permission before taking any action.
 
-Repository owner: Sgt Jack Penny — add an official contact email in the repo when ready.
+Repository owner: Jack Penny — add an official contact email in the repo when ready.

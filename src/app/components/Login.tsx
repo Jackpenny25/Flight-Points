@@ -35,8 +35,29 @@ export function Login({ onLogin }: LoginProps) {
     setLoading(true);
 
     try {
+      // Allow signing in with email OR username. If a username is provided, resolve it to an email using the server function.
+      let loginEmail = String(email || '').trim();
+      if (!loginEmail.includes('@')) {
+        const functionBase = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f`;
+        const resp = await fetch(`${functionBase}/auth/lookup-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ username: loginEmail }),
+        });
+        if (!resp.ok) {
+          const errJson = await resp.json().catch(() => ({}));
+          setError(errJson?.error || 'Username not found');
+          setLoading(false);
+          return;
+        }
+        const lookup = await resp.json();
+        loginEmail = lookup.email;
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: loginEmail,
         password,
       });
 
@@ -117,11 +138,11 @@ export function Login({ onLogin }: LoginProps) {
             <TabsContent value="signin">
               <form onSubmit={handleSignIn} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="signin-email">Email</Label>
+                  <Label htmlFor="signin-email">Email or Username</Label>
                   <Input
                     id="signin-email"
-                    type="email"
-                    placeholder="your.email@example.com"
+                    type="text"
+                    placeholder="your.email@example.com or Surname I"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required

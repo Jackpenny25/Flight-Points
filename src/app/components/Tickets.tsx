@@ -17,6 +17,7 @@ interface TicketsProps {
 
 export function Tickets({ accessToken }: TicketsProps) {
   const [category, setCategory] = useState('Badge');
+  const [type, setType] = useState<'Request'|'Issue'>('Request');
   const [description, setDescription] = useState('');
   // Removed requested points; SNCO/Staff will decide points on approval
   const [evidenceUrl, setEvidenceUrl] = useState('');
@@ -77,7 +78,7 @@ export function Tickets({ accessToken }: TicketsProps) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ category, description, evidenceUrl: uploadedUrl || evidenceUrl }),
+        body: JSON.stringify({ type, category, description, evidenceUrl: uploadedUrl || evidenceUrl }),
       });
       if (!res.ok) throw new Error('Submit failed');
       toast.success('Ticket submitted');
@@ -129,14 +130,35 @@ export function Tickets({ accessToken }: TicketsProps) {
         <CardContent>
           <form onSubmit={submit} className="space-y-4 max-w-2xl">
             <div>
+              <label className="text-sm font-medium">Type</label>
+              <Select value={type} onValueChange={(v: any) => setType(v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Request">Point Request</SelectItem>
+                  <SelectItem value="Issue">Report Issue</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <label className="text-sm font-medium">Category</label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Badge">Badge</SelectItem>
-                  <SelectItem value="Course">Course</SelectItem>
-                  <SelectItem value="Event">Event</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
+                  {type === 'Request' ? (
+                    <>
+                      <SelectItem value="Badge">Badge</SelectItem>
+                      <SelectItem value="Course">Course</SelectItem>
+                      <SelectItem value="Event">Event</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="Broken">Broken / Not working</SelectItem>
+                      <SelectItem value="Missing">Missing / Lost</SelectItem>
+                      <SelectItem value="Website">Website / App issue</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>

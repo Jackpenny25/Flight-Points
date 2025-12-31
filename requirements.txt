@@ -1,0 +1,6 @@
+python-pptx>=0.6.21
+pandas
+matplotlib
+numpy
+requests
+python-dotenv

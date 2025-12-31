@@ -113,6 +113,7 @@ export function TicketsAdmin({ accessToken }: Props) {
                     <TableHead>Date</TableHead>
                     <TableHead>Cadet</TableHead>
                     <TableHead>Flight</TableHead>
+                      <TableHead>Type</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Evidence</TableHead>
@@ -127,6 +128,7 @@ export function TicketsAdmin({ accessToken }: Props) {
                       <TableCell>{new Date(t.createdAt).toLocaleDateString('en-GB')}</TableCell>
                       <TableCell>{t.cadetName}</TableCell>
                       <TableCell>{t.flight || '-'}</TableCell>
+                      <TableCell>{t.type || 'Request'}</TableCell>
                       <TableCell>{t.category}</TableCell>
                       <TableCell className="max-w-[360px] truncate" title={t.description}>{t.description}</TableCell>
                       <TableCell>
@@ -147,8 +149,14 @@ export function TicketsAdmin({ accessToken }: Props) {
                         {t.status === 'open' ? (
                           <div className="space-y-2">
                             <div className="flex gap-2">
-                              <Input type="number" min={1} step={1} placeholder="Points (required)" className="w-32" value={actionState[t.id]?.points || ''} onChange={(e) => setActionState({ ...actionState, [t.id]: { ...(actionState[t.id]||{}), points: e.target.value } })} />
-                              <Input placeholder="Reason (required)" value={actionState[t.id]?.reason || ''} onChange={(e) => setActionState({ ...actionState, [t.id]: { ...(actionState[t.id]||{}), reason: e.target.value } })} />
+                              {t.type === 'Issue' ? (
+                                <Input placeholder="Reason (required)" value={actionState[t.id]?.reason || ''} onChange={(e) => setActionState({ ...actionState, [t.id]: { ...(actionState[t.id]||{}), reason: e.target.value } })} />
+                              ) : (
+                                <>
+                                  <Input type="number" min={1} step={1} placeholder="Points (required)" className="w-32" value={actionState[t.id]?.points || ''} onChange={(e) => setActionState({ ...actionState, [t.id]: { ...(actionState[t.id]||{}), points: e.target.value } })} />
+                                  <Input placeholder="Reason (required)" value={actionState[t.id]?.reason || ''} onChange={(e) => setActionState({ ...actionState, [t.id]: { ...(actionState[t.id]||{}), reason: e.target.value } })} />
+                                </>
+                              )}
                             </div>
                             <div className="flex gap-2 justify-end">
                               <Button size="sm" onClick={() => act(t.id, 'approve')}>Approve</Button>

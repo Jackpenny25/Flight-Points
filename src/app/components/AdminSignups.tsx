@@ -13,12 +13,13 @@ interface AdminSignupsProps {
 
 export default function AdminSignups({ accessToken }: AdminSignupsProps) {
   const [loading, setLoading] = useState(true);
-  const [pending, setPending] = useState<Array<{id:string;name:string;email:string;createdAt:string;flight?:string|null}>>([]);
+  const [pending, setPending] = useState<Array<{id:string;name:string;email:string;createdAt:string;flight?:string|null; existingAccounts?: Array<any> }>>([]);
   const [roleSelections, setRoleSelections] = useState<Record<string,string>>({});
   const [cadetSelections, setCadetSelections] = useState<Record<string,string>>({});
   const [nameSuggestions, setNameSuggestions] = useState<Record<string,string>>({});
   const [forceNameChange, setForceNameChange] = useState<Record<string,boolean>>({});
   const [cadets, setCadets] = useState<Array<{id:string;name:string;flight:string}>>([]);
+  const [users, setUsers] = useState<Array<any>>([]);
   const [joinCodeInfo, setJoinCodeInfo] = useState<{joinCode:string|null;expiresAt:string|null;durationSeconds:number|null} | null>(null);
   const [duration, setDuration] = useState<number>(1); // in hours
 
@@ -47,6 +48,18 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
       );
       const jcData = await jcRes.json();
       if (jcRes.ok) setJoinCodeInfo(jcData);
+
+      // Fetch existing Supabase users for admin management
+      try {
+        const usersRes = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/users`,
+          { headers }
+        );
+        const usersData = await usersRes.json();
+        if (usersRes.ok) setUsers((usersData.users || []).map((u:any)=>({ id: u.id, email: u.email, user_metadata: u.user_metadata || {}, created_at: u.created_at })));
+      } catch (e) {
+        setUsers([]);
+      }
     } catch (e) {
       setPending([]);
       setJoinCodeInfo(null);
@@ -110,6 +123,76 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
 
       <Card className={pending.length > 0 ? 'border-red-500' : ''}>
         <CardHeader>
+          <CardTitle>Existing Accounts</CardTitle>
+          <CardDescription>Manage Supabase accounts (role, username, flight etc.)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {users.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No managed accounts found</div>
+          ) : (
+            <div className="overflow-x-auto mb-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Username</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Flight</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell>{u.email}</TableCell>
+                      <TableCell>{u.user_metadata?.name || '—'}</TableCell>
+                      <TableCell>{u.user_metadata?.username || u.user_metadata?.name || '—'}</TableCell>
+                      <TableCell>{u.user_metadata?.role || 'cadet'}</TableCell>
+                      <TableCell>{u.user_metadata?.flight || '—'}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={async ()=>{
+                            // Prompt for editable fields
+                            const newName = window.prompt('Name:', u.user_metadata?.name || '');
+                            if (newName === null) return;
+                            const newUsername = window.prompt('Username (login):', u.user_metadata?.username || u.user_metadata?.name || '');
+                            if (newUsername === null) return;
+                            const newRole = window.prompt('Role (cadet|pointgiver|snco|staff):', u.user_metadata?.role || 'cadet');
+                            if (newRole === null) return;
+                            const newFlight = window.prompt('Flight (optional):', u.user_metadata?.flight || '');
+                            if (newFlight === null) return;
+                            const newCadetId = window.prompt('Cadet ID to link (optional):', '');
+                            const newPassword = window.prompt('Set new password (leave blank to keep current):', '');
+                            try {
+                              const body: any = { name: newName, username: newUsername, role: newRole, flight: newFlight };
+                              if (newCadetId) body.cadetId = newCadetId;
+                              if (newPassword) body.password = newPassword;
+                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/users/${u.id}`, { method: 'PUT', headers, body: JSON.stringify(body) });
+                              const data = await res.json().catch(()=>({}));
+                              if (!res.ok) {
+                                alert('Update failed: ' + (data.error || res.statusText));
+                                return;
+                              }
+                              // refresh
+                              fetchData();
+                              alert('User updated');
+                            } catch (e:any) {
+                              console.error('Update user failed', e);
+                              alert('Update failed: ' + String(e));
+                            }
+                          }}>Edit</Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+
+        <CardHeader>
           <CardTitle>
             Pending Signups {pending.length > 0 && (
               <span className="ml-2 inline-flex items-center justify-center min-w-6 h-6 text-xs px-2 rounded-full bg-red-600 text-white">{pending.length}</span>
@@ -133,6 +216,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                     <TableHead>Cadet Mapping</TableHead>
                     <TableHead>Suggested Name</TableHead>
                     <TableHead>Requested</TableHead>
+                    <TableHead>Existing Accounts</TableHead>
                     <TableHead className="text-right">Role</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -198,6 +282,53 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                         </div>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {r.existingAccounts && r.existingAccounts.length > 0 ? (
+                          <div className="space-y-2">
+                            {r.existingAccounts.map((a:any) => (
+                              <div key={a.id} className="flex items-center justify-between bg-muted/20 p-2 rounded">
+                                <div className="text-sm">{a.email}</div>
+                                <div className="flex gap-2">
+                                  <Button size="xs" onClick={async ()=>{
+                                    const password = window.prompt('Set a password for the existing account (leave blank to keep current):') || null;
+                                    try {
+                                      const body: any = { userId: a.id, role: roleSelections[r.id] || 'cadet' };
+                                      if (cadetSelections[r.id]) body.cadetId = cadetSelections[r.id];
+                                      if (password) body.password = password;
+                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/link`, { method: 'POST', headers, body: JSON.stringify(body) });
+                                      const data = await res.json().catch(()=>({}));
+                                      if (!res.ok) {
+                                        alert('Link failed: ' + (data.error || res.statusText));
+                                        return;
+                                      }
+                                      fetchData();
+                                    } catch (e:any) {
+                                      console.error('Link failed', e);
+                                      alert('Link failed: ' + String(e));
+                                    }
+                                  }}>Link</Button>
+                                  <Button size="xs" variant="outline" onClick={async ()=>{
+                                    const pass = window.prompt('Set a new password for this account (leave blank to cancel):');
+                                    if (!pass) return;
+                                    try {
+                                      const body = { userId: a.id, password: pass };
+                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/link`, { method: 'POST', headers, body: JSON.stringify(body) });
+                                      const data = await res.json().catch(()=>({}));
+                                      if (!res.ok) {
+                                        alert('Set password failed: ' + (data.error || res.statusText));
+                                        return;
+                                      }
+                                      fetchData();
+                                    } catch (e:any) {
+                                      console.error('Set password failed', e);
+                                    }
+                                  }}>Set password</Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : '—'}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end">
                           <Select value={roleSelections[r.id] || 'cadet'} onValueChange={(v)=>setRoleSelections(prev=>({...prev,[r.id]:v}))}>
@@ -223,23 +354,44 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                               role: roleSelections[r.id] || 'cadet', 
                               cadetId 
                             };
-                            
+
                             // Include name suggestion if provided
                             if (nameSuggestions[r.id]?.trim()) {
                               requestBody.suggestedName = nameSuggestions[r.id].trim();
                               requestBody.forceNameChange = forceNameChange[r.id] || false;
                             }
-                            
-                            await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/approve`,{
-                              method:'POST', headers, body: JSON.stringify(requestBody)
-                            });
-                            fetchData();
+
+                            try {
+                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/approve`,{
+                                method:'POST', headers, body: JSON.stringify(requestBody)
+                              });
+                              const data = await res.json().catch(()=>({}));
+                              if (!res.ok) {
+                                alert('Approve failed: ' + (data.error || res.statusText));
+                                return;
+                              }
+                              // success
+                              fetchData();
+                            } catch (e:any) {
+                              console.error('Approve request failed', e);
+                              alert('Approve request failed: ' + String(e));
+                            }
                           }}>Approve</Button>
                           <Button size="sm" variant="outline" onClick={async ()=>{
-                            await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}`,{
-                              method:'DELETE', headers
-                            });
-                            fetchData();
+                            try {
+                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}`,{
+                                method:'DELETE', headers
+                              });
+                              const data = await res.json().catch(()=>({}));
+                              if (!res.ok) {
+                                alert('Reject failed: ' + (data.error || res.statusText));
+                                return;
+                              }
+                              fetchData();
+                            } catch (e:any) {
+                              console.error('Reject request failed', e);
+                              alert('Reject request failed: ' + String(e));
+                            }
                           }}>Reject</Button>
                         </div>
                       </TableCell>

@@ -266,6 +266,12 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               maxLength={4}
               inputMode="numeric"
               autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitPin();
+                }
+              }}
             />
             {pinError && <p className="text-sm text-red-600">{pinError}</p>}
           </div>
