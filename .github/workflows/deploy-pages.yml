@@ -1,5 +1,10 @@
 name: Build and Deploy to GitHub Pages (gh-pages)
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 on:
   push:
     branches:
