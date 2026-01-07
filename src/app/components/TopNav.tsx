@@ -94,6 +94,7 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
             <div className="flex items-center ml-3">
               <DownloadCsvButton accessToken={accessToken ?? null} />
             </div>
+          </div>
         </div>
       </div>
     </nav>
