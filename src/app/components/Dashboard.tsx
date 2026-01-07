@@ -293,6 +293,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
             canManageCadets={canManageCadets}
             adminPendingCount={adminUnlocked && canManageCadets ? adminPendingCount : 0}
             ticketsCount={canManageCadets ? ticketsCount : 0}
+            accessToken={accessToken}
           />
         </div>
       )}

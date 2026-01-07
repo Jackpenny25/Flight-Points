@@ -1,4 +1,5 @@
 import React from 'react'
+import DownloadCsvButton from './DownloadCsvButton'
 import { ArrowUpRight, Award, Calendar, Users, FileText, Shield } from 'lucide-react'
 
 const items = [
@@ -19,9 +20,10 @@ type Props = {
   canManageCadets?: boolean
   adminPendingCount?: number
   ticketsCount?: number
+  accessToken?: string | null
 }
 
-export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canManageCadets, adminPendingCount, ticketsCount }: Props) {
+export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canManageCadets, adminPendingCount, ticketsCount, accessToken }: Props) {
   const handleClick = (key: string) => {
     // prefer prop handler, but keep event dispatch for backward compatibility
     if (onSelect) onSelect(key)
@@ -60,7 +62,8 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
     <nav className="w-full bg-transparent px-4 py-3">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-center">
-          <div className="inline-flex items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-full p-1 shadow-sm">
+          <div className="w-full max-w-3xl">
+            <div className="inline-flex items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-full p-1 shadow-sm overflow-x-auto no-scrollbar h-snap">
             {allItems.map((it) => {
               const Icon = it.icon
               const isActive = active === it.key
@@ -73,7 +76,7 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
                 <button
                   key={it.key}
                   onClick={() => handleClick(it.key)}
-                  className={`${base} ${isActive ? activeCls : inactiveCls} relative`}
+                  className={`${base} ${isActive ? activeCls : inactiveCls} relative flex-shrink-0`}
                   aria-label={it.label}
                   aria-pressed={isActive}
                 >
@@ -88,6 +91,9 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
               )
             })}
           </div>
+            <div className="flex items-center ml-3">
+              <DownloadCsvButton accessToken={accessToken ?? null} />
+            </div>
         </div>
       </div>
     </nav>

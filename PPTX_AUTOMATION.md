@@ -42,6 +42,25 @@ python scripts/generate_presentation_supabase.py --output outputs/cadets_present
 Notes
 - If `SUPABASE_SERVICE_ROLE_KEY` is not provided the script will try public endpoints (may return fewer metrics).
 - For fully automated runs, save the service role key as a secret in GitHub Actions / your scheduler and run the script on schedule.
+ 
+Google Drive upload (GitHub Actions)
+- To upload generated CSVs to Google Drive from GitHub Actions the workflow expects two repository secrets:
+	- `GDRIVE_SERVICE_ACCOUNT_JSON`: the full JSON content of a Google Service Account key (store as a secret; do NOT commit to repo).
+	- `GDRIVE_FOLDER_ID`: (optional) the Drive folder id to upload files into. If omitted the files will be uploaded to the service account's root.
+
+Steps to create the service account and add secrets:
+1. In Google Cloud Console create or select a project and enable the Drive API.
+2. Create a Service Account. In the Service Account details create a key (JSON) and download it.
+3. Create a folder in Google Drive and copy its folder id from the URL.
+4. Share the Drive folder with the service account email (Grant Editor permission).
+5. In your GitHub repo go to Settings → Secrets → Actions → New repository secret and add:
+	 - `GDRIVE_SERVICE_ACCOUNT_JSON`: paste the entire JSON key file content.
+	 - `GDRIVE_FOLDER_ID`: paste the folder id (or leave blank in the workflow if you prefer root upload).
+
+The included workflow `.github/workflows/generate-presentation.yml` now runs `scripts/upload_to_gdrive.py` after CSVs are generated and reads these secrets at runtime. Check the Action logs for printed `webViewLink` entries to confirm files uploaded successfully.
+
+Quick note — download from website
+- There is now a "Download CSV" button in the site's top navigation which downloads `cadets.csv` (derived from `data/cadets.json`). Use this to quickly get cadet data for importing into Excel.
 
 Customization
 - The script can be extended to add extra slides, inject images, or use a template PPTX as a starting point.
