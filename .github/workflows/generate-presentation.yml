@@ -1,9 +1,9 @@
 name: Generate Cadet PPTX
 
-on:
-  schedule:
-    - cron: '0 18 * * 2,5' # Tue & Fri 18:00 UTC (adjust as needed)
-  workflow_dispatch:
+#on:
+#  schedule:
+#    - cron: '0 18 * * 2,5' # Tue & Fri 18:00 UTC (adjust as needed)
+#  workflow_dispatch:
 
 jobs:
   generate:
