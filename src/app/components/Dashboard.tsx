@@ -14,6 +14,7 @@ import { AttendanceManager } from './AttendanceManager';
 import { DataIntegrity } from './DataIntegrity';
 import { ReportsExport } from './ReportsExport';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { exportAllCsvs } from './downloadCsvUtil';
 import AdminSignups from './AdminSignups';
 import { MyPoints } from './MyPoints';
 import { NotificationCenter } from './NotificationCenter';
@@ -86,6 +87,9 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
 
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState<boolean>(false);
+  const [downloadLoading, setDownloadLoading] = useState<boolean>(false);
+
   const openPinDialog = () => {
     if (adminUnlocked) return;
     setPinError('');
@@ -136,6 +140,15 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     return () => clearInterval(timer);
   }, [canManageCadets, accessToken]);
 
+  // Open download confirmation dialog when navigation requests the download tab
+  useEffect(() => {
+    if (activeTab === 'download') {
+      setDownloadDialogOpen(true);
+      // reset tab selection back to leaderboards so UI doesn't stay on a phantom tab
+      setActiveTab('leaderboards');
+    }
+  }, [activeTab]);
+
   // Poll open tickets count for SNCO/Staff to show a badge on the Tickets tab
   useEffect(() => {
     if (!canManageCadets) return;
@@ -169,7 +182,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
               <img
-                src={adminUnlocked ? '/logo-black.jpg' : '/logo.png'}
+                src={`${import.meta.env.BASE_URL}${adminUnlocked ? 'logo-black.jpg' : 'logo.png'}`}
                 alt="2427 Squadron"
                 className="h-12 w-12 object-contain cursor-pointer"
                 title={adminUnlocked ? 'Click to lock admin' : 'Click to unlock admin'}
@@ -180,17 +193,17 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                     // Try JPG → JPEG → PNG → regular logo
                     if (step === '') {
                       e.currentTarget.setAttribute('data-failed', 'jpg');
-                      e.currentTarget.src = '/logo-black.jpeg';
+                      e.currentTarget.src = `${import.meta.env.BASE_URL}logo-black.jpeg`;
                       return;
                     }
                     if (step === 'jpg') {
                       e.currentTarget.setAttribute('data-failed', 'jpeg');
-                      e.currentTarget.src = '/logo-black.png';
+                      e.currentTarget.src = `${import.meta.env.BASE_URL}logo-black.png`;
                       return;
                     }
                     if (step === 'jpeg') {
                       e.currentTarget.setAttribute('data-failed', 'png');
-                      e.currentTarget.src = '/logo.png';
+                      e.currentTarget.src = `${import.meta.env.BASE_URL}logo.png`;
                       return;
                     }
                   }
@@ -278,6 +291,39 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPinDialogOpen(false)}>Cancel</Button>
             <Button onClick={submitPin}>Unlock</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Download confirmation dialog (admin tab) */}
+      <Dialog open={downloadDialogOpen} onOpenChange={setDownloadDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Download CSVs</DialogTitle>
+            <DialogDescription>Export cadets, points and attendance as CSV files. Do you want to continue?</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm">This will download CSV files for points, attendance and cadet totals. Keep your browser's popup/downloads enabled.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDownloadDialogOpen(false)} disabled={downloadLoading}>Cancel</Button>
+            <Button onClick={async () => {
+              try {
+                setDownloadLoading(true)
+                const res = await exportAllCsvs(accessToken)
+                if (res && res.topCadet) {
+                  alert(`Exported CSVs. Top cadet: ${res.topCadet.name} (${res.topCadet.totalPoints} points)`)
+                } else {
+                  alert('Exported CSVs')
+                }
+              } catch (err: any) {
+                console.error(err)
+                alert(err?.message || 'Failed to download CSVs. See console for details.')
+              } finally {
+                setDownloadLoading(false)
+                setDownloadDialogOpen(false)
+              }
+            }} disabled={downloadLoading}>{downloadLoading ? 'Downloading...' : 'Download'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

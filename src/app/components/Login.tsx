@@ -121,7 +121,7 @@ export function Login({ onLogin }: LoginProps) {
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
-            <img src="/logo.png" alt="2427 Biggin Hill Squadron" className="h-24 w-24 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="2427 Biggin Hill Squadron" className="h-24 w-24 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
           </div>
           <div>
             <CardTitle className="text-2xl font-bold text-primary">2427 (Biggin Hill) Squadron</CardTitle>

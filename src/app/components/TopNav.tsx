@@ -1,6 +1,6 @@
 import React from 'react'
 import DownloadCsvButton from './DownloadCsvButton'
-import { ArrowUpRight, Award, Calendar, Users, FileText, Shield } from 'lucide-react'
+import { ArrowUpRight, Award, Calendar, Users, FileText, Shield, FileSpreadsheet } from 'lucide-react'
 
 const items = [
   { key: 'leaderboards', label: 'Leaderboards', icon: ArrowUpRight },
@@ -36,8 +36,10 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
     if (item.key === 'leaderboards') return true
     // Points and Attendance require canGivePoints
     if (item.key === 'points' || item.key === 'attendance') return canGivePoints
-    // Tickets, Cadets, Reports, Integrity require canManageCadets
-    if (item.key === 'tickets' || item.key === 'cadets' || item.key === 'reports' || item.key === 'integrity') return canManageCadets
+    // Tickets and Reports should be placed into the admin group when admin UI is shown
+    if (item.key === 'tickets' || item.key === 'reports') return canManageCadets && !showAdmin
+    // Cadets and Integrity require canManageCadets
+    if (item.key === 'cadets' || item.key === 'integrity') return canManageCadets
     return false
   }).map(item => {
     if (item.key === 'tickets' && ticketsCount && ticketsCount > 0) {
@@ -46,11 +48,14 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
     return item
   })
 
-  // Add admin tab if unlocked
+  // Add admin group if unlocked (include tickets, reports and download)
   const allItems = showAdmin 
     ? [
         ...visibleItems, 
         { key: 'admin', label: 'NCOs', icon: Shield },
+        { key: 'tickets', label: 'Tickets', icon: FileText },
+        { key: 'reports', label: 'Reports', icon: FileText },
+        { key: 'download', label: 'Download CSVs', icon: FileSpreadsheet },
         ...(adminPendingCount && adminPendingCount > 0 
           ? [{ key: 'signups', label: 'Signups', icon: Users, badgeCount: adminPendingCount }]
           : [{ key: 'signups', label: 'Signups', icon: Users }]
@@ -63,11 +68,11 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-center">
           <div className="w-full max-w-3xl">
-            <div className="inline-flex items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-full p-1 shadow-sm overflow-x-auto no-scrollbar h-snap">
+            <div className="flex flex-wrap justify-center items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-full p-1 shadow-sm">
             {allItems.map((it) => {
               const Icon = it.icon
               const isActive = active === it.key
-              const base = 'flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition'
+              const base = 'flex items-center gap-2 px-3 py-2 rounded-full text-xs sm:text-sm font-medium transition min-w-0'
               const activeCls = 'bg-primary text-primary-foreground shadow-sm'
               const inactiveCls = 'hover:bg-slate-100 dark:hover:bg-slate-700'
 
@@ -81,7 +86,7 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
                   aria-pressed={isActive}
                 >
                   <Icon className={`w-4 h-4 ${isActive ? 'opacity-100' : 'opacity-80'}`} />
-                  <span className="hidden sm:inline">{it.label}</span>
+                  <span className="inline-block max-w-[6rem] sm:max-w-[8rem] truncate">{it.label}</span>
                   {(it.key === 'signups' || it.key === 'tickets') && badgeCount && badgeCount > 0 && (
                     <span className="absolute -top-2 -right-2 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full bg-red-600 text-white">
                       {badgeCount > 99 ? '99+' : badgeCount}
@@ -91,9 +96,7 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
               )
             })}
           </div>
-            <div className="flex items-center ml-3">
-              <DownloadCsvButton accessToken={accessToken ?? null} />
-            </div>
+            {/* DownloadCsvButton removed from standalone area — download is an admin tab now */}
           </div>
         </div>
       </div>

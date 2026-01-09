@@ -13,6 +13,7 @@ interface AdminSignupsProps {
 
 export default function AdminSignups({ accessToken }: AdminSignupsProps) {
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [pending, setPending] = useState<Array<{id:string;name:string;email:string;createdAt:string;flight?:string|null; existingAccounts?: Array<any> }>>([]);
   const [roleSelections, setRoleSelections] = useState<Record<string,string>>({});
   const [cadetSelections, setCadetSelections] = useState<Record<string,string>>({});
@@ -28,10 +29,19 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
 
   const fetchData = async () => {
     try {
+      setFetchError(null);
       const reqRes = await fetch(
         `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests`,
         { headers }
       );
+      if (!reqRes.ok) {
+        const errJson = await reqRes.json().catch(() => ({}));
+        const msg = errJson?.error || reqRes.statusText || `Status ${reqRes.status}`;
+        setFetchError(String(msg));
+        setPending([]);
+        setLoading(false);
+        return;
+      }
       const reqData = await reqRes.json();
       setPending((reqData.requests || []).sort((a:any,b:any)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()));
 
@@ -64,6 +74,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
       setPending([]);
       setJoinCodeInfo(null);
       setCadets([]);
+      setFetchError(String(e));
     } finally {
       setLoading(false);
     }
@@ -201,6 +212,9 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
           <CardDescription>Requests awaiting SNCO approval and role assignment</CardDescription>
         </CardHeader>
         <CardContent>
+          {fetchError && (
+            <div className="text-sm text-red-700 bg-red-50 p-3 rounded mb-4">Failed to load pending signups: {fetchError}</div>
+          )}
           {loading ? (
             <div className="text-center text-muted-foreground py-6">Loading…</div>
           ) : pending.length === 0 ? (
