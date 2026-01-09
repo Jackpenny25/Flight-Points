@@ -90,6 +90,9 @@ export function Login({ onLogin }: LoginProps) {
 
     try {
       const functionBase = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f`;
+      const payload: any = { email, password, name, joinCode, flight };
+      if (captchaToken) payload.hcaptchaToken = captchaToken;
+
       const response = await fetch(`${functionBase}/auth/request-signup`, {
         method: 'POST',
         headers: {
@@ -115,6 +118,19 @@ export function Login({ onLogin }: LoginProps) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // Dynamically import the HCaptcha component only on the client
+    let mounted = true;
+    import('@hcaptcha/react-hcaptcha')
+      .then((m) => {
+        if (mounted) setHCaptchaComponent(() => m.default || m.HCaptcha || m);
+      })
+      .catch(() => {
+        // ignore; captcha optional if package not available
+      });
+    return () => { mounted = false; };
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-100 via-blue-50 to-sky-200 p-4">
@@ -257,7 +273,7 @@ export function Login({ onLogin }: LoginProps) {
       </Card>
 
       {/* Allow guest cadet access without creating an account */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 text-center space-y-4">
+      <div className="w-full md:w-auto md:flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 md:mt-0 text-center space-y-4">
         <p className="text-sm text-gray-600 mb-2">Cadets can continue without creating an account — only SNCOs and Point Givers need accounts.</p>
         <div className="mt-2 flex items-center justify-center gap-3">
           <Input placeholder="Guest name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
