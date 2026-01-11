@@ -24,15 +24,18 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
   const [joinCodeInfo, setJoinCodeInfo] = useState<{joinCode:string|null;expiresAt:string|null;durationSeconds:number|null} | null>(null);
   const [duration, setDuration] = useState<number>(1); // in hours
 
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  const makeHeaders = () => {
+    const h: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (accessToken) h['Authorization'] = `Bearer ${accessToken}`;
+    return h;
+  };
 
   const fetchData = async () => {
     try {
       setFetchError(null);
       const reqRes = await fetch(
         `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests`,
-        { headers }
+        { headers: makeHeaders() }
       );
       if (!reqRes.ok) {
         const errJson = await reqRes.json().catch(() => ({}));
@@ -54,7 +57,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
 
       const jcRes = await fetch(
         `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/admin/join-code`,
-        { headers }
+        { headers: makeHeaders() }
       );
       const jcData = await jcRes.json();
       if (jcRes.ok) setJoinCodeInfo(jcData);
@@ -63,7 +66,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
       try {
         const usersRes = await fetch(
           `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/users`,
-          { headers }
+          { headers: makeHeaders() }
         );
         const usersData = await usersRes.json();
         if (usersRes.ok) setUsers((usersData.users || []).map((u:any)=>({ id: u.id, email: u.email, user_metadata: u.user_metadata || {}, created_at: u.created_at })));
@@ -80,10 +83,43 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { 
+    if (!accessToken) {
+      setFetchError('Missing access token — please sign in again');
+      setLoading(false);
+      return;
+    }
+    fetchData();
+  }, [accessToken]);
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={async () => {
+            if (!confirm('Run data retention cleanup now? This will permanently delete records older than 4 years.')) return;
+            try {
+              const url = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/retention/cleanup`;
+              const res = await fetch(url, { method: 'POST', headers: makeHeaders() });
+              const data = await res.json();
+              if (!res.ok) {
+                alert('Cleanup failed: ' + (data.error || res.statusText));
+                return;
+              }
+              alert('Cleanup completed. Deleted: ' + JSON.stringify(data.deleted));
+              // refresh list after cleanup
+              fetchData();
+            } catch (e) {
+              console.error('Cleanup request failed', e);
+              alert('Cleanup request failed');
+            }
+          }}
+        >
+          Run Retention Cleanup
+        </Button>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Join Code</CardTitle>
@@ -105,7 +141,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
             <div className="flex justify-start sm:justify-end">
               <Button onClick={async ()=>{
                 const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/admin/join-code`,{
-                  method:'POST', headers, body: JSON.stringify({ durationSeconds: Math.round(duration * 3600) })
+                  method:'POST', headers: makeHeaders(), body: JSON.stringify({ durationSeconds: Math.round(duration * 3600) })
                 });
                 const data = await res.json();
                 if (res.ok) setJoinCodeInfo(data);
@@ -179,7 +215,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                               const body: any = { name: newName, username: newUsername, role: newRole, flight: newFlight };
                               if (newCadetId) body.cadetId = newCadetId;
                               if (newPassword) body.password = newPassword;
-                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/users/${u.id}`, { method: 'PUT', headers, body: JSON.stringify(body) });
+                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/users/${u.id}`, { method: 'PUT', headers: makeHeaders(), body: JSON.stringify(body) });
                               const data = await res.json().catch(()=>({}));
                               if (!res.ok) {
                                 alert('Update failed: ' + (data.error || res.statusText));
@@ -309,7 +345,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                                       const body: any = { userId: a.id, role: roleSelections[r.id] || 'cadet' };
                                       if (cadetSelections[r.id]) body.cadetId = cadetSelections[r.id];
                                       if (password) body.password = password;
-                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/link`, { method: 'POST', headers, body: JSON.stringify(body) });
+                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/link`, { method: 'POST', headers: makeHeaders(), body: JSON.stringify(body) });
                                       const data = await res.json().catch(()=>({}));
                                       if (!res.ok) {
                                         alert('Link failed: ' + (data.error || res.statusText));
@@ -326,7 +362,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                                     if (!pass) return;
                                     try {
                                       const body = { userId: a.id, password: pass };
-                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/link`, { method: 'POST', headers, body: JSON.stringify(body) });
+                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/link`, { method: 'POST', headers: makeHeaders(), body: JSON.stringify(body) });
                                       const data = await res.json().catch(()=>({}));
                                       if (!res.ok) {
                                         alert('Set password failed: ' + (data.error || res.statusText));
@@ -377,7 +413,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
 
                             try {
                               const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/approve`,{
-                                method:'POST', headers, body: JSON.stringify(requestBody)
+                                method:'POST', headers: makeHeaders(), body: JSON.stringify(requestBody)
                               });
                               const data = await res.json().catch(()=>({}));
                               if (!res.ok) {
@@ -394,7 +430,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                           <Button size="sm" variant="outline" onClick={async ()=>{
                             try {
                               const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}`,{
-                                method:'DELETE', headers
+                                method:'DELETE', headers: makeHeaders()
                               });
                               const data = await res.json().catch(()=>({}));
                               if (!res.ok) {

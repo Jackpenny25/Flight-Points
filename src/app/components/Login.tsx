@@ -1,6 +1,6 @@
   // Role is no longer self-assigned during signup
 import { useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import supabase from '../../utils/supabase/client';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -10,10 +10,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
-const supabase = createClient(
-  `https://${projectId}.supabase.co`,
-  publicAnonKey
-);
 
 interface LoginProps {
   onLogin: (accessToken: string | null, user: any) => void;
@@ -120,7 +116,7 @@ export function Login({ onLogin }: LoginProps) {
   
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-100 via-blue-50 to-sky-200 p-4">
+    <div className="min-h-screen flex flex-col md:flex-row items-center justify-center bg-gradient-to-br from-sky-100 via-blue-50 to-sky-200 p-4 gap-6">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">

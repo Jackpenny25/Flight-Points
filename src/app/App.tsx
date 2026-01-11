@@ -1,14 +1,9 @@
 import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import supabase from '../utils/supabase/client';
 import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
 import { Toaster } from './components/ui/sonner';
 
-const supabase = createClient(
-  `https://${projectId}.supabase.co`,
-  publicAnonKey
-);
 
 export default function App() {
   const [accessToken, setAccessToken] = useState<string | null>(null);

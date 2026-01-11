@@ -213,44 +213,12 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               />
               <div>
                 <h1 className="text-xl font-bold text-primary">2427 (Biggin Hill) Squadron</h1>
-                <p className="text-sm text-muted-foreground">RAF Air Cadets - Flight Points</p>
               </div>
               {/* Admin text indicator removed; logo color indicates unlock state */}
             </div>
             <div className="flex items-center gap-4">
                 {userRole === 'cadet' && <NotificationCenter accessToken={accessToken} />}
-                <PrivacyPolicyModal />
-                {/* Retention cleanup (staff/SNCO only) */}
-                {canManageCadets && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={async () => {
-                      if (!confirm('Run data retention cleanup now? This will permanently delete records older than 4 years.')) return;
-                      try {
-                        const url = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/retention/cleanup`;
-                        const res = await fetch(url, {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${accessToken}`,
-                          }
-                        });
-                        const data = await res.json();
-                        if (!res.ok) {
-                          alert('Cleanup failed: ' + (data.error || res.statusText));
-                          return;
-                        }
-                        alert('Cleanup completed. Deleted: ' + JSON.stringify(data.deleted));
-                      } catch (e) {
-                        console.error('Cleanup request failed', e);
-                        alert('Cleanup request failed');
-                      }
-                    }}
-                  >
-                    Run Retention Cleanup
-                  </Button>
-                )}
+                {/* Retention cleanup moved to Signups tab (admin only) */}
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">{userName}</p>
                 <p className="text-xs text-gray-500 capitalize">{userRole}</p>
@@ -448,6 +416,13 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           {/* bottom tab triggers removed; use TopNav above */}
         </Tabs>
       </main>
+
+      {/* Footer: Privacy Policy moved here to avoid header crowding */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="text-center">
+          <PrivacyPolicyModal />
+        </div>
+      </div>
 
       {/* Name Change Dialog */}
       <Dialog open={nameChangeDialogOpen} onOpenChange={(open) => {

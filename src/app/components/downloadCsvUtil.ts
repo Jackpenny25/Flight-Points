@@ -1,5 +1,5 @@
 import { projectId, publicAnonKey } from '../../../utils/supabase/info'
-import { createClient } from '@supabase/supabase-js'
+import supabase from '../../utils/supabase/client'
 
 const tryFetchJson = async (paths: string[], bearerTokenOrUseAnon: string | boolean = false) => {
   for (const p of paths) {
@@ -57,8 +57,7 @@ function downloadBlob(filename: string, content: string, mime = 'text/csv;charse
 export async function exportAllCsvs(accessToken?: string | null) {
   // Implemented to be reused by UI components
   try {
-    const supabaseClient = createClient(`https://${projectId}.supabase.co`, publicAnonKey)
-    const { data: { session } } = await supabaseClient.auth.getSession()
+    const { data: { session } } = await supabase.auth.getSession()
     const bearer = accessToken ?? session?.access_token ?? true
     const functionBase = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f`
     const cadets = await tryFetchJson([
