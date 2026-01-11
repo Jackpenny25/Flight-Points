@@ -140,10 +140,7 @@ export function PrivacyPolicyModal() {
                 <strong>CSV Data Exports (For Leaderboards):</strong>
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2 mb-3">
-                <li>Flight Point Leads can export data to CSV format for creating leaderboard spreadsheets in Excel</li>
-                <li>Exported CSV files are downloaded directly to the user's device - they are not stored on any server</li>
-                <li>Exports contain cadet names, flights, points totals, and attendance summaries</li>
-                <li>Users are responsible for securely storing and disposing of exported files</li>
+                <li>Flight Point Leads (SNCOs) can download data to CSV format to their device. The downloaded CSV file is then manually opened in Excel to create leaderboard spreadsheets for display to cadets. Downloaded files are stored temporarily on the user's device and should be securely deleted when no longer needed.</li>
               </ul>
 
               <p className="text-gray-700 mt-3">
@@ -200,9 +197,9 @@ export function PrivacyPolicyModal() {
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Cadets:</strong> Can view leaderboards (all cadets' points and flights), their own points history, and submit tickets</li>
-                <li><strong>Point Givers:</strong> Can view all cadet data, award points, record attendance, and download CSV exports</li>
-                <li><strong>SNCOs:</strong> Full access to manage cadets, points, attendance, and tickets</li>
-                <li><strong>Staff:</strong> Full administrative access to all system functions and data</li>
+                <li><strong>Point Givers:</strong> Can view all cadet data, award points, and record attendance</li>
+                <li><strong>SNCOs (Flight Point Leads):</strong> Full administrative access - manage cadets, award points, record attendance, download CSV exports, and manage tickets</li>
+                <li><strong>Staff:</strong> View-only access for spectating and viewing reports - cannot give points or change data</li>
               </ul>
               <p className="text-gray-700 mt-2">
                 <strong>We do NOT share your data with:</strong>
@@ -215,7 +212,7 @@ export function PrivacyPolicyModal() {
                 <li>Any external organizations</li>
               </ul>
               <p className="text-gray-700 mt-2">
-                The only third-party services that process data are our technical infrastructure providers (Supabase for hosting, Vercel for application hosting) who act as data processors under our instructions and appropriate contracts.
+                The only third-party services that process data are our technical infrastructure providers (Supabase for database/storage hosting, GitHub Pages for website hosting) who act as data processors under our instructions and appropriate contracts.
               </p>
             </section>
 
@@ -258,7 +255,7 @@ export function PrivacyPolicyModal() {
               <p className="text-gray-700 mb-2">We use the following third-party services to operate this system:</p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Supabase (supabase.com):</strong> Cloud database, authentication, and file storage - GDPR-compliant infrastructure</li>
-                <li><strong>Vercel (vercel.com):</strong> Application hosting and deployment platform</li>
+                <li><strong>GitHub Pages (pages.github.com):</strong> Website hosting and deployment platform</li>
               </ul>
               <p className="text-gray-700 mt-2">
                 Each service has its own privacy policy and security practices. We select vendors that comply with UK GDPR and data protection regulations.  Data processing agreements are in place where required.
