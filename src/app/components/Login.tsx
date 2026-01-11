@@ -90,8 +90,6 @@ export function Login({ onLogin }: LoginProps) {
 
     try {
       const functionBase = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f`;
-      const payload: any = { email, password, name, joinCode, flight };
-      if (captchaToken) payload.hcaptchaToken = captchaToken;
 
       const response = await fetch(`${functionBase}/auth/request-signup`, {
         method: 'POST',
@@ -119,18 +117,7 @@ export function Login({ onLogin }: LoginProps) {
     }
   };
 
-  useEffect(() => {
-    // Dynamically import the HCaptcha component only on the client
-    let mounted = true;
-    import('@hcaptcha/react-hcaptcha')
-      .then((m) => {
-        if (mounted) setHCaptchaComponent(() => m.default || m.HCaptcha || m);
-      })
-      .catch(() => {
-        // ignore; captcha optional if package not available
-      });
-    return () => { mounted = false; };
-  }, []);
+  
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-100 via-blue-50 to-sky-200 p-4">
