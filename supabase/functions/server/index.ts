@@ -1417,10 +1417,7 @@ Deno.serve(async (req: Request) => {
             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
           });
         }
-<<<<<<< HEAD
-=======
-        // hCaptcha verification temporarily disabled
->>>>>>> 1bc9aa9 (chore: temporarily disable hCaptcha (client + server) for local testing)
+  // hCaptcha verification temporarily disabled
         // Basic per-email throttle (max 5 requests per hour)
         const throttleKey = `throttle:${(email || '').toLowerCase()}`;
         const t = await kv.get(throttleKey);
