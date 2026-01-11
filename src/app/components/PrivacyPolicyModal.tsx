@@ -215,7 +215,7 @@ export function PrivacyPolicyModal() {
                 <li>Any external organizations</li>
               </ul>
               <p className="text-gray-700 mt-2">
-                The only third-party services that process data are our technical infrastructure providers (Supabase for hosting, Vercel for application hosting) who act as data processors under our instructions and appropriate contracts.
+                The only third-party services that process data are our technical infrastructure providers (Supabase for hosting, GitGub Pages for application hosting) who act as data processors under our instructions and appropriate contracts.
               </p>
             </section>
 
@@ -258,7 +258,7 @@ export function PrivacyPolicyModal() {
               <p className="text-gray-700 mb-2">We use the following third-party services to operate this system:</p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Supabase (supabase.com):</strong> Cloud database, authentication, and file storage - GDPR-compliant infrastructure</li>
-                <li><strong>Vercel (vercel.com):</strong> Application hosting and deployment platform</li>
+                <li><strong>GitHub Pages:</strong> Application hosting and deployment platform</li>
               </ul>
               <p className="text-gray-700 mt-2">
                 Each service has its own privacy policy and security practices. We select vendors that comply with UK GDPR and data protection regulations.  Data processing agreements are in place where required.
