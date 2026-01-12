@@ -28,7 +28,9 @@ const tryFetchJson = async (paths: string[], bearerTokenOrUseAnon: string | bool
 
 function arrayToCsv(rows: Record<string, any>[]): string {
   if (!rows || rows.length === 0) return ''
-  const keys = Array.from(rows.reduce((s, r) => { Object.keys(r).forEach(k => s.add(k)); return s }, new Set<string>()))
+  const keySet = new Set<string>()
+  rows.forEach(r => { Object.keys(r).forEach(k => keySet.add(k)) })
+  const keys = Array.from(keySet)
   const escape = (v: any) => {
     if (v === null || v === undefined) return ''
     const s = String(v)

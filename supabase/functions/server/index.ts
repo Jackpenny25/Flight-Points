@@ -38,7 +38,7 @@ app.get("/make-server-73a3871f/health", (c) => {
 function getSupabaseAdmin() {
   return createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')) ?? '',
   );
 }
 
@@ -143,14 +143,14 @@ app.get("/public/cadets", async (c) => {
   }
 });
 
-// Add cadet (staff/SNCO only)
+// Add cadet (staff/Flight Point Lead only)
 app.post("/make-server-73a3871f/cadets", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
     
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can add cadets' }, 403);
+      return c.json({ error: 'Unauthorized - only staff/Flight Point Lead can add cadets' }, 403);
     }
     
     const { name, flight } = await c.req.json();
@@ -175,14 +175,14 @@ app.post("/make-server-73a3871f/cadets", verifyAuth, async (c) => {
   }
 });
 
-// Delete cadet (staff/SNCO only)
+// Delete cadet (staff/Flight Point Lead only)
 app.delete("/make-server-73a3871f/cadets/:id", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
     
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can delete cadets' }, 403);
+      return c.json({ error: 'Unauthorized - only staff/Flight Point Lead can delete cadets' }, 403);
     }
     
     const cadetId = c.req.param('id');
@@ -195,14 +195,14 @@ app.delete("/make-server-73a3871f/cadets/:id", verifyAuth, async (c) => {
   }
 });
 
-// Update cadet (staff/SNCO only) - allows editing name and flight
+// Update cadet (staff/Flight Point Lead only) - allows editing name and flight
 app.put("/make-server-73a3871f/cadets/:id", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
 
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can update cadets' }, 403);
+      return c.json({ error: 'Unauthorized - only staff/Flight Point Lead can update cadets' }, 403);
     }
 
     const cadetId = c.req.param('id');
@@ -288,7 +288,7 @@ app.post("/make-server-73a3871f/tickets", verifyAuth, async (c) => {
   }
 });
 
-// List tickets - cadets see their own; SNCO/Staff see all
+// List tickets - cadets see their own; Flight Point Lead/Staff see all
 app.get("/make-server-73a3871f/tickets", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
@@ -310,7 +310,7 @@ app.get("/make-server-73a3871f/tickets", verifyAuth, async (c) => {
   }
 });
 
-// Update ticket: cadet can edit description while open; SNCO/Staff can approve/reject and optionally award points
+// Update ticket: cadet can edit description while open; Flight Point Lead/Staff can approve/reject and optionally award points
 app.put("/make-server-73a3871f/tickets/:id", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
@@ -342,7 +342,7 @@ app.put("/make-server-73a3871f/tickets/:id", verifyAuth, async (c) => {
       return c.json({ ticket: updated });
     }
 
-    // SNCO/Staff actions
+    // Flight Point Lead/Staff actions
     const action = (body.action || '').toLowerCase();
     if (action === 'approve') {
       const awardPoints = Number(body.points);
@@ -558,7 +558,7 @@ app.post("/make-server-73a3871f/notifications/read-all", verifyAuth, async (c) =
   }
 });
 
-// Storage: ensure evidence bucket exists (SNCO/Staff/Cadet authenticated)
+// Storage: ensure evidence bucket exists (Flight Point Lead/Staff/Cadet authenticated)
 app.post("/make-server-73a3871f/storage/init", verifyAuth, async (c) => {
   try {
     const admin = getSupabaseAdmin();
@@ -656,7 +656,7 @@ app.get("/make-server-73a3871f/data/my-points", async (c) => {
   }
 });
 
-// Add points (point givers and staff/SNCO)
+// Add points (point givers and staff/Flight Point Lead)
 app.post("/make-server-73a3871f/points", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
@@ -693,14 +693,14 @@ app.post("/make-server-73a3871f/points", verifyAuth, async (c) => {
   }
 });
 
-// Delete point (staff/SNCO only)
+// Delete point (staff/Flight Point Lead only)
 app.delete("/make-server-73a3871f/points/:id", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
     
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can delete points' }, 403);
+      return c.json({ error: 'Unauthorized - only staff/Flight Point Lead can delete points' }, 403);
     }
     
     const pointId = c.req.param('id');
@@ -713,14 +713,14 @@ app.delete("/make-server-73a3871f/points/:id", verifyAuth, async (c) => {
   }
 });
 
-// Update point (staff/SNCO only)
+// Update point (staff/Flight Point Lead only)
 app.put("/make-server-73a3871f/points/:id", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
     
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can update points' }, 403);
+      return c.json({ error: 'Unauthorized - only staff/Flight Point Lead can update points' }, 403);
     }
     
     const pointId = c.req.param('id');
@@ -827,7 +827,7 @@ app.get("/make-server-73a3871f/attendance", verifyAuth, async (c) => {
   }
 });
 
-// Add attendance (point givers and staff/SNCO)
+// Add attendance (point givers and staff/Flight Point Lead)
 app.post("/make-server-73a3871f/attendance", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
@@ -951,14 +951,14 @@ app.post("/make-server-73a3871f/attendance/bulk", verifyAuth, async (c) => {
   }
 });
 
-// Delete attendance (staff/SNCO only)
+// Delete attendance (staff/Flight Point Lead only)
 app.delete("/make-server-73a3871f/attendance/:id", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
     
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can delete attendance' }, 403);
+      return c.json({ error: 'Unauthorized - only staff/Flight Point Lead can delete attendance' }, 403);
     }
     
     const attendanceId = c.req.param('id');
@@ -995,7 +995,7 @@ app.delete("/make-server-73a3871f/attendance/bulk/:id", verifyAuth, async (c) =>
     const userRole = user.user_metadata?.role || 'cadet';
 
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can delete bulk attendance' }, 403);
+      return c.json({ error: 'Unauthorized - only staff/Flight Point Lead can delete bulk attendance' }, 403);
     }
 
     const id = c.req.param('id');
@@ -1343,7 +1343,7 @@ Deno.serve(async (req: Request) => {
         }
         const supabase = createClient(
           Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+          (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')) ?? '',
         );
         const { data, error } = await supabase.auth.admin.createUser({
           email,
@@ -1398,7 +1398,7 @@ Deno.serve(async (req: Request) => {
         // Validate active join code
         const jc = await kv.get('joincode:current');
         if (!jc || !jc.code || !jc.expiresAt) {
-          return new Response(JSON.stringify({ error: 'Signup is currently closed. Ask an SNCO for the join code.' }), {
+          return new Response(JSON.stringify({ error: 'Signup is currently closed. Ask a Flight Point Lead for the join code.' }), {
             status: 403,
             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
           });
@@ -1459,9 +1459,9 @@ Deno.serve(async (req: Request) => {
         }
 
         const sb = createClient(
-          Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-        );
+              Deno.env.get('SUPABASE_URL') ?? '',
+              (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')) ?? '',
+            );
 
         // Try to list users (paginated). Request a reasonably large page to cover most orgs.
         const perPage = 1000;
@@ -1484,12 +1484,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // List all Supabase users (SNCO/Staff) - helpful for admin to manage accounts
+    // List all Supabase users (Flight Point Lead/Staff) - helpful for admin to manage accounts
     if (pathname.includes('/auth/users') && req.method === 'GET') {
       try {
         const accessToken = req.headers.get('Authorization')?.split(' ')[1];
         if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')) ?? '');
         const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
         if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         const role = (user.user_metadata?.role || '').toLowerCase();
@@ -1505,12 +1505,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Update a Supabase user's metadata (SNCO/Staff)
+    // Update a Supabase user's metadata (Flight Point Lead/Staff)
     if (pathname.match(/\/auth\/users\/[^/]+$/) && req.method === 'PUT') {
       try {
         const accessToken = req.headers.get('Authorization')?.split(' ')[1];
         if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')) ?? '');
         const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
         if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         const role = (user.user_metadata?.role || '').toLowerCase();
@@ -1552,12 +1552,118 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Admin: get current join code (SNCO/Staff)
+    // Allow an authenticated user to update their own role safely.
+    // Rules:
+    // - A user may demote themselves (e.g. snco -> cadet) and their previous role will be stored in `_previous_role`.
+    // - A user may only restore to a higher-privilege role (snco/staff) if that role matches their stored `_previous_role`.
+    // This prevents cadets from self-promoting while allowing temporary demotions and restores.
+    if (pathname.includes('/auth/me/role') && req.method === 'POST') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')) ?? '');
+        const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const body = await req.json().catch(() => ({}));
+        const requestedRole = (body?.role || '').toString().toLowerCase();
+        if (!requestedRole) return new Response(JSON.stringify({ error: 'Missing role' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const currentRole = (user.user_metadata?.role || '').toString().toLowerCase();
+
+        // Role priority map
+        const priority: Record<string, number> = { cadet: 0, pointgiver: 1, snco: 2, staff: 3 };
+        if (priority[requestedRole] === undefined) return new Response(JSON.stringify({ error: 'Invalid role' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        // If requesting a demotion (lower priority), allow and store previous role
+        if ((priority[requestedRole] || 0) < (priority[currentRole] || 0)) {
+          const newMeta = { ...(user.user_metadata || {}), role: requestedRole, _previous_role: currentRole };
+          const { data: updated, error: updateErr } = await sb.auth.admin.updateUserById(user.id, { user_metadata: newMeta } as any);
+          if (updateErr) return new Response(JSON.stringify({ error: updateErr.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          return new Response(JSON.stringify({ user: (updated && (updated as any).user) || null }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        // If requesting a promotion/restore (higher or equal priority), only allow if it matches stored _previous_role
+        const prev = (user.user_metadata && (user.user_metadata as any)._previous_role) || null;
+        if (prev && prev.toString().toLowerCase() === requestedRole) {
+          const newMeta = { ...(user.user_metadata || {}), role: requestedRole };
+          // clear previous role
+          if ((newMeta as any)._previous_role) delete (newMeta as any)._previous_role;
+          const { data: updated, error: updateErr } = await sb.auth.admin.updateUserById(user.id, { user_metadata: newMeta } as any);
+          if (updateErr) return new Response(JSON.stringify({ error: updateErr.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          return new Response(JSON.stringify({ user: (updated && (updated as any).user) || null }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        return new Response(JSON.stringify({ error: 'Forbidden: cannot promote self' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        console.error('Self role update error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to update role' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Admin-assisted: permanently set current user's role when presenting admin PIN
+    if (pathname.includes('/auth/me/role/set') && req.method === 'POST') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        const pin = req.headers.get('x-admin-pin') || '';
+        const ADMIN_PIN = Deno.env.get('ADMIN_PIN_SECRET') || Deno.env.get('ADMIN_PIN') || '';
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        if (!ADMIN_PIN || pin !== ADMIN_PIN) return new Response(JSON.stringify({ error: 'Forbidden - invalid admin pin' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const sb = getSupabaseAdmin();
+        const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const body = await req.json().catch(()=>({}));
+        const requestedRole = (body?.role || '').toString().toLowerCase();
+        if (!requestedRole) return new Response(JSON.stringify({ error: 'Missing role' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const newMeta = { ...(user.user_metadata || {}), role: requestedRole };
+        const { data: updated, error: updateErr } = await sb.auth.admin.updateUserById(user.id, { user_metadata: newMeta } as any);
+        if (updateErr) return new Response(JSON.stringify({ error: updateErr.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        return new Response(JSON.stringify({ user: (updated && (updated as any).user) || null }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        console.error('Set role (admin) error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to set role' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Admin-assisted: set temporary role for current user with expiry seconds
+    if (pathname.includes('/auth/me/role/temp') && req.method === 'POST') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        const pin = req.headers.get('x-admin-pin') || '';
+        const ADMIN_PIN = Deno.env.get('ADMIN_PIN_SECRET') || Deno.env.get('ADMIN_PIN') || '';
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        if (!ADMIN_PIN || pin !== ADMIN_PIN) return new Response(JSON.stringify({ error: 'Forbidden - invalid admin pin' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const sb = getSupabaseAdmin();
+        const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const body = await req.json().catch(()=>({}));
+        const requestedRole = (body?.role || '').toString().toLowerCase();
+        const seconds = Number(body?.seconds || 0);
+        if (!requestedRole) return new Response(JSON.stringify({ error: 'Missing role' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        if (!seconds || seconds <= 0) return new Response(JSON.stringify({ error: 'Invalid duration' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const expiresAt = new Date(Date.now() + seconds * 1000).toISOString();
+        const newMeta = { ...(user.user_metadata || {}), _previous_role: (user.user_metadata?.role || null), role: requestedRole, _temporary_expires: expiresAt };
+        const { data: updated, error: updateErr } = await sb.auth.admin.updateUserById(user.id, { user_metadata: newMeta } as any);
+        if (updateErr) return new Response(JSON.stringify({ error: updateErr.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        return new Response(JSON.stringify({ user: (updated && (updated as any).user) || null }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e) {
+        console.error('Set temp role (admin) error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to set temporary role' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Admin: get current join code (Flight Point Lead/Staff)
     if (pathname.includes('/admin/join-code') && req.method === 'GET') {
       try {
         const accessToken = req.headers.get('Authorization')?.split(' ')[1];
         if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')) ?? '');
         const { data: { user }, error } = await sb.auth.getUser(accessToken);
         if (error || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         const role = (user.user_metadata?.role || '').toLowerCase();
@@ -1572,12 +1678,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Admin: create/rotate join code with duration (SNCO/Staff)
+    // Admin: create/rotate join code with duration (Flight Point Lead/Staff)
     if (pathname.includes('/admin/join-code') && req.method === 'POST') {
       try {
         const accessToken = req.headers.get('Authorization')?.split(' ')[1];
         if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')) ?? '');
         const { data: { user }, error } = await sb.auth.getUser(accessToken);
         if (error || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         const role = (user.user_metadata?.role || '').toLowerCase();
@@ -1612,7 +1718,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // List signup requests (SNCO/Staff only)
+    // List signup requests (Flight Point Lead/Staff only)
     if (pathname.includes('/auth/requests') && req.method === 'GET') {
       try {
         const accessToken = req.headers.get('Authorization')?.split(' ')[1];
@@ -1653,7 +1759,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Approve signup request (SNCO/Staff) -> create user
+    // Approve signup request (Flight Point Lead/Staff) -> create user
     if (pathname.match(/\/auth\/requests\/[^/]+\/approve$/) && req.method === 'POST') {
       try {
         const accessToken = req.headers.get('Authorization')?.split(' ')[1];
@@ -1739,7 +1845,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Link an existing Supabase account to a signup request (SNCO/Staff)
+    // Link an existing Supabase account to a signup request (Flight Point Lead/Staff)
     if (pathname.match(/\/auth\/requests\/[^/]+\/link$/) && req.method === 'POST') {
       try {
         const accessToken = req.headers.get('Authorization')?.split(' ')[1];
@@ -2600,7 +2706,7 @@ Deno.serve(async (req: Request) => {
 // Retention cleanup: delete personal data older than 4 years
 app.post("/make-server-73a3871f/retention/cleanup", async (c) => {
   try {
-    // Allow invocation either by an authenticated staff/SNCO user (Bearer user token)
+    // Allow invocation either by an authenticated staff/Flight Point Lead user (Bearer user token)
     // or by a scheduled job using the Supabase service role key (Bearer SERVICE_ROLE_KEY).
     const authHeader = c.req.header('Authorization') || '';
     const bearer = authHeader.split(' ')[1] || '';
@@ -2615,7 +2721,7 @@ app.post("/make-server-73a3871f/retention/cleanup", async (c) => {
       invokedBy = 'service_role';
     }
 
-    // If not using service role, validate user token and require staff/SNCO role
+    // If not using service role, validate user token and require staff/Flight Point Lead role
     let invokingUser: any = null;
     if (!allowed && bearer) {
       const supabase = getSupabaseAdmin();
@@ -2631,7 +2737,7 @@ app.post("/make-server-73a3871f/retention/cleanup", async (c) => {
     }
 
     if (!allowed) {
-      return c.json({ error: 'Unauthorized - must be staff/SNCO or service role' }, 403);
+      return c.json({ error: 'Unauthorized - must be staff/Flight Point Lead or service role' }, 403);
     }
 
     // Retention rules:

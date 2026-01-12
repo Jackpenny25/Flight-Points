@@ -12,7 +12,7 @@ import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
 
 interface LoginProps {
-  onLogin: (accessToken: string | null, user: any) => void;
+  onLogin: (accessToken: string, user: any) => void;
 }
 
 export function Login({ onLogin }: LoginProps) {
@@ -116,14 +116,15 @@ export function Login({ onLogin }: LoginProps) {
   
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row items-center justify-center bg-gradient-to-br from-sky-100 via-blue-50 to-sky-200 p-4 gap-6">
-      <Card className="w-full max-w-md shadow-xl">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-100 via-blue-50 to-sky-200 p-8">
+      <div className="w-full max-w-2xl px-4">
+        <Card className="w-full max-w-lg md:max-w-xl mx-auto shadow-xl">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
-            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="2427 Biggin Hill Squadron" className="h-24 w-24 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="2427 Biggin Hill Squadron" className="h-32 w-32 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
           </div>
           <div>
-            <CardTitle className="text-2xl font-bold text-primary">2427 (Biggin Hill) Squadron</CardTitle>
+            <CardTitle className="text-3xl font-bold text-primary">2427 (Biggin Hill) Squadron</CardTitle>
             <CardDescription className="text-base">RAF Air Cadets - Flight Points Management</CardDescription>
           </div>
         </CardHeader>
@@ -232,7 +233,7 @@ export function Login({ onLogin }: LoginProps) {
                     </SelectContent>
                   </Select>
                 </div>
-                {/* Role selection removed; SNCOs will assign upon approval */}
+                {/* Role selection removed; Flight Point Leads will assign upon approval */}
                 {error && (
                   <div className="text-sm text-red-600 bg-red-50 p-3 rounded">
                     {error}
@@ -253,26 +254,12 @@ export function Login({ onLogin }: LoginProps) {
             </TabsContent>
           </Tabs>
         </CardContent>
-      </Card>
+        </Card>
 
-      {/* Allow guest cadet access without creating an account */}
-      <div className="w-full md:w-auto md:flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 md:mt-0 text-center space-y-4">
-        <p className="text-sm text-gray-600 mb-2">Cadets can continue without creating an account — only SNCOs and Point Givers need accounts.</p>
-        <div className="mt-2 flex items-center justify-center gap-3">
-          <Input placeholder="Guest name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
-          <Button
-            variant="ghost"
-            onClick={() => onLogin(null, { user_metadata: { role: 'cadet', name: name || 'Guest Cadet' } })}
-          >
-            Continue as Cadet (no account)
-          </Button>
-        </div>
-        
-        {/* Privacy Policy Link */}
-        <div className="flex items-center justify-center gap-2">
+        {/* Privacy Policy below the login card */}
+        <div className="mt-6 text-center text-sm text-gray-600">
           <PrivacyPolicyModal />
-          <span className="text-xs text-gray-500">|</span>
-          <p className="text-xs text-gray-500">By signing up, you agree to our Privacy Policy</p>
+          <div className="mt-2">By signing up, you agree to our Privacy Policy</div>
         </div>
       </div>
     </div>

@@ -140,14 +140,14 @@ app.get("/public/cadets", async (c) => {
   }
 });
 
-// Add cadet (staff/SNCO only)
+// Add cadet (staff or Flight Point Lead only)
 app.post("/make-server-73a3871f/cadets", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
     
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can add cadets' }, 403);
+      return c.json({ error: 'Unauthorized - only staff or Flight Point Lead can add cadets' }, 403);
     }
     
     const { name, flight } = await c.req.json();
@@ -172,14 +172,14 @@ app.post("/make-server-73a3871f/cadets", verifyAuth, async (c) => {
   }
 });
 
-// Delete cadet (staff/SNCO only)
+// Delete cadet (staff or Flight Point Lead only)
 app.delete("/make-server-73a3871f/cadets/:id", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
     
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can delete cadets' }, 403);
+      return c.json({ error: 'Unauthorized - only staff or Flight Point Lead can delete cadets' }, 403);
     }
     
     const cadetId = c.req.param('id');
@@ -192,14 +192,14 @@ app.delete("/make-server-73a3871f/cadets/:id", verifyAuth, async (c) => {
   }
 });
 
-// Update cadet (staff/SNCO only) - allows editing name and flight
+// Update cadet (staff or Flight Point Lead only) - allows editing name and flight
 app.put("/make-server-73a3871f/cadets/:id", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
 
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can update cadets' }, 403);
+      return c.json({ error: 'Unauthorized - only staff or Flight Point Lead can update cadets' }, 403);
     }
 
     const cadetId = c.req.param('id');
@@ -243,7 +243,7 @@ app.get("/make-server-73a3871f/points", verifyAuth, async (c) => {
   }
 });
 
-// Add points (point givers and staff/SNCO)
+// Add points (point givers and staff or Flight Point Lead)
 app.post("/make-server-73a3871f/points", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
@@ -280,14 +280,14 @@ app.post("/make-server-73a3871f/points", verifyAuth, async (c) => {
   }
 });
 
-// Delete point (staff/SNCO only)
+// Delete point (staff or Flight Point Lead only)
 app.delete("/make-server-73a3871f/points/:id", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
     
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can delete points' }, 403);
+      return c.json({ error: 'Unauthorized - only staff or Flight Point Lead can delete points' }, 403);
     }
     
     const pointId = c.req.param('id');
@@ -300,14 +300,14 @@ app.delete("/make-server-73a3871f/points/:id", verifyAuth, async (c) => {
   }
 });
 
-// Update point (staff/SNCO only)
+// Update point (staff or Flight Point Lead only)
 app.put("/make-server-73a3871f/points/:id", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
     
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can update points' }, 403);
+      return c.json({ error: 'Unauthorized - only staff or Flight Point Lead can update points' }, 403);
     }
     
     const pointId = c.req.param('id');
@@ -406,14 +406,14 @@ app.get("/make-server-73a3871f/attendance", verifyAuth, async (c) => {
   }
 });
 
-// Add attendance (point givers and staff/SNCO)
+// Add attendance (point givers and staff or Flight Point Lead)
 app.post("/make-server-73a3871f/attendance", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
     
     if (userRole !== 'staff' && userRole !== 'snco' && userRole !== 'pointgiver') {
-      return c.json({ error: 'Unauthorized - only point givers and staff can record attendance' }, 403);
+      return c.json({ error: 'Unauthorized - only point givers or staff/Flight Point Leads can record attendance' }, 403);
     }
     
     const { cadetName, date, flight, status, bulkId } = await c.req.json();
@@ -467,7 +467,7 @@ app.post("/make-server-73a3871f/attendance/bulk", verifyAuth, async (c) => {
     const userRole = user.user_metadata?.role || 'cadet';
     
     if (userRole !== 'staff' && userRole !== 'snco' && userRole !== 'pointgiver') {
-      return c.json({ error: 'Unauthorized - only point givers and staff can record attendance' }, 403);
+      return c.json({ error: 'Unauthorized - only point givers or staff/Flight Point Leads can record attendance' }, 403);
     }
 
     const { entries, date, flightFilter, bulkId } = await c.req.json();
@@ -530,14 +530,14 @@ app.post("/make-server-73a3871f/attendance/bulk", verifyAuth, async (c) => {
   }
 });
 
-// Delete attendance (staff/SNCO only)
+// Delete attendance (staff or Flight Point Lead only)
 app.delete("/make-server-73a3871f/attendance/:id", verifyAuth, async (c) => {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
     
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can delete attendance' }, 403);
+      return c.json({ error: 'Unauthorized - only staff or Flight Point Lead can delete attendance' }, 403);
     }
     
     const attendanceId = c.req.param('id');
@@ -574,7 +574,7 @@ app.delete("/make-server-73a3871f/attendance/bulk/:id", verifyAuth, async (c) =>
     const userRole = user.user_metadata?.role || 'cadet';
 
     if (userRole !== 'staff' && userRole !== 'snco') {
-      return c.json({ error: 'Unauthorized - only staff/SNCO can delete bulk attendance' }, 403);
+      return c.json({ error: 'Unauthorized - only staff or Flight Point Lead can delete bulk attendance' }, 403);
     }
 
     const id = c.req.param('id');

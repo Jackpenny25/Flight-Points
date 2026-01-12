@@ -19,7 +19,7 @@ export function Tickets({ accessToken }: TicketsProps) {
   const [category, setCategory] = useState('Badge');
   const [type, setType] = useState<'Request'|'Issue'>('Request');
   const [description, setDescription] = useState('');
-  // Removed requested points; SNCO/Staff will decide points on approval
+  // Removed requested points; Flight Point Leads/Staff will decide points on approval
   const [evidenceUrl, setEvidenceUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);

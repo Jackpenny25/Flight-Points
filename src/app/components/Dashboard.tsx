@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import TopNav from './TopNav';
 import { Button } from './ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -31,6 +32,14 @@ interface DashboardProps {
 export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const userRole = user?.user_metadata?.role || 'cadet';
   const userName = user?.user_metadata?.name || user?.email || 'User';
+  // Map internal role values to user-facing labels
+  const displayRole = userRole === 'snco'
+    ? 'Flight Point Lead'
+    : userRole === 'pointgiver'
+      ? 'Point Giver'
+      : userRole === 'staff'
+        ? 'Staff'
+        : (userRole.charAt(0).toUpperCase() + userRole.slice(1));
   const cadetName = user?.user_metadata?.cadetName;
   const suggestedName = user?.user_metadata?.suggestedName;
   const requireNameChange = user?.user_metadata?.requireNameChange === true;
@@ -89,6 +98,69 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
 
   const [downloadDialogOpen, setDownloadDialogOpen] = useState<boolean>(false);
   const [downloadLoading, setDownloadLoading] = useState<boolean>(false);
+  const [showMyRoleEditor, setShowMyRoleEditor] = useState<boolean>(false);
+  const [myRoleSelection, setMyRoleSelection] = useState<string>(userRole);
+  const [myRoleSaving, setMyRoleSaving] = useState<boolean>(false);
+  const [useAdminPin, setUseAdminPin] = useState<boolean>(false);
+  const [adminPinInput, setAdminPinInput] = useState<string>('');
+  const [temporaryRole, setTemporaryRole] = useState<boolean>(false);
+  const [tempDurationMinutes, setTempDurationMinutes] = useState<number>(30);
+
+  const saveMyRole = async () => {
+    if (!accessToken) { alert('Missing access token'); return }
+    if (!user?.id) { alert('Missing user id'); return }
+    if (myRoleSelection === userRole) { setShowMyRoleEditor(false); return }
+    setMyRoleSaving(true)
+    try {
+      let res;
+      if (temporaryRole) {
+        // call temp endpoint (requires admin pin)
+        res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/me/role/temp`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+            'x-admin-pin': adminPinInput
+          },
+          body: JSON.stringify({ role: myRoleSelection, seconds: Math.max(60, Math.round(tempDurationMinutes * 60)) })
+        });
+      } else if (useAdminPin) {
+        // admin-assisted permanent set
+        res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/me/role/set`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+            'x-admin-pin': adminPinInput
+          },
+          body: JSON.stringify({ role: myRoleSelection })
+        });
+      } else {
+        // default self-role flow (demote/restore allowed only per previous-role rules)
+        res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/me/role`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ role: myRoleSelection })
+        });
+      }
+
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok) {
+        alert('Failed to update role: ' + (data.error || res.statusText))
+        return
+      }
+      alert('Role updated. Please sign out and sign in to refresh permissions.')
+      setShowMyRoleEditor(false)
+    } catch (e:any) {
+      console.error('Save role failed', e)
+      alert('Save failed: ' + String(e))
+    } finally {
+      setMyRoleSaving(false)
+    }
+  }
 
   const openPinDialog = () => {
     if (adminUnlocked) return;
@@ -115,7 +187,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     }
   };
 
-  // Poll pending signup requests count for SNCO/Staff to show a badge on the NCO's tab
+  // Poll pending signup requests count for Flight Point Leads/Staff to show a badge on the NCO's tab
   useEffect(() => {
     if (!canManageCadets) return;
     const url = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/data/signups-count`;
@@ -149,7 +221,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     }
   }, [activeTab]);
 
-  // Poll open tickets count for SNCO/Staff to show a badge on the Tickets tab
+  // Poll open tickets count for Flight Point Leads/Staff to show a badge on the Tickets tab
   useEffect(() => {
     if (!canManageCadets) return;
     const url = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/data/tickets-count`;
@@ -221,7 +293,60 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 {/* Retention cleanup moved to Signups tab (admin only) */}
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">{userName}</p>
-                <p className="text-xs text-gray-500 capitalize">{userRole}</p>
+                {userRole === 'snco' && adminUnlocked ? (
+                  // Flight Point Leads in admin mode can open the role-change panel
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <div>
+                      <span className="text-left">{displayRole}</span>
+                    </div>
+                    <div>
+                      {!showMyRoleEditor ? (
+                        <button onClick={() => { setMyRoleSelection(userRole); setShowMyRoleEditor(true) }} className="text-[11px] text-primary underline">Change my role</button>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Select value={myRoleSelection} onValueChange={(v)=>setMyRoleSelection(v)}>
+                              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="cadet">Cadet</SelectItem>
+                                <SelectItem value="pointgiver">Point Giver</SelectItem>
+                                <SelectItem value="snco">Flight Point Lead</SelectItem>
+                                <SelectItem value="staff">Staff</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Button size="sm" onClick={saveMyRole} disabled={myRoleSaving}>{myRoleSaving ? 'Saving...' : 'Save'}</Button>
+                            <Button variant="outline" size="sm" onClick={() => setShowMyRoleEditor(false)}>Cancel</Button>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <label className="flex items-center gap-2 text-xs">
+                              <input type="checkbox" checked={temporaryRole} onChange={(e)=>setTemporaryRole(e.target.checked)} /> Temporary role
+                            </label>
+                            <label className="flex items-center gap-2 text-xs">
+                              <input type="checkbox" checked={useAdminPin} onChange={(e)=>setUseAdminPin(e.target.checked)} /> Use admin PIN
+                            </label>
+                          </div>
+
+                          {temporaryRole && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <label>Duration (minutes)</label>
+                              <input type="number" min={1} value={tempDurationMinutes} onChange={(e)=>setTempDurationMinutes(Math.max(1, Number(e.target.value)))} className="w-20 p-1 rounded border" />
+                            </div>
+                          )}
+
+                          {useAdminPin && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <label>Admin PIN</label>
+                              <input type="password" value={adminPinInput} onChange={(e)=>setAdminPinInput(e.target.value)} className="w-32 p-1 rounded border" />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">{displayRole}</p>
+                )}
               </div>
               <Button variant="outline" size="sm" onClick={onLogout}>
                 <LogOut className="size-4 mr-2" />
@@ -400,7 +525,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 </TabsContent>
               )}
 
-              {/* Admin tickets review (SNCO/Staff) */}
+              {/* Admin tickets review (Flight Point Leads/Staff) */}
               <TabsContent value="tickets">
                 <TicketsAdmin accessToken={accessToken} />
               </TabsContent>
@@ -423,6 +548,8 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           <PrivacyPolicyModal />
         </div>
       </div>
+
+      {/* Role change panel removed — only inline role-change remains */}
 
       {/* Name Change Dialog */}
       <Dialog open={nameChangeDialogOpen} onOpenChange={(open) => {

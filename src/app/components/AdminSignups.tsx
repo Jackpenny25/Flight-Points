@@ -6,7 +6,7 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { formatFlight } from './ui/utils';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
-
+  const [users, setUsers] = useState<Array<any>>([]);
 interface AdminSignupsProps {
   accessToken: string;
 }
@@ -20,7 +20,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
   const [nameSuggestions, setNameSuggestions] = useState<Record<string,string>>({});
   const [forceNameChange, setForceNameChange] = useState<Record<string,boolean>>({});
   const [cadets, setCadets] = useState<Array<{id:string;name:string;flight:string}>>([]);
-  const [users, setUsers] = useState<Array<any>>([]);
+  
   const [joinCodeInfo, setJoinCodeInfo] = useState<{joinCode:string|null;expiresAt:string|null;durationSeconds:number|null} | null>(null);
   const [duration, setDuration] = useState<number>(1); // in hours
 
@@ -68,7 +68,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
           `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/users`,
           { headers: makeHeaders() }
         );
-        const usersData = await usersRes.json();
+        const usersData = await usersRes.json().catch(()=>({}));
         if (usersRes.ok) setUsers((usersData.users || []).map((u:any)=>({ id: u.id, email: u.email, user_metadata: u.user_metadata || {}, created_at: u.created_at })));
       } catch (e) {
         setUsers([]);
@@ -167,85 +167,89 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
           </div>
         </CardContent>
       </Card>
-
-      <Card className={pending.length > 0 ? 'border-red-500' : ''}>
-        <CardHeader>
-          <CardTitle>Existing Accounts</CardTitle>
-          <CardDescription>Manage Supabase accounts (role, username, flight etc.)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {users.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No managed accounts found</div>
-          ) : (
-            <div className="overflow-x-auto mb-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Flight</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users.map((u) => (
-                    <TableRow key={u.id}>
-                      <TableCell>{u.email}</TableCell>
-                      <TableCell>{u.user_metadata?.name || '—'}</TableCell>
-                      <TableCell>{u.user_metadata?.username || u.user_metadata?.name || '—'}</TableCell>
-                      <TableCell>{u.user_metadata?.role || 'cadet'}</TableCell>
-                      <TableCell>{u.user_metadata?.flight || '—'}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={async ()=>{
-                            // Prompt for editable fields
-                            const newName = window.prompt('Name:', u.user_metadata?.name || '');
-                            if (newName === null) return;
-                            const newUsername = window.prompt('Username (login):', u.user_metadata?.username || u.user_metadata?.name || '');
-                            if (newUsername === null) return;
-                            const newRole = window.prompt('Role (cadet|pointgiver|snco|staff):', u.user_metadata?.role || 'cadet');
-                            if (newRole === null) return;
-                            const newFlight = window.prompt('Flight (optional):', u.user_metadata?.flight || '');
-                            if (newFlight === null) return;
-                            const newCadetId = window.prompt('Cadet ID to link (optional):', '');
-                            const newPassword = window.prompt('Set new password (leave blank to keep current):', '');
-                            try {
-                              const body: any = { name: newName, username: newUsername, role: newRole, flight: newFlight };
-                              if (newCadetId) body.cadetId = newCadetId;
-                              if (newPassword) body.password = newPassword;
-                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/users/${u.id}`, { method: 'PUT', headers: makeHeaders(), body: JSON.stringify(body) });
-                              const data = await res.json().catch(()=>({}));
-                              if (!res.ok) {
-                                alert('Update failed: ' + (data.error || res.statusText));
-                                return;
-                              }
-                              // refresh
-                              fetchData();
-                              alert('User updated');
-                            } catch (e:any) {
-                              console.error('Update user failed', e);
-                              alert('Update failed: ' + String(e));
-                            }
-                          }}>Edit</Button>
-                        </div>
-                      </TableCell>
+        <Card>
+          <CardHeader>
+            <CardTitle>Existing Accounts</CardTitle>
+            <CardDescription>Manage Supabase accounts (role, username, flight etc.)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {users.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No managed accounts found</div>
+            ) : (
+              <div className="overflow-x-auto mb-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Username</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Flight</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
+                  </TableHeader>
+                  <TableBody>
+                    {users.map((u) => (
+                      <TableRow key={u.id}>
+                        <TableCell>{u.email}</TableCell>
+                        <TableCell>{u.user_metadata?.name || '—'}</TableCell>
+                        <TableCell>{u.user_metadata?.username || u.user_metadata?.name || '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Select value={u.user_metadata?.role || 'cadet'} onValueChange={(v)=>{
+                              // update local copy so UI shows selection
+                              setUsers(prev=>prev.map(p=>p.id===u.id?{...p, user_metadata:{...p.user_metadata, role:v}}:p))
+                            }}>
+                              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="cadet">Cadet</SelectItem>
+                                <SelectItem value="pointgiver">Point Giver</SelectItem>
+                                <SelectItem value="snco">Flight Point Lead</SelectItem>
+                                <SelectItem value="staff">Staff</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </TableCell>
+                        <TableCell>{u.user_metadata?.flight || '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={async ()=>{
+                              if (!confirm(`Change role for ${u.email} to ${u.user_metadata?.role || 'cadet'}?`)) return;
+                              try {
+                                const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/users/${u.id}`, { method: 'PUT', headers: makeHeaders(), body: JSON.stringify({ role: u.user_metadata?.role || 'cadet' }) });
+                                const data = await res.json().catch(()=>({}));
+                                if (!res.ok) {
+                                  alert('Update failed: ' + (data.error || res.statusText));
+                                  return;
+                                }
+                                // refresh lists
+                                fetchData();
+                                alert('User updated');
+                              } catch (e:any) {
+                                console.error('Update user failed', e);
+                                alert('Update failed: ' + String(e));
+                              }
+                            }}>Save</Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-        <CardHeader>
+        <Card className={pending.length > 0 ? 'border-red-500' : ''}>
+        
+          <CardHeader>
           <CardTitle>
             Pending Signups {pending.length > 0 && (
               <span className="ml-2 inline-flex items-center justify-center min-w-6 h-6 text-xs px-2 rounded-full bg-red-600 text-white">{pending.length}</span>
             )}
           </CardTitle>
-          <CardDescription>Requests awaiting SNCO approval and role assignment</CardDescription>
+          <CardDescription>Requests awaiting Flight Point Lead approval and role assignment</CardDescription>
         </CardHeader>
         <CardContent>
           {fetchError && (
@@ -283,26 +287,20 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                         <div className="max-w-[220px]">
                           <Select value={cadetSelections[r.id] || ''} onValueChange={(v)=>setCadetSelections(prev=>({...prev,[r.id]:v}))}>
                             <SelectTrigger><SelectValue placeholder="Select cadet" /></SelectTrigger>
-                            <SelectContent>
-                              {(cadets || [])
-                                .filter(c => {
-                                  // Filter by flight if provided
+                                <SelectContent>
+                              {(() => {
+                                const matches = (cadets || []).filter(c => {
                                   const flightMatch = !r.flight || (String(c.flight).trim() === String(r.flight).trim());
-                                  // Then filter by name match (case-insensitive)
                                   const nameMatch = String(c.name).toLowerCase().includes(String(r.name).toLowerCase());
                                   return flightMatch && nameMatch;
-                                })
-                                // If no matches, show all cadets for that flight
-                                .length === 0 
+                                });
+                                const list = matches.length === 0
                                   ? (cadets || []).filter(c => !r.flight || (String(c.flight).trim() === String(r.flight).trim()))
-                                  : (cadets || []).filter(c => {
-                                      const flightMatch = !r.flight || (String(c.flight).trim() === String(r.flight).trim());
-                                      const nameMatch = String(c.name).toLowerCase().includes(String(r.name).toLowerCase());
-                                      return flightMatch && nameMatch;
-                                    })
-                                .map(c => (
+                                  : matches;
+                                return list.map(c => (
                                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                ))}
+                                ));
+                              })()}
                             </SelectContent>
                           </Select>
                         </div>
@@ -339,7 +337,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                               <div key={a.id} className="flex items-center justify-between bg-muted/20 p-2 rounded">
                                 <div className="text-sm">{a.email}</div>
                                 <div className="flex gap-2">
-                                  <Button size="xs" onClick={async ()=>{
+                                  <Button size="sm" onClick={async ()=>{
                                     const password = window.prompt('Set a password for the existing account (leave blank to keep current):') || null;
                                     try {
                                       const body: any = { userId: a.id, role: roleSelections[r.id] || 'cadet' };
@@ -357,7 +355,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                                       alert('Link failed: ' + String(e));
                                     }
                                   }}>Link</Button>
-                                  <Button size="xs" variant="outline" onClick={async ()=>{
+                                  <Button size="sm" variant="outline" onClick={async ()=>{
                                     const pass = window.prompt('Set a new password for this account (leave blank to cancel):');
                                     if (!pass) return;
                                     try {
@@ -386,7 +384,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                             <SelectContent>
                               <SelectItem value="cadet">Cadet</SelectItem>
                               <SelectItem value="pointgiver">Point Giver</SelectItem>
-                              <SelectItem value="snco">SNCO</SelectItem>
+                              <SelectItem value="snco">Flight Point Lead</SelectItem>
                               <SelectItem value="staff">Staff</SelectItem>
                             </SelectContent>
                           </Select>

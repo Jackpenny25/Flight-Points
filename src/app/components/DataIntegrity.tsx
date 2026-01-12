@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { projectId } from '../../utils/supabase/info';
+import { projectId } from '../../../utils/supabase/info';
 import supabase from '../../utils/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';

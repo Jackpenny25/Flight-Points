@@ -54,7 +54,7 @@ export function PrivacyPolicyModal() {
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Names</strong> - Full name of cadets and staff (format:  Surname Initial)</li>
                 <li><strong>Email addresses</strong> - For account access and notifications (staff and NCOs only)</li>
-                <li><strong>Role information</strong> - Cadet, Point Giver, SNCO, or Staff designation</li>
+                <li><strong>Role information</strong> - Cadet, Point Giver, Flight Point Lead, or Staff designation</li>
                 <li><strong>Flight assignments</strong> - Which flight (1, 2, 3, or 4) you belong to</li>
                 <li><strong>Attendance records</strong> - Dates, times, and status (present/absent) at squadron activities</li>
                 <li><strong>Points/Awards data</strong> - Flight points earned, achievements, reasons, and who awarded them</li>
@@ -90,7 +90,7 @@ export function PrivacyPolicyModal() {
               <p className="text-gray-700 mb-2">We collect personal data through:</p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Account Registration</strong> - Email and name provided during signup (staff and NCOs only; cadets can use the system without accounts)</li>
-                <li><strong>Direct Input</strong> - Points, attendance, and cadet information entered by authorized staff, SNCOs, and Point Givers</li>
+                <li><strong>Direct Input</strong> - Points, attendance, and cadet information entered by authorized staff, Flight Point Leads, and Point Givers</li>
                 <li><strong>File Uploads</strong> - Images and documents you voluntarily upload as evidence for achievement ticket requests</li>
                 <li><strong>OCR Processing</strong> - Attendance data extracted from uploaded attendance register photos using optical character recognition</li>
                 <li><strong>Automated Processes</strong> - System-generated IDs, timestamps, bulk operation tracking, and attendance points</li>
@@ -161,7 +161,7 @@ export function PrivacyPolicyModal() {
               <p className="text-gray-700 mb-2">We implement the following security measures:</p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Encryption:</strong> All data transmitted between your device and our servers uses industry-standard SSL/TLS encryption</li>
-                <li><strong>Access Control:</strong> Role-based permissions limit who can view, edit, or delete data (Cadet, Point Giver, SNCO, Staff roles)</li>
+                <li><strong>Access Control:</strong> Role-based permissions limit who can view, edit, or delete data (Cadet, Point Giver, Flight Point Lead, Staff roles)</li>
                 <li><strong>Authentication:</strong> Secure login system with email/password authentication managed by Supabase (staff and NCOs only)</li>
                 <li><strong>Admin Verification:</strong> Additional 4-digit PIN verification required for sensitive administrative functions</li>
                 <li><strong>File Sanitization:</strong> Uploaded file names are automatically sanitized to prevent security vulnerabilities</li>
@@ -181,7 +181,7 @@ export function PrivacyPolicyModal() {
                 <li><strong>General Data:</strong> Data is retained for a maximum of 4 years, after which it is deleted from Supabase</li>
                 <li><strong>Periodic Resets:</strong> The database may be reset at the end of academic years or as operationally required, removing older data</li>
                 <li><strong>Uploaded Evidence Files:</strong> Stored for the duration of the ticket lifecycle; deleted when tickets are resolved or during periodic resets</li>
-                <li><strong>User Accounts:</strong> Staff and SNCO accounts remain active until manually deleted by administrators</li>
+                <li><strong>User Accounts:</strong> Staff and Flight Point Lead accounts remain active until manually deleted by administrators</li>
                 <li><strong>Notification Data:</strong> Retained for the duration of system use; removed during periodic resets</li>
                 <li><strong>Browser Cache:</strong> Persists in your browser until you manually clear it or the browser automatically clears it based on your settings</li>
                 <li><strong>Join Codes:</strong> Automatically expire after their configured duration (minimum 1 minute, typically 1 hour)</li>
@@ -201,7 +201,7 @@ export function PrivacyPolicyModal() {
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Cadets:</strong> Can view leaderboards (all cadets' points and flights), their own points history, and submit tickets</li>
                 <li><strong>Point Givers:</strong> Can view all cadet data, award points, record attendance, and download CSV exports</li>
-                <li><strong>SNCOs:</strong> Full access to manage cadets, points, attendance, and tickets</li>
+                <li><strong>Flight Point Leads:</strong> Full access to manage cadets, points, attendance, and tickets</li>
                 <li><strong>Staff:</strong> Full administrative access to all system functions and data</li>
               </ul>
               <p className="text-gray-700 mt-2">
@@ -284,7 +284,7 @@ export function PrivacyPolicyModal() {
                 <em>(Email address to be provided following CO approval)</em>
               </p>
               <p className="text-gray-700 mt-2">
-                Alternatively, speak to any staff member or SNCO at squadron parades.
+                Alternatively, speak to any staff member or Flight Point Lead at squadron parades.
               </p>
             </section>
 

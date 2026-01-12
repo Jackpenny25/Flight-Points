@@ -36,8 +36,8 @@ export default function App() {
     }
   };
 
-  const handleLogin = (token: string | null, userData: any) => {
-    // token may be null for guest cadets (no account required)
+  const handleLogin = (token: string, userData: any) => {
+    // Require a valid access token for logged-in users; guest cadet flow removed
     setAccessToken(token);
     setUser(userData);
   };
@@ -66,8 +66,7 @@ export default function App() {
 
   return (
     <>
-      {/* Allow guest cadets (user exists but no accessToken) to access the dashboard. */}
-      {user ? (
+      {user && accessToken ? (
         <Dashboard user={user} accessToken={accessToken} onLogout={handleLogout} />
       ) : (
         <Login onLogin={handleLogin} />

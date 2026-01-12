@@ -30,7 +30,7 @@ interface PointsManagerProps {
 }
 
 export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
-  const ADMIN_PIN = '5394';
+  const ADMIN_PIN = (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_ADMIN_PIN : '') || '';
   const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
     typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
   );
@@ -59,6 +59,20 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
 
   const ensureAdminPin = () => {
     if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
+
+    // Allow users with admin roles to proceed without a PIN
+    if (userRole === 'staff' || userRole === 'snco') {
+      sessionStorage.setItem('adminPinVerified', 'true');
+      setAdminUnlocked(true);
+      return true;
+    }
+
+    // If no ADMIN_PIN configured, disallow PIN-based elevation
+    if (!ADMIN_PIN) {
+      toast.error('Admin PIN not configured. Please sign in with an admin account.');
+      return false;
+    }
+
     const pin = prompt('Enter 4-digit admin PIN');
     if (pin === ADMIN_PIN) {
       sessionStorage.setItem('adminPinVerified', 'true');
@@ -547,7 +561,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
         </CardContent>
       </Card>
 
-      {/* Recent Points - SNCO/Staff only */}
+      {/* Recent Points - Flight Point Leads/Staff only */}
       {(userRole === 'snco' || userRole === 'staff') && (
       <Card>
         <CardHeader>
@@ -689,7 +703,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
         <Card>
           <CardHeader>
             <CardTitle>Cadet Totals & Clear</CardTitle>
-            <CardDescription>SNCO/staff tools to adjust points</CardDescription>
+            <CardDescription>Flight Point Leads / Staff tools to adjust points</CardDescription>
           </CardHeader>
           <CardContent>
             {cadetTotals.length === 0 ? (
