@@ -59,6 +59,8 @@
     "multer": "^2.0.2",
     "next": "14.0.4",
     "next-themes": "0.4.6",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
     "react-day-picker": "8.10.1",
     "react-dnd": "16.0.1",
     "react-dnd-html5-backend": "16.0.1",
@@ -86,18 +88,6 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "6.3.5"
-  },
-  "peerDependencies": {
-    "react": "18.2.0",
-    "react-dom": "18.2.0"
-  },
-  "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    },
-    "react-dom": {
-      "optional": true
-    }
   },
   "pnpm": {
     "overrides": {
