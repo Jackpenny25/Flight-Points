@@ -139,12 +139,9 @@ export function PrivacyPolicyModal() {
               <p className="text-gray-700 mb-2">
                 <strong>CSV Data Exports (For Leaderboards):</strong>
               </p>
-              <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2 mb-3">
-                <li>Flight Point Leads can export data to CSV format for creating leaderboard spreadsheets in Excel</li>
-                <li>Exported CSV files are downloaded directly to the user's device - they are not stored on any server</li>
-                <li>Exports contain cadet names, flights, points totals, and attendance summaries</li>
-                <li>Users are responsible for securely storing and disposing of exported files</li>
-              </ul>
+              <p className="text-gray-700 ml-2 mb-3">
+                Flight Point Leads (SNCOs) can download data to CSV format to their device. The downloaded CSV file is then manually opened in Excel to create leaderboard spreadsheets for display to cadets. Downloaded files are stored temporarily on the user's device and should be securely deleted when no longer needed.
+              </p>
 
               <p className="text-gray-700 mt-3">
                 <strong>Important:</strong> Data is <strong>not</strong> stored on squadron computers, physical servers, or any local infrastructure. All data resides in the cloud (Supabase) or temporarily in your web browser.
@@ -200,9 +197,9 @@ export function PrivacyPolicyModal() {
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Cadets:</strong> Can view leaderboards (all cadets' points and flights), their own points history, and submit tickets</li>
-                <li><strong>Point Givers:</strong> Can view all cadet data, award points, record attendance, and download CSV exports</li>
-                <li><strong>SNCOs:</strong> Full access to manage cadets, points, attendance, and tickets</li>
-                <li><strong>Staff:</strong> Full administrative access to all system functions and data</li>
+                <li><strong>Staff:</strong> View-only access for spectating and viewing reports - cannot give points or change data</li>
+                <li><strong>Point Givers:</strong> Can award points, record attendance, and view all cadet data</li>
+                <li><strong>SNCOs (Flight Point Leads):</strong> Full administrative access - manage cadets, award points, record attendance, download CSV exports, and manage tickets</li>
               </ul>
               <p className="text-gray-700 mt-2">
                 <strong>We do NOT share your data with:</strong>
