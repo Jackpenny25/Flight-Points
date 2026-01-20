@@ -6,7 +6,7 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { formatFlight } from './ui/utils';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
-  const [users, setUsers] = useState<Array<any>>([]);
+
 interface AdminSignupsProps {
   accessToken: string;
 }
@@ -21,7 +21,6 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
   const [nameSuggestions, setNameSuggestions] = useState<Record<string,string>>({});
   const [forceNameChange, setForceNameChange] = useState<Record<string,boolean>>({});
   const [cadets, setCadets] = useState<Array<{id:string;name:string;flight:string}>>([]);
-  const [users, setUsers] = useState<Array<any>>([]);
   
   const [joinCodeInfo, setJoinCodeInfo] = useState<{joinCode:string|null;expiresAt:string|null;durationSeconds:number|null} | null>(null);
   const [duration, setDuration] = useState<number>(1); // in hours
@@ -136,7 +135,8 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                 min="0.5" 
                 step="0.5"
                 value={duration} 
-                onChange={(e) => setDuration(Math.max(0.5, Number(e.target.value)))}
+                onChange={(e) => setDuration(Math.max(0.5, Number(e.target.value)))
+                }
                 placeholder="1"
               />
             </div>
