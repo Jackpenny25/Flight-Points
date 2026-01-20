@@ -877,7 +877,8 @@ app.post("/make-server-73a3871f/attendance", verifyAuth, async (c) => {
     return c.json({ attendance: attendanceRecord });
   } catch (error) {
     console.log('Error adding attendance:', error);
-    return c.json({ error: 'Failed to add attendance' }, 500);
+    const message = (error && (error.message || error.toString())) || 'Failed to add attendance';
+    return c.json({ error: message }, 500);
   }
 });
 
@@ -947,7 +948,8 @@ app.post("/make-server-73a3871f/attendance/bulk", verifyAuth, async (c) => {
     return c.json({ bulk: bulkRecord });
   } catch (error) {
     console.log('Error adding bulk attendance:', error);
-    return c.json({ error: 'Failed to add bulk attendance' }, 500);
+    const message = (error && (error.message || error.toString())) || 'Failed to add bulk attendance';
+    return c.json({ error: message }, 500);
   }
 });
 

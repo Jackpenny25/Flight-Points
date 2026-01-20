@@ -106,33 +106,30 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
         status: attendanceStatuses[c.id] || 'absent',
       }));
 
-      const results = await Promise.all(entries.map(async (entry) => {
-        try {
-          const res = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/attendance`,
-            {
-              method: 'POST',
-              headers: postHeaders,
-              body: JSON.stringify(entry),
-            }
-          );
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({ error: 'unknown' }));
-            return { ok: false, cadetName: entry.cadetName, reason: err.error || res.statusText || 'Failed', entry };
+      // Submit as a single bulk request to avoid many parallel calls
+      try {
+        const res = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/attendance/bulk`,
+          {
+            method: 'POST',
+            headers: postHeaders,
+            body: JSON.stringify({ entries, date: new Date(selectedDate).toISOString(), flightFilter }),
           }
-          return { ok: true, cadetName: entry.cadetName };
-        } catch (err: any) {
-          return { ok: false, cadetName: entry.cadetName, reason: String(err), entry };
-        }
-      }));
+        );
 
-      const failures = results.filter(r => !r.ok);
-      if (failures.length > 0) {
-        setBulkErrors(failures.map(f => ({ cadetName: f.cadetName, reason: f.reason })));
-        setBulkFailedEntries(failures.map(f => f.entry));
-        toast.error(`Saved ${entries.length - failures.length} succeeded, ${failures.length} failed`);
-      } else {
-        toast.success(`Saved ${entries.length} attendance records`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'unknown' }));
+          setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: err.error || res.statusText || 'Failed' })));
+          setBulkFailedEntries(entries);
+          toast.error(`Saved 0 succeeded, ${entries.length} failed`);
+        } else {
+          const data = await res.json().catch(() => ({}));
+          toast.success(`Saved ${entries.length} attendance records`);
+        }
+      } catch (err: any) {
+        setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: String(err) })));
+        setBulkFailedEntries(entries);
+        toast.error(`Saved 0 succeeded, ${entries.length} failed`);
       }
 
       setSelectedIds(new Set());

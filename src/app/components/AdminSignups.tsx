@@ -6,13 +6,13 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { formatFlight } from './ui/utils';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
-  const [users, setUsers] = useState<Array<any>>([]);
 interface AdminSignupsProps {
   accessToken: string;
 }
 
 export default function AdminSignups({ accessToken }: AdminSignupsProps) {
   const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<Array<any>>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [pending, setPending] = useState<Array<{id:string;name:string;email:string;createdAt:string;flight?:string|null; existingAccounts?: Array<any> }>>([]);
   const [roleSelections, setRoleSelections] = useState<Record<string,string>>({});
