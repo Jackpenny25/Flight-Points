@@ -27,7 +27,11 @@ interface CadetsManagerProps {
 }
 
 export function CadetsManager({ accessToken }: CadetsManagerProps) {
-  const ADMIN_PIN = '5394';
+  const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN || '';
+  // Add a console warning if PIN is not configured
+  if (!ADMIN_PIN && typeof window !== 'undefined') {
+    console.warn('VITE_ADMIN_PIN not configured - admin features will not work');
+  }
   const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
     typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
   );

@@ -11,3 +11,16 @@ If you are interested in using this software please contact the owner Jack Penny
 
 Repository owner: Jack Penny — add an official contact email in the repo when ready.
 
+## Environment Setup
+
+1. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` and set your admin PIN:
+   ```dotenv
+   VITE_ADMIN_PIN=your-secure-pin-here
+   ```
+
+3. Never commit your `.env` file to git!
