@@ -109,7 +109,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
       // Submit as a single bulk request to avoid many parallel calls
       try {
         const res = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/attendance/bulk`,
+          `https://${projectId}.supabase.co/functions/v1/server/attendance/bulk`,
           {
             method: 'POST',
             headers: postHeaders,
@@ -150,7 +150,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/attendance`,
+        `https://${projectId}.supabase.co/functions/v1/server/attendance`,
         { headers }
       );
 
@@ -179,7 +179,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/attendance/bulk`,
+        `https://${projectId}.supabase.co/functions/v1/server/attendance/bulk`,
         { headers }
       );
 
@@ -198,7 +198,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
       if (accessToken) headers2['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets`,
+        `https://${projectId}.supabase.co/functions/v1/server/cadets`,
         { headers: headers2 }
       );
 
@@ -227,7 +227,7 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
       if (accessToken) delHeaders['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/attendance/bulk/${bulkId}`,
+        `https://${projectId}.supabase.co/functions/v1/server/attendance/bulk/${bulkId}`,
         { method: 'DELETE', headers: delHeaders }
       );
 

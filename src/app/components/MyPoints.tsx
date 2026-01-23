@@ -34,7 +34,7 @@ export function MyPoints({ accessToken, cadetName }: MyPointsProps) {
   const fetchMyPoints = async () => {
     try {
       setLoading(true);
-      const functionBase = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f`;
+      const functionBase = `https://${projectId}.supabase.co/functions/v1/server`;
       console.log('Fetching my points for:', cadetName);
       const url = `${functionBase}/data/my-points?name=${encodeURIComponent(cadetName)}`;
       const response = await fetch(url, {

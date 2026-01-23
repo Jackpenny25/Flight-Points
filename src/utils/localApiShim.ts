@@ -11,8 +11,8 @@ function unauthorized(msg = 'Unauthorized') { return jsonResponse({ error: msg }
 
 export function enableLocalMode() {
   if (typeof window === 'undefined' || !(window as any).fetch) return;
-  // Match the deployed function name "server"; all routes are nested under it
-  const base = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f`;
+  // Match the deployed function slug directly; all routes are nested under it
+  const base = `https://${projectId}.supabase.co/functions/v1/server`;
   const originalFetch = window.fetch.bind(window);
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {

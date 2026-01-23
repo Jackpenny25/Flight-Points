@@ -34,7 +34,7 @@ export function Login({ onLogin }: LoginProps) {
       // Allow signing in with email OR username. If a username is provided, resolve it to an email using the server function.
       let loginEmail = String(email || '').trim();
       if (!loginEmail.includes('@')) {
-        const functionBase = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f`;
+        const functionBase = `https://${projectId}.supabase.co/functions/v1/server`;
         const resp = await fetch(`${functionBase}/auth/lookup-email`, {
           method: 'POST',
           headers: {
@@ -85,7 +85,7 @@ export function Login({ onLogin }: LoginProps) {
     setLoading(true);
 
     try {
-      const functionBase = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f`;
+      const functionBase = `https://${projectId}.supabase.co/functions/v1/server`;
 
       const response = await fetch(`${functionBase}/auth/request-signup`, {
         method: 'POST',

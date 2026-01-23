@@ -1,5 +1,6 @@
 
   import { createRoot } from "react-dom/client";
+  import "./app/setupFetch";
   import App from "./app/App";
   import "./styles/index.css";
   import { LOCAL_MODE } from "../utils/config";

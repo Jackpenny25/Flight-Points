@@ -39,7 +39,7 @@ export function AdminPointGivers({ accessToken }: AdminPointGiversProps) {
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
       const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/admin/point-givers`,
+        `https://${projectId}.supabase.co/functions/v1/server/admin/point-givers`,
         { headers }
       );
       const data = await res.json();

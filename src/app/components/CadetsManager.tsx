@@ -111,7 +111,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
         // Use access token if present, otherwise anon key (required by Supabase functions)
         if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
         else headers['Authorization'] = `Bearer ${publicAnonKey}`;
-        const path = `/functions/v1/server/make-server-73a3871f/cadets`;
+        const path = `/functions/v1/server/cadets`;
         const res = await fetch(`https://${projectId}.supabase.co${path}`, { headers });
         if (res.ok) {
           const body = await res.json().catch(() => null);
@@ -205,7 +205,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             return { ok: true, name: entry.name, cadet: localCadet } as any;
           }
           const res = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets`,
+            `https://${projectId}.supabase.co/functions/v1/server/cadets`,
             {
               method: 'POST',
               headers: postHeaders,
@@ -334,7 +334,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
       const putHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
       if (accessToken) putHeaders['Authorization'] = `Bearer ${accessToken}`;
 
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets/${editingCadet.id}`, { method: 'PUT', headers: putHeaders, body: JSON.stringify({ name: editName, flight: editFlight }) });
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/server/cadets/${editingCadet.id}`, { method: 'PUT', headers: putHeaders, body: JSON.stringify({ name: editName, flight: editFlight }) });
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({ error: 'unknown' }));
@@ -387,7 +387,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
       const results = await Promise.all(ids.map(async (id) => {
         try {
           const res = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets/${id}`,
+            `https://${projectId}.supabase.co/functions/v1/server/cadets/${id}`,
             { method: 'DELETE', headers: delHeaders }
           );
           return res.ok ? { id, ok: true } : { id, ok: false };
@@ -486,7 +486,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
       const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
       if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
 
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets`, {
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/server/cadets`, {
         method: 'POST', headers: postHeaders, body: JSON.stringify({ name, flight })
       });
 
@@ -536,7 +536,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
       else delHeaders['Authorization'] = `Bearer ${publicAnonKey}`;
       
       const deleteRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets/${cadetId}`,
+        `https://${projectId}.supabase.co/functions/v1/server/cadets/${cadetId}`,
         { method: 'DELETE', headers: delHeaders }
       );
 

@@ -16,7 +16,9 @@ app.use(
   cors({
     origin: "*",
     allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      // Allow common custom headers used by clients (anon apikey, admin pin)
+      allowHeaders: ["Content-Type", "Authorization", "apikey", "x-api-key", "x-admin-pin", "X-Admin-Pin"],
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
   }),
@@ -81,21 +83,49 @@ app.post("/make-server-73a3871f/auth/signup", async (c) => {
 
 // Middleware to verify user authentication
 async function verifyAuth(c: any, next: any) {
+  // Allow admin-pin bypass for testing: compare header to ADMIN_PIN env var
+  const adminPinHeader = c.req.header('x-admin-pin') || c.req.header('X-Admin-Pin');
+  const configuredPin = Deno.env.get('ADMIN_PIN');
+  // Also accept admin pin via query param (temporary testing helper)
+  let adminPinQuery = null;
+  try {
+    // Hono/different runtimes expose the raw URL differently; try both c.req.url and c.req.raw.url
+    const rawUrl = c.req.url || (c.req.raw && c.req.raw.url) || '';
+    const url = new URL(rawUrl, 'http://localhost');
+    adminPinQuery = url.searchParams.get('admin_pin') || url.searchParams.get('adminPin');
+  } catch (e) {
+    adminPinQuery = null;
+  }
+  const effectiveAdminPin = adminPinHeader || adminPinQuery;
+  if (adminPinHeader && configuredPin && adminPinHeader === configuredPin) {
+    // Synthesize a privileged user for testing
+    const syntheticUser = {
+      id: 'admin-pin-user',
+      email: 'admin-pin@example.local',
+      user_metadata: { role: 'staff', name: 'Admin (pin)' },
+    };
+    c.set('user', syntheticUser);
+    await next();
+    return;
+  }
+  // If an admin pin was provided but didn't match or isn't configured, return a helpful debug response (temporary)
+  if (effectiveAdminPin && (!configuredPin || effectiveAdminPin !== configuredPin)) {
+    return c.json({ error: 'Unauthorized - invalid admin pin', adminPinProvided: true, configuredPinPresent: !!configuredPin }, 401);
+  }
+
   const accessToken = c.req.header('Authorization')?.split(' ')[1];
-  
   if (!accessToken) {
     return c.json({ error: 'Unauthorized - no token provided' }, 401);
   }
-  
+
   const supabase = getSupabaseAdmin();
   const { data: { user }, error } = await supabase.auth.getUser(accessToken);
-  
+
   if (error || !user) {
     console.log('Auth error:', error);
     return c.json({ error: 'Unauthorized - invalid token' }, 401);
   }
-  
-  // Attach user to context
+
   c.set('user', user);
   await next();
 }
@@ -815,49 +845,50 @@ app.get("/make-server-73a3871f/leaderboards", verifyAuth, async (c) => {
 
 // Attendance Routes
 // Get all attendance records
-app.get("/make-server-73a3871f/attendance", verifyAuth, async (c) => {
+// Centralized attendance handlers (used by both legacy-prefixed and root routes)
+async function getAttendanceHandler(c: any) {
   try {
     const attendance = await kv.getByPrefix('attendance:');
-    // Sort by date, newest first
     attendance.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return c.json({ attendance });
   } catch (error) {
     console.log('Error fetching attendance:', error);
     return c.json({ error: 'Failed to fetch attendance' }, 500);
   }
-});
+}
+
+app.get("/make-server-73a3871f/attendance", verifyAuth, getAttendanceHandler);
+app.get("/attendance", verifyAuth, getAttendanceHandler);
+app.get("/server/attendance", verifyAuth, getAttendanceHandler);
 
 // Add attendance (point givers and staff/Flight Point Lead)
-app.post("/make-server-73a3871f/attendance", verifyAuth, async (c) => {
+async function postAttendanceHandler(c: any) {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
-    
     if (userRole !== 'staff' && userRole !== 'snco' && userRole !== 'pointgiver') {
       return c.json({ error: 'Unauthorized - only point givers and staff can record attendance' }, 403);
     }
-    
+
     const { cadetName, date, flight, status, bulkId } = await c.req.json();
-    
     if (!cadetName || !flight || !status) {
       return c.json({ error: 'Cadet name, flight, and status are required' }, 400);
     }
-    
+
     const attendanceId = crypto.randomUUID();
     const attendanceRecord = {
       id: attendanceId,
       cadetName,
       date: date || new Date().toISOString(),
       flight,
-      status, // 'present', 'authorised_absence', 'absent'
+      status,
       submittedBy: user.user_metadata?.name || user.email,
       bulkId: bulkId || null,
       createdAt: new Date().toISOString(),
     };
-    
+
     await kv.set(`attendance:${attendanceId}`, attendanceRecord);
-    
-    // Optionally award attendance points if present
+
     if (status === 'present') {
       const pointId = crypto.randomUUID();
       const point = {
@@ -873,21 +904,24 @@ app.post("/make-server-73a3871f/attendance", verifyAuth, async (c) => {
       };
       await kv.set(`point:${pointId}`, point);
     }
-    
+
     return c.json({ attendance: attendanceRecord });
   } catch (error) {
     console.log('Error adding attendance:', error);
     const message = (error && (error.message || error.toString())) || 'Failed to add attendance';
     return c.json({ error: message }, 500);
   }
-});
+}
+
+app.post("/make-server-73a3871f/attendance", verifyAuth, postAttendanceHandler);
+app.post("/attendance", verifyAuth, postAttendanceHandler);
+app.post("/server/attendance", verifyAuth, postAttendanceHandler);
 
 // Add bulk attendance endpoint that writes a bulk summary and attendance records atomically
-app.post("/make-server-73a3871f/attendance/bulk", verifyAuth, async (c) => {
+async function postAttendanceBulkHandler(c: any) {
   try {
     const user = c.get('user');
     const userRole = user.user_metadata?.role || 'cadet';
-    
     if (userRole !== 'staff' && userRole !== 'snco' && userRole !== 'pointgiver') {
       return c.json({ error: 'Unauthorized - only point givers and staff can record attendance' }, 403);
     }
@@ -944,14 +978,17 @@ app.post("/make-server-73a3871f/attendance/bulk", verifyAuth, async (c) => {
     };
 
     await kv.set(`attendance-bulk:${id}`, bulkRecord);
-
     return c.json({ bulk: bulkRecord });
   } catch (error) {
     console.log('Error adding bulk attendance:', error);
     const message = (error && (error.message || error.toString())) || 'Failed to add bulk attendance';
     return c.json({ error: message }, 500);
   }
-});
+}
+
+app.post("/make-server-73a3871f/attendance/bulk", verifyAuth, postAttendanceBulkHandler);
+app.post("/attendance/bulk", verifyAuth, postAttendanceBulkHandler);
+app.post("/server/attendance/bulk", verifyAuth, postAttendanceBulkHandler);
 
 // Delete attendance (staff/Flight Point Lead only)
 app.delete("/make-server-73a3871f/attendance/:id", verifyAuth, async (c) => {
@@ -974,12 +1011,91 @@ app.delete("/make-server-73a3871f/attendance/:id", verifyAuth, async (c) => {
 });
 
 // Get attendance reports and statistics
+// Compute attendance summary helper used by both legacy and root routes
+async function computeAttendanceSummary() {
+  const attendance = await kv.getByPrefix('attendance:');
+
+  // Calculate summary per cadet
+  const cadetSummary: { [key: string]: any } = {};
+  attendance.forEach((record: any) => {
+    if (!cadetSummary[record.cadetName]) {
+      cadetSummary[record.cadetName] = {
+        cadetName: record.cadetName,
+        flight: record.flight,
+        totalPresent: 0,
+        totalAuthorisedAbsence: 0,
+        totalAbsent: 0,
+        totalRecords: 0,
+      };
+    }
+
+    cadetSummary[record.cadetName].totalRecords++;
+
+    switch (record.status) {
+      case 'present':
+        cadetSummary[record.cadetName].totalPresent++;
+        break;
+      case 'authorised_absence':
+        cadetSummary[record.cadetName].totalAuthorisedAbsence++;
+        break;
+      case 'absent':
+        cadetSummary[record.cadetName].totalAbsent++;
+        break;
+    }
+  });
+
+  const summary = Object.values(cadetSummary).map((cadet: any) => ({
+    ...cadet,
+    attendanceRate: cadet.totalRecords > 0
+      ? Math.round((cadet.totalPresent / cadet.totalRecords) * 100)
+      : 0,
+  }));
+
+  const stats = {
+    totalPresent: summary.reduce((sum: number, c: any) => sum + c.totalPresent, 0),
+    totalAuthorisedAbsence: summary.reduce((sum: number, c: any) => sum + c.totalAuthorisedAbsence, 0),
+    totalAbsent: summary.reduce((sum: number, c: any) => sum + c.totalAbsent, 0),
+    averageAttendanceRate: summary.length > 0
+      ? Math.round(summary.reduce((sum: number, c: any) => sum + c.attendanceRate, 0) / summary.length)
+      : 0,
+  };
+
+  return { summary, stats };
+}
+
 app.get("/make-server-73a3871f/attendance/reports", verifyAuth, async (c) => {
   try {
-    const attendance = await kv.getByPrefix('attendance:');
+    const result = await computeAttendanceSummary();
+    return c.json(result);
+  } catch (error) {
+    console.log('Error fetching attendance reports:', error);
+    return c.json({ error: 'Failed to fetch attendance reports' }, 500);
+  }
+});
+
+// Root-level aliases for reports and a convenience attendance-summary endpoint
+app.get("/attendance/reports", verifyAuth, async (c) => {
+  try {
+    const result = await computeAttendanceSummary();
+    return c.json(result);
+  } catch (error) {
+    console.log('Error fetching attendance reports:', error);
+    return c.json({ error: 'Failed to fetch attendance reports' }, 500);
+  }
+});
+
+app.get("/attendance-summary", verifyAuth, async (c) => {
+  try {
+    const result = await computeAttendanceSummary();
+    return c.json(result);
+  } catch (error) {
+    console.log('Error fetching attendance summary:', error);
+    return c.json({ error: 'Failed to fetch attendance summary' }, 500);
+  }
+});
 
 // Get bulk attendance overview
-app.get("/make-server-73a3871f/attendance/bulk", verifyAuth, async (c) => {
+async function getAttendanceBulkHandler(c: any) {
   try {
     const bulks = await kv.getByPrefix('attendance-bulk:');
     bulks.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -987,6 +1103,57 @@ app.get("/make-server-73a3871f/attendance/bulk", verifyAuth, async (c) => {
   } catch (error) {
     console.log('Error fetching bulk attendance:', error);
     return c.json({ error: 'Failed to fetch bulk attendance' }, 500);
+  }
+}
+
+app.get("/make-server-73a3871f/attendance/bulk", verifyAuth, getAttendanceBulkHandler);
+app.get("/attendance/bulk", verifyAuth, getAttendanceBulkHandler);
+app.get("/server/attendance/bulk", verifyAuth, getAttendanceBulkHandler);
+
+// Temporary debug endpoint: write a single attendance record when provided with admin_pin (for local/browser testing)
+app.post('/debug/attendance/write', verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const payload = await c.req.json().catch(() => ({}));
+    const cadetName = payload.cadetName || 'DEBUG_TEST';
+    const flight = payload.flight || 'TEST';
+    const status = payload.status || 'present';
+
+    const attendanceId = crypto.randomUUID();
+    const attendanceRecord = {
+      id: attendanceId,
+      cadetName,
+      date: new Date().toISOString(),
+      flight,
+      status,
+      submittedBy: user.user_metadata?.name || user.email || 'admin-pin',
+      bulkId: null,
+      createdAt: new Date().toISOString(),
+    };
+
+    await kv.set(`attendance:${attendanceId}`, attendanceRecord);
+
+    // Optionally create a point for present
+    if (status === 'present') {
+      const pointId = crypto.randomUUID();
+      const point = {
+        id: pointId,
+        cadetName,
+        date: new Date().toISOString(),
+        flight,
+        reason: 'Debug Attendance - Present',
+        points: 1,
+        type: 'attendance',
+        givenBy: user.user_metadata?.name || user.email || 'admin-pin',
+        createdAt: new Date().toISOString(),
+      };
+      await kv.set(`point:${pointId}`, point);
+    }
+
+    return c.json({ ok: true, attendance: attendanceRecord });
+  } catch (err) {
+    console.log('Debug write error:', err);
+    return c.json({ error: 'Failed to write debug attendance', detail: (err && err.toString()) || err }, 500);
   }
 });
 
@@ -1028,61 +1195,7 @@ app.delete("/make-server-73a3871f/attendance/bulk/:id", verifyAuth, async (c) =>
     return c.json({ error: 'Failed to delete bulk attendance' }, 500);
   }
 });
-    
-    // Calculate summary per cadet
-    const cadetSummary: { [key: string]: any } = {};
-    
-    attendance.forEach((record: any) => {
-      if (!cadetSummary[record.cadetName]) {
-        cadetSummary[record.cadetName] = {
-          cadetName: record.cadetName,
-          flight: record.flight,
-          totalPresent: 0,
-          totalAuthorisedAbsence: 0,
-          totalAbsent: 0,
-          totalRecords: 0,
-        };
-      }
-      
-      cadetSummary[record.cadetName].totalRecords++;
-      
-      switch (record.status) {
-        case 'present':
-          cadetSummary[record.cadetName].totalPresent++;
-          break;
-        case 'authorised_absence':
-          cadetSummary[record.cadetName].totalAuthorisedAbsence++;
-          break;
-        case 'absent':
-          cadetSummary[record.cadetName].totalAbsent++;
-          break;
-      }
-    });
-    
-    // Calculate attendance rate for each cadet
-    const summary = Object.values(cadetSummary).map((cadet: any) => ({
-      ...cadet,
-      attendanceRate: cadet.totalRecords > 0 
-        ? Math.round((cadet.totalPresent / cadet.totalRecords) * 100)
-        : 0,
-    }));
-    
-    // Calculate overall statistics
-    const stats = {
-      totalPresent: summary.reduce((sum: number, c: any) => sum + c.totalPresent, 0),
-      totalAuthorisedAbsence: summary.reduce((sum: number, c: any) => sum + c.totalAuthorisedAbsence, 0),
-      totalAbsent: summary.reduce((sum: number, c: any) => sum + c.totalAbsent, 0),
-      averageAttendanceRate: summary.length > 0
-        ? Math.round(summary.reduce((sum: number, c: any) => sum + c.attendanceRate, 0) / summary.length)
-        : 0,
-    };
-    
-    return c.json({ summary, stats });
-  } catch (error) {
-    console.log('Error fetching attendance reports:', error);
-    return c.json({ error: 'Failed to fetch attendance reports' }, 500);
-  }
-});
+ 
 
 // Data Integrity Checks
 app.get("/make-server-73a3871f/integrity-check", verifyAuth, async (c) => {
@@ -1229,7 +1342,8 @@ Deno.serve(async (req: Request) => {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          // Allow the same custom headers as Hono middleware
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-api-key, x-admin-pin, X-Admin-Pin',
         },
       });
     }
@@ -2034,6 +2148,100 @@ Deno.serve(async (req: Request) => {
           console.error('Tickets POST error:', e);
           return new Response(JSON.stringify({ error: 'Failed to create ticket' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         }
+
+          // Handle attendance endpoints directly (bypass Hono)
+          if (pathname.includes('/attendance')) {
+            // Get all attendance records
+            if (req.method === 'GET' && pathname.endsWith('/attendance')) {
+              try {
+                const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+                if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+                const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+                const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+                if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+                const attendance = await kv.getByPrefix('attendance:');
+                attendance.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                return new Response(JSON.stringify({ attendance }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+              } catch (e) {
+                console.error('Attendance GET error:', e);
+                return new Response(JSON.stringify({ error: 'Failed to fetch attendance' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+              }
+            }
+
+            // Create single attendance record
+            if (req.method === 'POST' && pathname.endsWith('/attendance')) {
+              try {
+                const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+                if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+                const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+                const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+                if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+                const role = (user.user_metadata?.role || 'cadet').toLowerCase();
+                if (role !== 'staff' && role !== 'snco' && role !== 'pointgiver') return new Response(JSON.stringify({ error: 'Unauthorized - only point givers and staff can record attendance' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+                const body = await req.json();
+                const { cadetName, date, flight, status, bulkId } = body || {};
+                if (!cadetName || !flight || !status) return new Response(JSON.stringify({ error: 'Cadet name, flight, and status are required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+                const attendanceId = crypto.randomUUID();
+                const attendanceRecord = { id: attendanceId, cadetName, date: date || new Date().toISOString(), flight, status, submittedBy: user.user_metadata?.name || user.email, bulkId: bulkId || null, createdAt: new Date().toISOString() };
+                await kv.set(`attendance:${attendanceId}`, attendanceRecord);
+
+                if (status === 'present') {
+                  const pointId = crypto.randomUUID();
+                  const point = { id: pointId, cadetName, date: date || new Date().toISOString(), flight, reason: 'Attendance - Present Correctly Dressed', points: 1, type: 'attendance', givenBy: user.user_metadata?.name || user.email, createdAt: new Date().toISOString() };
+                  await kv.set(`point:${pointId}`, point);
+                }
+
+                return new Response(JSON.stringify({ attendance: attendanceRecord }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+              } catch (e) {
+                console.error('Attendance POST error:', e);
+                return new Response(JSON.stringify({ error: 'Failed to add attendance', details: String(e) }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+              }
+            }
+
+            // Bulk attendance
+            if (req.method === 'POST' && pathname.endsWith('/attendance/bulk')) {
+              try {
+                const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+                if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+                const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+                const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+                if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+                const role = (user.user_metadata?.role || 'cadet').toLowerCase();
+                if (role !== 'staff' && role !== 'snco' && role !== 'pointgiver') return new Response(JSON.stringify({ error: 'Unauthorized - only point givers and staff can record attendance' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+                const body = await req.json();
+                const { entries, date, flightFilter, bulkId } = body || {};
+                if (!entries || !Array.isArray(entries) || entries.length === 0) return new Response(JSON.stringify({ error: 'Entries are required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+                const id = bulkId || crypto.randomUUID();
+                let presentCount = 0;
+                let total = entries.length;
+                for (const e of entries) {
+                  const attendanceId = crypto.randomUUID();
+                  const attendanceRecord = { id: attendanceId, cadetName: e.cadetName, date: e.date || date || new Date().toISOString(), flight: e.flight, status: e.status, submittedBy: user.user_metadata?.name || user.email, bulkId: id, createdAt: new Date().toISOString() };
+                  await kv.set(`attendance:${attendanceId}`, attendanceRecord);
+                  if (e.status === 'present') {
+                    presentCount++;
+                    const pointId = crypto.randomUUID();
+                    const point = { id: pointId, cadetName: e.cadetName, date: e.date || date || new Date().toISOString(), flight: e.flight, reason: 'Attendance - Present Correctly Dressed', points: 1, type: 'attendance', givenBy: user.user_metadata?.name || user.email, createdAt: new Date().toISOString() };
+                    await kv.set(`point:${pointId}`, point);
+                  }
+                }
+
+                const bulkRecord = { id, date: date || new Date().toISOString(), flightFilter: flightFilter || 'all', totalRecords: total, totalPresent: presentCount, submittedBy: user.user_metadata?.name || user.email, createdAt: new Date().toISOString() };
+                await kv.set(`attendance-bulk:${id}`, bulkRecord);
+                return new Response(JSON.stringify({ bulk: bulkRecord }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+              } catch (e) {
+                console.error('Attendance bulk error:', e);
+                return new Response(JSON.stringify({ error: 'Failed to add bulk attendance', details: String(e) }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+              }
+            }
+          }
       }
 
       // Resolve ticket id if present
@@ -2849,5 +3057,160 @@ app.post("/make-server-73a3871f/retention/cleanup", async (c) => {
   } catch (error) {
     console.error('Retention cleanup failed:', error);
     return c.json({ error: 'Retention cleanup failed' }, 500);
+  }
+});
+
+// --- Alias routes without legacy prefix ---
+// These exist so clients calling the active `server` slug (e.g. /functions/v1/server/attendance)
+// will work without the legacy `make-server-73a3871f` prefix.
+app.get("/attendance", verifyAuth, async (c) => {
+  try {
+    const attendance = await kv.getByPrefix('attendance:');
+    attendance.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return c.json({ attendance });
+  } catch (error) {
+    console.log('Error fetching attendance (alias):', error);
+    return c.json({ error: 'Failed to fetch attendance' }, 500);
+  }
+});
+
+// Alias for single attendance record (no legacy prefix)
+app.post("/attendance", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const userRole = user.user_metadata?.role || 'cadet';
+    if (userRole !== 'staff' && userRole !== 'snco' && userRole !== 'pointgiver') {
+      return c.json({ error: 'Unauthorized - only point givers and staff can record attendance' }, 403);
+    }
+
+    const { cadetName, date, flight, status, bulkId } = await c.req.json();
+    if (!cadetName || !flight || !status) {
+      return c.json({ error: 'Cadet name, flight, and status are required' }, 400);
+    }
+
+    const attendanceId = crypto.randomUUID();
+    const attendanceRecord = {
+      id: attendanceId,
+      cadetName,
+      date: date || new Date().toISOString(),
+      flight,
+      status,
+      submittedBy: user.user_metadata?.name || user.email,
+      bulkId: bulkId || null,
+      createdAt: new Date().toISOString(),
+    };
+
+    await kv.set(`attendance:${attendanceId}`, attendanceRecord);
+
+    if (status === 'present') {
+      const pointId = crypto.randomUUID();
+      const point = {
+        id: pointId,
+        cadetName,
+        date: date || new Date().toISOString(),
+        flight,
+        reason: 'Attendance - Present Correctly Dressed',
+        points: 1,
+        type: 'attendance',
+        givenBy: user.user_metadata?.name || user.email,
+        createdAt: new Date().toISOString(),
+      };
+      await kv.set(`point:${pointId}`, point);
+    }
+
+    return c.json({ attendance: attendanceRecord });
+  } catch (error) {
+    console.log('Error adding attendance (alias):', error);
+    const message = (error && (error.message || error.toString())) || 'Failed to add attendance';
+    return c.json({ error: message }, 500);
+  }
+});
+
+// Alias for bulk attendance (no legacy prefix)
+app.post("/attendance/bulk", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const userRole = user.user_metadata?.role || 'cadet';
+    if (userRole !== 'staff' && userRole !== 'snco' && userRole !== 'pointgiver') {
+      return c.json({ error: 'Unauthorized - only point givers and staff can record attendance' }, 403);
+    }
+
+    const { entries, date, flightFilter, bulkId } = await c.req.json();
+    if (!entries || !Array.isArray(entries) || entries.length === 0) {
+      return c.json({ error: 'Entries are required' }, 400);
+    }
+
+    const id = bulkId || crypto.randomUUID();
+    let presentCount = 0;
+    let total = entries.length;
+
+    for (const e of entries) {
+      const attendanceId = crypto.randomUUID();
+      const attendanceRecord = {
+        id: attendanceId,
+        cadetName: e.cadetName,
+        date: e.date || date || new Date().toISOString(),
+        flight: e.flight,
+        status: e.status,
+        submittedBy: user.user_metadata?.name || user.email,
+        bulkId: id,
+        createdAt: new Date().toISOString(),
+      };
+      await kv.set(`attendance:${attendanceId}`, attendanceRecord);
+
+      if (e.status === 'present') {
+        presentCount++;
+        const pointId = crypto.randomUUID();
+        const point = {
+          id: pointId,
+          cadetName: e.cadetName,
+          date: e.date || date || new Date().toISOString(),
+          flight: e.flight,
+          reason: 'Attendance - Present Correctly Dressed',
+          points: 1,
+          type: 'attendance',
+          givenBy: user.user_metadata?.name || user.email,
+          createdAt: new Date().toISOString(),
+        };
+        await kv.set(`point:${pointId}`, point);
+      }
+    }
+
+    const bulkRecord = {
+      id,
+      date: date || new Date().toISOString(),
+      flightFilter: flightFilter || 'all',
+      totalRecords: total,
+      totalPresent: presentCount,
+      submittedBy: user.user_metadata?.name || user.email,
+      createdAt: new Date().toISOString(),
+    };
+
+    await kv.set(`attendance-bulk:${id}`, bulkRecord);
+
+    return c.json({ bulk: bulkRecord });
+  } catch (error) {
+    console.log('Error adding bulk attendance (alias):', error);
+    const message = (error && (error.message || error.toString())) || 'Failed to add bulk attendance';
+    return c.json({ error: message }, 500);
+  }
+});
+app.get("/server/attendance/reports", verifyAuth, async (c) => {
+  try {
+    const result = await computeAttendanceSummary();
+    return c.json(result);
+  } catch (error) {
+    console.log('Error fetching attendance reports:', error);
+    return c.json({ error: 'Failed to fetch attendance reports' }, 500);
+  }
+});
+
+app.get("/server/attendance-summary", verifyAuth, async (c) => {
+  try {
+    const result = await computeAttendanceSummary();
+    return c.json(result);
+  } catch (error) {
+    console.log('Error fetching attendance summary:', error);
+    return c.json({ error: 'Failed to fetch attendance summary' }, 500);
   }
 });

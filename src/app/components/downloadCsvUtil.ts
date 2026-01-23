@@ -61,7 +61,7 @@ export async function exportAllCsvs(accessToken?: string | null) {
   try {
     const { data: { session } } = await supabase.auth.getSession()
     const bearer = accessToken ?? session?.access_token ?? true
-    const functionBase = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f`
+    const functionBase = `https://${projectId}.supabase.co/functions/v1/server`
     const cadets = await tryFetchJson([
       `${functionBase}/cadets`,
       '/data/cadets.json',

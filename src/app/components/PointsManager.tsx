@@ -99,7 +99,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/points`,
+        `https://${projectId}.supabase.co/functions/v1/server/points`,
         { headers }
       );
 
@@ -121,7 +121,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       if (accessToken) headers2['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/cadets`,
+        `https://${projectId}.supabase.co/functions/v1/server/cadets`,
         { headers: headers2 }
       );
 
@@ -269,7 +269,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
         if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
 
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/points`,
+          `https://${projectId}.supabase.co/functions/v1/server/points`,
           {
             method: 'POST',
             headers: postHeaders,
@@ -321,7 +321,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       if (accessToken) delHeaders['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/points/${pointId}`,
+          `https://${projectId}.supabase.co/functions/v1/server/points/${pointId}`,
         {
           method: 'DELETE',
           headers: delHeaders,
@@ -365,7 +365,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/points/${editingId}`,
+        `https://${projectId}.supabase.co/functions/v1/server/points/${editingId}`,
         {
           method: 'PUT',
           headers,
@@ -402,7 +402,7 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/points/clear-cadet`,
+        `https://${projectId}.supabase.co/functions/v1/server/points/clear-cadet`,
         {
           method: 'POST',
           headers,

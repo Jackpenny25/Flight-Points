@@ -115,7 +115,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       let res;
       if (temporaryRole) {
         // call temp endpoint (requires admin pin)
-        res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/me/role/temp`, {
+        res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/me/role/temp`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -126,7 +126,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         });
       } else if (useAdminPin) {
         // admin-assisted permanent set
-        res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/me/role/set`, {
+        res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/me/role/set`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -137,7 +137,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         });
       } else {
         // default self-role flow (demote/restore allowed only per previous-role rules)
-        res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/me/role`, {
+        res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/me/role`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -190,7 +190,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   // Poll pending signup requests count for Flight Point Leads/Staff to show a badge on the NCO's tab
   useEffect(() => {
     if (!canManageCadets) return;
-    const url = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/data/signups-count`;
+    const url = `https://${projectId}.supabase.co/functions/v1/server/data/signups-count`;
     let timer: any;
     const fetchCount = async () => {
       try {
@@ -201,7 +201,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           }
         });
         const data = await res.json();
-        console.log('Pending signups count:', data.count);
+        // suppressed noisy console output
         if (typeof data.count === 'number') setAdminPendingCount(data.count);
       } catch (e) {
         console.error('Failed to fetch pending signups count:', e);
@@ -224,7 +224,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   // Poll open tickets count for Flight Point Leads/Staff to show a badge on the Tickets tab
   useEffect(() => {
     if (!canManageCadets) return;
-    const url = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/data/tickets-count`;
+    const url = `https://${projectId}.supabase.co/functions/v1/server/data/tickets-count`;
     let timer: any;
     const fetchCount = async () => {
       try {
@@ -235,7 +235,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           }
         });
         const data = await res.json();
-        console.log('Open tickets count:', data.count);
+        // suppressed noisy console output
         if (typeof data.count === 'number') setTicketsCount(data.count);
       } catch (e) {
         console.error('Failed to fetch open tickets count:', e);
@@ -622,7 +622,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 }
                 try {
                   const response = await fetch(
-                    `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/update-name`,
+                    `https://${projectId}.supabase.co/functions/v1/server/auth/update-name`,
                     {
                       method: 'POST',
                       headers: {

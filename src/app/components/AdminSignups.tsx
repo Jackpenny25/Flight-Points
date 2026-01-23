@@ -35,7 +35,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
     try {
       setFetchError(null);
       const reqRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests`,
+        `https://${projectId}.supabase.co/functions/v1/server/auth/requests`,
         { headers: makeHeaders() }
       );
       if (!reqRes.ok) {
@@ -50,14 +50,14 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
       setPending((reqData.requests || []).sort((a:any,b:any)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()));
 
       const cadRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/data/cadets`,
+        `https://${projectId}.supabase.co/functions/v1/server/data/cadets`,
         { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
       );
       const cadData = await cadRes.json();
       setCadets((cadData.cadets || []).map((c:any)=>({ id: c.id, name: c.name, flight: c.flight })));
 
       const jcRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/admin/join-code`,
+        `https://${projectId}.supabase.co/functions/v1/server/admin/join-code`,
         { headers: makeHeaders() }
       );
       const jcData = await jcRes.json();
@@ -66,7 +66,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
       // Fetch existing Supabase users for admin management
       try {
         const usersRes = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/users`,
+          `https://${projectId}.supabase.co/functions/v1/server/auth/users`,
           { headers: makeHeaders() }
         );
         const usersData = await usersRes.json().catch(()=>({}));
@@ -102,7 +102,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
           onClick={async () => {
             if (!confirm('Run data retention cleanup now? This will permanently delete records older than 4 years.')) return;
             try {
-              const url = `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/retention/cleanup`;
+              const url = `https://${projectId}.supabase.co/functions/v1/server/retention/cleanup`;
               const res = await fetch(url, { method: 'POST', headers: makeHeaders() });
               const data = await res.json();
               if (!res.ok) {
@@ -142,7 +142,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
             </div>
             <div className="flex justify-start sm:justify-end">
               <Button onClick={async ()=>{
-                const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/admin/join-code`,{
+                const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/join-code`,{
                   method:'POST', headers: makeHeaders(), body: JSON.stringify({ durationSeconds: Math.round(duration * 3600) })
                 });
                 const data = await res.json();
@@ -218,7 +218,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                             <Button size="sm" onClick={async ()=>{
                               if (!confirm(`Change role for ${u.email} to ${u.user_metadata?.role || 'cadet'}?`)) return;
                               try {
-                                const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/users/${u.id}`, { method: 'PUT', headers: makeHeaders(), body: JSON.stringify({ role: u.user_metadata?.role || 'cadet' }) });
+                                const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/users/${u.id}`, { method: 'PUT', headers: makeHeaders(), body: JSON.stringify({ role: u.user_metadata?.role || 'cadet' }) });
                                 const data = await res.json().catch(()=>({}));
                                 if (!res.ok) {
                                   alert('Update failed: ' + (data.error || res.statusText));
@@ -345,7 +345,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                                       const body: any = { userId: a.id, role: roleSelections[r.id] || 'cadet' };
                                       if (cadetSelections[r.id]) body.cadetId = cadetSelections[r.id];
                                       if (password) body.password = password;
-                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/link`, { method: 'POST', headers: makeHeaders(), body: JSON.stringify(body) });
+                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/requests/${r.id}/link`, { method: 'POST', headers: makeHeaders(), body: JSON.stringify(body) });
                                       const data = await res.json().catch(()=>({}));
                                       if (!res.ok) {
                                         alert('Link failed: ' + (data.error || res.statusText));
@@ -362,7 +362,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                                     if (!pass) return;
                                     try {
                                       const body = { userId: a.id, password: pass };
-                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/link`, { method: 'POST', headers: makeHeaders(), body: JSON.stringify(body) });
+                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/requests/${r.id}/link`, { method: 'POST', headers: makeHeaders(), body: JSON.stringify(body) });
                                       const data = await res.json().catch(()=>({}));
                                       if (!res.ok) {
                                         alert('Set password failed: ' + (data.error || res.statusText));
@@ -412,7 +412,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                             }
 
                             try {
-                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}/approve`,{
+                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/requests/${r.id}/approve`,{
                                 method:'POST', headers: makeHeaders(), body: JSON.stringify(requestBody)
                               });
                               const data = await res.json().catch(()=>({}));
@@ -429,7 +429,7 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                           }}>Approve</Button>
                           <Button size="sm" variant="outline" onClick={async ()=>{
                             try {
-                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/auth/requests/${r.id}`,{
+                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/requests/${r.id}`,{
                                 method:'DELETE', headers: makeHeaders()
                               });
                               const data = await res.json().catch(()=>({}));
