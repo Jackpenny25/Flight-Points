@@ -613,6 +613,194 @@ app.post("/make-server-73a3871f/storage/init", verifyAuth, async (c) => {
   }
 });
 
+// Rewards Routes
+const listRewards = async (c: any) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('rewards')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log('Error fetching rewards:', error);
+      return c.json({ error: 'Failed to fetch rewards' }, 500);
+    }
+
+    const rewards = (data || []).map((r: any) => ({
+      id: r.id,
+      title: r.title,
+      howToWin: r.how_to_win,
+      prize: r.prize,
+      endsAt: r.ends_at,
+      winnerName: r.winner_name,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+      createdBy: r.created_by,
+      updatedBy: r.updated_by,
+    }));
+
+    return c.json({ rewards });
+  } catch (error) {
+    console.log('Error fetching rewards:', error);
+    return c.json({ error: 'Failed to fetch rewards' }, 500);
+  }
+};
+
+const createReward = async (c: any) => {
+  try {
+    const user = c.get('user');
+    const userRole = (user.user_metadata?.role || 'cadet').toLowerCase();
+
+    if (userRole !== 'snco' && userRole !== 'staff') {
+      return c.json({ error: 'Unauthorized - only Flight Point Leads and staff can create rewards' }, 403);
+    }
+
+    const { title, howToWin, prize, endsAt } = await c.req.json();
+    if (!title || !howToWin || !prize || !endsAt) {
+      return c.json({ error: 'Title, how to win, prize, and end date are required' }, 400);
+    }
+
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('rewards')
+      .insert({
+        title,
+        how_to_win: howToWin,
+        prize,
+        ends_at: endsAt,
+        winner_name: winnerName || null,
+        created_by: user.user_metadata?.name || user.email,
+        updated_by: user.user_metadata?.name || user.email,
+      })
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      console.log('Error creating reward:', error);
+      return c.json({ error: 'Failed to create reward' }, 500);
+    }
+
+    const reward = {
+      id: data.id,
+      title: data.title,
+      howToWin: data.how_to_win,
+      prize: data.prize,
+      endsAt: data.ends_at,
+      winnerName: data.winner_name,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      createdBy: data.created_by,
+      updatedBy: data.updated_by,
+    };
+
+    return c.json({ reward });
+  } catch (error) {
+    console.log('Error creating reward:', error);
+    return c.json({ error: 'Failed to create reward' }, 500);
+  }
+};
+
+const updateReward = async (c: any) => {
+  try {
+    const user = c.get('user');
+    const userRole = (user.user_metadata?.role || 'cadet').toLowerCase();
+
+    if (userRole !== 'snco' && userRole !== 'staff') {
+      return c.json({ error: 'Unauthorized - only Flight Point Leads and staff can update rewards' }, 403);
+    }
+
+    const id = c.req.param('id');
+    const body = await c.req.json();
+
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('rewards')
+      .update({
+        title: body.title,
+        how_to_win: body.howToWin,
+        prize: body.prize,
+        ends_at: body.endsAt,
+        winner_name: body.winnerName ?? null,
+        updated_at: new Date().toISOString(),
+        updated_by: user.user_metadata?.name || user.email,
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      console.log('Error updating reward:', error);
+      return c.json({ error: 'Failed to update reward' }, 500);
+    }
+
+    const reward = {
+      id: data.id,
+      title: data.title,
+      howToWin: data.how_to_win,
+      prize: data.prize,
+      endsAt: data.ends_at,
+      winnerName: data.winner_name,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      createdBy: data.created_by,
+      updatedBy: data.updated_by,
+    };
+
+    return c.json({ reward });
+  } catch (error) {
+    console.log('Error updating reward:', error);
+    return c.json({ error: 'Failed to update reward' }, 500);
+  }
+};
+
+const deleteReward = async (c: any) => {
+  try {
+    const user = c.get('user');
+    const userRole = (user.user_metadata?.role || 'cadet').toLowerCase();
+
+    if (userRole !== 'snco' && userRole !== 'staff') {
+      return c.json({ error: 'Unauthorized - only Flight Point Leads and staff can delete rewards' }, 403);
+    }
+
+    const id = c.req.param('id');
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('rewards')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.log('Error deleting reward:', error);
+      return c.json({ error: 'Failed to delete reward' }, 500);
+    }
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Error deleting reward:', error);
+    return c.json({ error: 'Failed to delete reward' }, 500);
+  }
+};
+
+// List rewards (any authenticated user)
+app.get("/make-server-73a3871f/rewards", verifyAuth, listRewards);
+app.get("/rewards", verifyAuth, listRewards);
+
+// Create reward (Flight Point Lead/Staff only)
+// Create reward (Flight Point Lead/Staff only)
+app.post("/make-server-73a3871f/rewards", verifyAuth, createReward);
+app.post("/rewards", verifyAuth, createReward);
+
+// Update reward (Flight Point Lead/Staff only)
+// Update reward (Flight Point Lead/Staff only)
+app.put("/make-server-73a3871f/rewards/:id", verifyAuth, updateReward);
+app.put("/rewards/:id", verifyAuth, updateReward);
+
+// Delete reward (Flight Point Lead/Staff only)
+// Delete reward (Flight Point Lead/Staff only)
+app.delete("/make-server-73a3871f/rewards/:id", verifyAuth, deleteReward);
+app.delete("/rewards/:id", verifyAuth, deleteReward);
+
 // Get points for logged-in cadet
 app.get("/make-server-73a3871f/my-points", verifyAuth, async (c) => {
   console.log('=== MY POINTS ENDPOINT HIT ===');
@@ -2453,6 +2641,169 @@ Deno.serve(async (req: Request) => {
         } catch (e) {
           console.error('Notification read error:', e);
           return new Response(JSON.stringify({ error: 'Failed to mark notification as read' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+      }
+    }
+
+    // Handle rewards endpoint directly (bypass Hono)
+    if (pathname.endsWith('/rewards') || pathname.includes('/rewards/')) {
+      // List rewards
+      if (req.method === 'GET' && pathname.endsWith('/rewards')) {
+        try {
+          const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+          if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          const sb = getSupabaseAdmin();
+          const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+          if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const { data, error } = await sb.from('rewards').select('*').order('created_at', { ascending: false });
+          if (error) return new Response(JSON.stringify({ error: 'Failed to fetch rewards' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const rewards = (data || []).map((r: any) => ({
+            id: r.id,
+            title: r.title,
+            howToWin: r.how_to_win,
+            prize: r.prize,
+            endsAt: r.ends_at,
+            winnerName: r.winner_name,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            createdBy: r.created_by,
+            updatedBy: r.updated_by,
+          }));
+
+          return new Response(JSON.stringify({ rewards }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        } catch (e) {
+          console.error('Rewards GET error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to fetch rewards' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+      }
+
+      // Create reward
+      if (req.method === 'POST' && pathname.endsWith('/rewards')) {
+        try {
+          const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+          if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          const sb = getSupabaseAdmin();
+          const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+          if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const role = (user.user_metadata?.role || 'cadet').toLowerCase();
+          if (role !== 'snco' && role !== 'staff') return new Response(JSON.stringify({ error: 'Unauthorized - only Flight Point Leads and staff can create rewards' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const body = await req.json();
+          const { title, howToWin, prize, endsAt, winnerName } = body || {};
+          if (!title || !howToWin || !prize || !endsAt) {
+            return new Response(JSON.stringify({ error: 'Title, how to win, prize, and end date are required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          }
+
+          const { data, error } = await sb
+            .from('rewards')
+            .insert({
+              title,
+              how_to_win: howToWin,
+              prize,
+              ends_at: endsAt,
+              winner_name: winnerName || null,
+              created_by: user.user_metadata?.name || user.email,
+              updated_by: user.user_metadata?.name || user.email,
+            })
+            .select('*')
+            .single();
+
+          if (error || !data) return new Response(JSON.stringify({ error: 'Failed to create reward' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const reward = {
+            id: data.id,
+            title: data.title,
+            howToWin: data.how_to_win,
+            prize: data.prize,
+            endsAt: data.ends_at,
+            winnerName: data.winner_name,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+            createdBy: data.created_by,
+            updatedBy: data.updated_by,
+          };
+
+          return new Response(JSON.stringify({ reward }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        } catch (e) {
+          console.error('Rewards POST error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to create reward' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+      }
+
+      // Update/delete by id
+      const rewardIdMatch = pathname.match(/\/rewards\/([^/]+)$/);
+      if (rewardIdMatch && req.method === 'PUT') {
+        try {
+          const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+          if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          const sb = getSupabaseAdmin();
+          const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+          if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const role = (user.user_metadata?.role || 'cadet').toLowerCase();
+          if (role !== 'snco' && role !== 'staff') return new Response(JSON.stringify({ error: 'Unauthorized - only Flight Point Leads and staff can update rewards' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const id = decodeURIComponent(rewardIdMatch[1]);
+          const body = await req.json();
+          const { data, error } = await sb
+            .from('rewards')
+            .update({
+              title: body.title,
+              how_to_win: body.howToWin,
+              prize: body.prize,
+              ends_at: body.endsAt,
+              winner_name: body.winnerName ?? null,
+              updated_at: new Date().toISOString(),
+              updated_by: user.user_metadata?.name || user.email,
+            })
+            .eq('id', id)
+            .select('*')
+            .single();
+
+          if (error || !data) return new Response(JSON.stringify({ error: 'Failed to update reward' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const reward = {
+            id: data.id,
+            title: data.title,
+            howToWin: data.how_to_win,
+            prize: data.prize,
+            endsAt: data.ends_at,
+            winnerName: data.winner_name,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+            createdBy: data.created_by,
+            updatedBy: data.updated_by,
+          };
+
+          return new Response(JSON.stringify({ reward }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        } catch (e) {
+          console.error('Rewards PUT error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to update reward' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+      }
+
+      if (rewardIdMatch && req.method === 'DELETE') {
+        try {
+          const accessToken = req.headers.get('Authorization')?.split(' ')[1] || null;
+          if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+          const sb = getSupabaseAdmin();
+          const { data: { user }, error: authErr } = await sb.auth.getUser(accessToken);
+          if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const role = (user.user_metadata?.role || 'cadet').toLowerCase();
+          if (role !== 'snco' && role !== 'staff') return new Response(JSON.stringify({ error: 'Unauthorized - only Flight Point Leads and staff can delete rewards' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          const id = decodeURIComponent(rewardIdMatch[1]);
+          const { error } = await sb.from('rewards').delete().eq('id', id);
+          if (error) return new Response(JSON.stringify({ error: 'Failed to delete reward' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+          return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        } catch (e) {
+          console.error('Rewards DELETE error:', e);
+          return new Response(JSON.stringify({ error: 'Failed to delete reward' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         }
       }
     }

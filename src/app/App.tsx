@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import supabase from '../utils/supabase/client';
 import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
@@ -9,10 +9,28 @@ export default function App() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const logoutInProgress = useRef(false);
 
   useEffect(() => {
     // Check for existing session
     checkSession();
+  }, []);
+
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (logoutInProgress.current) {
+        setAccessToken(null);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+      setAccessToken(session?.access_token ?? null);
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      data.subscription.unsubscribe();
+    };
   }, []);
 
   const checkSession = async () => {
@@ -43,16 +61,35 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    if (logoutInProgress.current) return;
+    logoutInProgress.current = true;
+    // Immediately clear UI state so the app responds instantly
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('adminPinVerified');
+    }
+    setAccessToken(null);
+    setUser(null);
+    setLoading(false);
+
+    // Perform sign-out in the background with a short timeout
+    const timeout = new Promise((resolve) => setTimeout(resolve, 1500));
     try {
-      if (accessToken) {
-        // only sign out from supabase if we actually have a session token
-        await supabase.auth.signOut();
-      }
+      await Promise.race([
+        supabase.auth.signOut(),
+        timeout,
+      ]);
     } catch (err) {
       console.error('Error signing out:', err);
+      try {
+        await Promise.race([
+          supabase.auth.signOut({ scope: 'local' }),
+          timeout,
+        ]);
+      } catch (fallbackErr) {
+        console.error('Error signing out locally:', fallbackErr);
+      }
     } finally {
-      setAccessToken(null);
-      setUser(null);
+      logoutInProgress.current = false;
     }
   };
 

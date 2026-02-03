@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from './ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileSpreadsheet, FileText } from 'lucide-react';
+import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileSpreadsheet, FileText, Gift } from 'lucide-react';
 import { PointsManager } from './PointsManager';
 import { Leaderboards } from './Leaderboards';
 import { AdminPointGivers } from './AdminPointGivers';
@@ -22,6 +22,7 @@ import { NotificationCenter } from './NotificationCenter';
 import { Tickets } from './Tickets';
 import { TicketsAdmin } from './TicketsAdmin';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
+import { Rewards } from './Rewards';
 
 interface DashboardProps {
   user: any;
@@ -451,6 +452,15 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               Leaderboards
             </Button>
             <Button
+              variant={activeTab === 'rewards' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setActiveTab('rewards')}
+              className="flex-1"
+            >
+              <Gift className="size-4 mr-2" />
+              Rewards
+            </Button>
+            <Button
               variant={activeTab === 'mypoints' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setActiveTab('mypoints')}
@@ -477,6 +487,10 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v)} className="space-y-6">
           <TabsContent value="leaderboards">
             <Leaderboards accessToken={accessToken} />
+          </TabsContent>
+
+          <TabsContent value="rewards">
+            <Rewards accessToken={accessToken} userRole={userRole} />
           </TabsContent>
 
           {/* Show My Points tab for cadets with cadetName */}

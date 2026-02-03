@@ -1,5 +1,5 @@
 import { projectId } from '../../utils/supabase/info';
-import { readStore, writeStore, uuid, type Cadet, type Point, type Attendance, type AttendanceBulk } from './localStore';
+import { readStore, writeStore, uuid, type Cadet, type Point, type Attendance, type AttendanceBulk, type Reward } from './localStore';
 
 function jsonResponse(obj: any, init: number = 200) {
   return new Response(JSON.stringify(obj), { status: init, headers: { 'Content-Type': 'application/json' } });
@@ -162,6 +162,40 @@ export function enableLocalMode() {
         store.attendanceBulks = store.attendanceBulks.filter(b => b.id !== id);
         writeStore(store);
         return jsonResponse({ success: true });
+      }
+
+      // Rewards
+      if (path === '/make-server-73a3871f/rewards' && method === 'GET') {
+        const rewards = [...(store.rewards || [])].sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime());
+        return jsonResponse({ rewards });
+      }
+      if (path === '/make-server-73a3871f/rewards' && method === 'POST') {
+        const { title, howToWin, prize, endsAt } = body || {};
+        if (!title || !howToWin || !prize || !endsAt) return badRequest('Title, how to win, prize, and end date are required');
+        const reward: Reward = { id: uuid(), title, howToWin, prize, endsAt, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        store.rewards = store.rewards || [];
+        store.rewards.push(reward);
+        writeStore(store);
+        return jsonResponse({ reward });
+      }
+      const rewardMatch = path.match(/^\/make-server-73a3871f\/rewards\/(.+)$/);
+      if (rewardMatch) {
+        const id = rewardMatch[1];
+        const idx = (store.rewards || []).findIndex(r => r.id === id);
+        if (idx === -1) return notFound('Reward not found');
+        if (method === 'DELETE') {
+          store.rewards.splice(idx, 1);
+          writeStore(store);
+          return jsonResponse({ success: true });
+        }
+        if (method === 'PUT') {
+          const { title, howToWin, prize, endsAt } = body || {};
+          const reward = store.rewards[idx];
+          const updated: Reward = { ...reward, title: title ?? reward.title, howToWin: howToWin ?? reward.howToWin, prize: prize ?? reward.prize, endsAt: endsAt ?? reward.endsAt, updatedAt: new Date().toISOString() };
+          store.rewards[idx] = updated;
+          writeStore(store);
+          return jsonResponse({ reward: updated });
+        }
       }
 
       // Leaderboards

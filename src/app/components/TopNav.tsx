@@ -1,9 +1,10 @@
 import React from 'react'
 import DownloadCsvButton from './DownloadCsvButton'
-import { ArrowUpRight, Award, Calendar, Users, FileText, Shield, FileSpreadsheet } from 'lucide-react'
+import { ArrowUpRight, Award, Calendar, Users, FileText, Shield, FileSpreadsheet, Gift } from 'lucide-react'
 
 const items = [
   { key: 'leaderboards', label: 'Leaderboards', icon: ArrowUpRight },
+  { key: 'rewards', label: 'Rewards', icon: Gift },
   { key: 'points', label: 'Points', icon: Award },
   { key: 'attendance', label: 'Attendance', icon: Calendar },
   { key: 'tickets', label: 'Tickets', icon: FileText },
@@ -34,6 +35,8 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
   const visibleItems = items.filter((item) => {
     // Leaderboards is always visible
     if (item.key === 'leaderboards') return true
+    // Rewards is always visible
+    if (item.key === 'rewards') return true
     // Points and Attendance require canGivePoints
     if (item.key === 'points' || item.key === 'attendance') return canGivePoints
     // Tickets and Reports should be placed into the admin group when admin UI is shown
