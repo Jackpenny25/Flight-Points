@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "server": "tsx watch server/server.ts",
-    "dev:all": "concurrently \"npm run dev\" \"npm run server\""
+    "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
+    "start": "concurrently \"npm run preview\" \"npm run server\""
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
