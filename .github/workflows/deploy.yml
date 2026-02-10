@@ -12,7 +12,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run My Application
-        shell: pwsh
+        shell: powershell
         run: |
           # Add your run commands here, for example:
           Stop-Process -Name "MyAppsProcess" -ErrorAction SilentlyContinue
