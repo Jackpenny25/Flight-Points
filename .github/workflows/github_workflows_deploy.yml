@@ -1,0 +1,34 @@
+name: Deploy to IIS
+
+on:
+  push:
+    branches:
+      - main  # Deploy when pushing to main branch
+
+jobs:
+  deploy:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET (if using .NET)
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+    
+    - name: Build
+      run: dotnet build --configuration Release
+    
+    - name: Publish
+      run: dotnet publish -c Release -o ./publish
+    
+    - name: Deploy to IIS using Web Deploy
+      uses: azure/webapps-deploy@v2
+      with:
+        server-name: 'your-server-address'
+        website-name: 'your-iis-site-name'
+        username: ${{ secrets.IIS_USERNAME }}
+        password: ${{ secrets.IIS_PASSWORD }}
+        package: './publish'
