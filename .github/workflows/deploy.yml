@@ -1,0 +1,19 @@
+name: Auto Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run My Application
+        shell: pwsh
+        run: |
+          # Add your run commands here, for example:
+          Stop-Process -Name "MyAppsProcess" -ErrorAction SilentlyContinue
+          .\run-my-app.ps1
