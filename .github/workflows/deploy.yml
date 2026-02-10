@@ -1,19 +1,37 @@
-name: Auto Deploy
+name: Auto Deploy to Windows Server
 
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: self-hosted 
+    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Run My Application
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install & Build
         shell: powershell
         run: |
-          # Add your run commands here, for example:
-          Stop-Process -Name "MyAppsProcess" -ErrorAction SilentlyContinue
-          .\run-my-app.ps1
+          npm ci
+          npm run build
+        env:
+          VITE_BASE: /Flight-Points/
+
+      - name: Restart Application
+        shell: powershell
+        run: |
+          # Use PM2 to keep the app running in the background permanently
+          # 'my-website' is just a name you give the process
+          pm2 delete my-website --exit-codes 0
+          pm2 start npm --name "my-website" -- start
+          pm2 save
