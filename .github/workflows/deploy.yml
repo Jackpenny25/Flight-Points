@@ -30,8 +30,11 @@ jobs:
       - name: Restart Application
         shell: powershell
         run: |
-          # Use PM2 to keep the app running in the background permanently
-          # 'my-website' is just a name you give the process
-          pm2 delete my-website --exit-codes 0
+          # 1. Force delete the old process if it exists (ignores errors if not found)
+          pm2 delete "my-website" --exit-codes 0 2>$null | Out-Null
+
+          # 2. Use the direct path to npm to avoid "Script Not Found" errors on Windows
           pm2 start npm --name "my-website" -- start
+          
+          # 3. Ensure the process list is saved for server reboots
           pm2 save
