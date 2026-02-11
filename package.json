@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "server": "tsx watch server/server.ts",
     "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
-    "start": "concurrently \"npm run preview\" \"npm run server\""
+    "start": "concurrently \"npm run preview\" \"npm run server\"",
+    "deploy": "npm run build"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
