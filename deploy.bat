@@ -15,12 +15,12 @@ if defined HAS_CHANGES (
 )
 call npm install
 call npm run build
-sc query "cadet-website" >nul 2>&1
+sc query "flight-points" >nul 2>&1
 if %errorlevel%==0 (
-	net stop "cadet-website"
-	net start "cadet-website"
+	net stop "flight-points"
+	net start "flight-points"
 ) else (
-	echo Service "cadet-website" not found. Skipping restart.
+	echo Service "flight-points" not found. Skipping restart.
 )
 echo.
 echo Press any key to close...
