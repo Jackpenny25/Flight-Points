@@ -4,9 +4,17 @@ if /i "%~1" neq "fromcmd" (
 	exit /b
 )
 cd /d C:\Users\Admin\Desktop\Flight-Points\Code\Flight-Points
-git pull
-npm install
-npm run build
+set "HAS_CHANGES="
+for /f "delims=" %%A in ('git status --porcelain') do set "HAS_CHANGES=1"
+if defined HAS_CHANGES (
+	call git stash push -u -m "auto-stash before pull"
+)
+call git pull
+if defined HAS_CHANGES (
+	call git stash pop
+)
+call npm install
+call npm run build
 net stop cadet-website
 net start cadet-website
 echo.
