@@ -670,3 +670,5 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     </div>
   );
 }
+
+export default Dashboard;
