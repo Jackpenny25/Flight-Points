@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { FileStorage } from '../../../utils/fileStorage';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { api } from '../../../utils/api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -94,39 +94,26 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
 
   useEffect(() => {
     fetchCadets();
-    
-    // Poll server periodically to keep cadets in sync across browsers
     const id = setInterval(() => {
       fetchCadets();
-    }, 30000); // every 30s
-    
+    }, 30000);
     return () => clearInterval(id);
   }, []);
 
   const fetchCadets = async () => {
-    // Try to fetch server cadets (public read). If that fails, fall back to localStorage.
+    setLoading(true);
     try {
-      try {
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        // Use access token if present, otherwise anon key (required by Supabase functions)
-        if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-        else headers['Authorization'] = `Bearer ${publicAnonKey}`;
-        const path = `/functions/v1/server/cadets`;
-        const res = await fetch(`https://${projectId}.supabase.co${path}`, { headers });
-        if (res.ok) {
-          const body = await res.json().catch(() => null);
-          const serverCadets = (body && body.cadets) ? body.cadets : [];
-          try { localStorage.setItem('cadets', JSON.stringify(serverCadets)); } catch (e) { /* noop */ }
-          setCadets(serverCadets);
-          return;
-        }
-      } catch (e) {
-        console.warn('Server cadets fetch failed, falling back to localStorage', e);
+      const res = await api.getCadets();
+      if (Array.isArray(res)) {
+        setCadets(res);
+        localStorage.setItem('cadets', JSON.stringify(res));
+      } else if (res && Array.isArray(res.cadets)) {
+        setCadets(res.cadets);
+        localStorage.setItem('cadets', JSON.stringify(res.cadets));
+      } else {
+        setCadets([]);
+        toast.error('No cadets found');
       }
-
-      // localStorage fallback
-      const cadetsData = JSON.parse(localStorage.getItem('cadets') || '[]');
-      setCadets(Array.isArray(cadetsData) ? cadetsData : []);
     } catch (error) {
       console.error('Error fetching cadets:', error);
       toast.error('Failed to load cadets');
@@ -184,73 +171,22 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     if (!ensureAdminPin()) return;
     const rows = entries || csvPreviewEntries;
     setCsvImporting(true);
-
-    // If not signed in, allow local-only import; if signed in, attempt server import and fall back to local entries
-
     try {
-      const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
-
       const results = await Promise.all(rows.map(async (entry) => {
         try {
           const flightToUse = (!entry.flight || entry.flight === 'Unassigned') ? csvImportFlight : entry.flight;
-          // If no access token, create local cadet
-          if (!accessToken) {
-            const localCadet: Cadet = {
-              id: `local_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
-              name: entry.name,
-              flight: flightToUse,
-              createdAt: new Date().toISOString(),
-            };
-            return { ok: true, name: entry.name, cadet: localCadet } as any;
-          }
-          const res = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/server/cadets`,
-            {
-              method: 'POST',
-              headers: postHeaders,
-              body: JSON.stringify({ name: entry.name, flight: flightToUse }),
-            }
-          );
-          if (res.ok) {
-            try {
-              const body = await res.json().catch(() => null);
-              if (body && body.cadet) {
-                const created = body.cadet as Cadet;
-                const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
-                const merged = mergeAndDedupe(Array.isArray(existing) ? existing : [], [created]);
-                localStorage.setItem('cadets', JSON.stringify(merged));
-                setCadets(merged);
-                return { ok: true, name: entry.name, cadet: created } as any;
-              }
-              // If server returned ok but no cadet body, fall through to fallback
-            } catch (err) {
-              console.warn('Could not parse created cadet body:', err);
-            }
-            // Fallback local-ish cadet so UI can show it
-            const fallbackCadet: Cadet = {
-              id: `remote_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
-              name: entry.name,
-              flight: flightToUse,
-              createdAt: new Date().toISOString(),
-            };
-            const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
-            const merged = mergeAndDedupe(Array.isArray(existing) ? existing : [], [fallbackCadet]);
-            localStorage.setItem('cadets', JSON.stringify(merged));
-            setCadets(merged);
-            return { ok: true, name: entry.name, cadet: fallbackCadet } as any;
+          const res = await api.createCadet({ name: entry.name, flight: flightToUse });
+          if (res && res.id) {
+            return { ok: true, name: entry.name, cadet: res };
           } else {
-            const errBody = await res.json().catch(() => ({ error: res.statusText }));
-            return { ok: false, name: entry.name, reason: errBody.error || res.statusText } as any;
+            return { ok: false, name: entry.name, reason: res?.error || 'Unknown error' };
           }
         } catch (err: any) {
           return { ok: false, name: entry.name, reason: String(err) };
         }
       }));
-
       const failures = results.filter(r => !r.ok);
       const successesWithCadets = results.filter((r: any) => r.ok && r.cadet).map((r: any) => r.cadet as Cadet);
-
       if (successesWithCadets.length > 0) {
         try {
           const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
@@ -266,7 +202,6 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
       } else {
         toast.success(`Imported ${successesWithCadets.length} cadets (persisted locally)`);
       }
-
       fetchCadets();
     } catch (err) {
       console.error('CSV import failed', err);
@@ -311,51 +246,18 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     if (!ensureAdminPin()) return;
     if (!editingCadet) return;
     setEditSubmitting(true);
-
     try {
-      // If unauthenticated, update localStorage directly
-      if (!accessToken) {
-        try {
-          const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
-          const updated = (Array.isArray(existing) ? existing : []).map((c: Cadet) => c.id === editingCadet.id ? { ...c, name: editName, flight: editFlight, updatedAt: new Date().toISOString() } : c);
-          localStorage.setItem('cadets', JSON.stringify(updated));
-          setCadets(updated);
-          toast.success('Cadet updated locally');
-          setEditOpen(false);
-          setEditingCadet(null);
-        } catch (err) {
-          console.error('Local edit failed', err);
-          toast.error('Failed to update cadet locally');
-        }
-        setEditSubmitting(false);
-        return;
-      }
-
-      const putHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) putHeaders['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/server/cadets/${editingCadet.id}`, { method: 'PUT', headers: putHeaders, body: JSON.stringify({ name: editName, flight: editFlight }) });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: 'unknown' }));
-        toast.error(`Failed to update cadet: ${err.error || response.statusText}`);
+      const res = await api.updateCadet(editingCadet.id, { name: editName, flight: editFlight });
+      if (res && res.id) {
+        const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
+        const updated = (Array.isArray(existing) ? existing : []).map((c: Cadet) => c.id === res.id ? res : c);
+        localStorage.setItem('cadets', JSON.stringify(updated));
+        setCadets(updated);
+        toast.success('Cadet updated');
+        setEditOpen(false);
+        setEditingCadet(null);
       } else {
-        try {
-          const body = await response.json().catch(() => null);
-          if (body && body.cadet) {
-            const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
-            const updated = (Array.isArray(existing) ? existing : []).map((c: Cadet) => c.id === body.cadet.id ? body.cadet : c);
-            localStorage.setItem('cadets', JSON.stringify(updated));
-            setCadets(updated);
-          } else {
-            fetchCadets();
-          }
-          toast.success('Cadet updated');
-          setEditOpen(false);
-          setEditingCadet(null);
-        } catch (err) {
-          console.error('Failed processing update response', err);
-        }
+        toast.error(res?.error || 'Failed to update cadet');
       }
     } catch (err) {
       console.error('Edit cadet failed', err);
@@ -463,57 +365,19 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   const handleAddCadet = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-
     try {
-      // If not signed in, create a local cadet immediately
-      if (!accessToken) {
-        const localCadet: Cadet = { id: `local_${Date.now()}_${Math.random().toString(36).slice(2,9)}`, name, flight, createdAt: new Date().toISOString() };
-        try {
-          const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
-          const merged = Array.isArray(existing) ? existing.concat(localCadet) : [localCadet];
-          localStorage.setItem('cadets', JSON.stringify(merged));
-          setCadets(merged);
-        } catch (err) {
-          console.error('Failed saving local cadet', err);
-        }
-        toast.success('Cadet added locally');
-        setName('');
-        setFlight('');
-        setOpen(false);
-        return;
-      }
-
-      const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/server/cadets`, {
-        method: 'POST', headers: postHeaders, body: JSON.stringify({ name, flight })
-      });
-
-      if (response.ok) {
-        try {
-          const body = await response.json().catch(() => null);
-          if (body && body.cadet) {
-            const created = body.cadet as Cadet;
-            const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
-            const merged = Array.isArray(existing) ? existing.concat(created) : [created];
-            localStorage.setItem('cadets', JSON.stringify(merged));
-            setCadets(merged);
-          } else {
-            fetchCadets();
-          }
-        } catch (err) {
-          console.warn('Could not parse created cadet body:', err);
-          fetchCadets();
-        }
-
+      const res = await api.createCadet({ name, flight });
+      if (res && res.id) {
+        const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
+        const merged = Array.isArray(existing) ? existing.concat(res) : [res];
+        localStorage.setItem('cadets', JSON.stringify(merged));
+        setCadets(merged);
         toast.success('Cadet added successfully!');
         setName('');
         setFlight('');
         setOpen(false);
       } else {
-        const error = await response.json();
-        toast.error(error.error || 'Failed to add cadet');
+        toast.error(res?.error || 'Failed to add cadet');
       }
     } catch (error) {
       console.error('Error adding cadet:', error);
@@ -528,37 +392,17 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     if (!confirm(`Are you sure you want to remove ${cadetName} from the system?`)) {
       return;
     }
-
     try {
-      // Delete from server first
-      const delHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) delHeaders['Authorization'] = `Bearer ${accessToken}`;
-      else delHeaders['Authorization'] = `Bearer ${publicAnonKey}`;
-      
-      const deleteRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/cadets/${cadetId}`,
-        { method: 'DELETE', headers: delHeaders }
-      );
-
-      console.log('Delete response:', deleteRes.status, deleteRes.ok);
-      
-      if (!deleteRes.ok) {
-        const errBody = await deleteRes.text();
-        console.error('Server delete failed:', deleteRes.status, errBody);
-        toast.warning('Could not sync deletion to server, deleting locally only');
+      const res = await api.deleteCadet(cadetId);
+      if (res && (res.success || res.id || res.deleted)) {
+        const existingCadets = JSON.parse(localStorage.getItem('cadets') || '[]');
+        const updatedCadets = existingCadets.filter((cadet: Cadet) => cadet.id !== cadetId);
+        localStorage.setItem('cadets', JSON.stringify(updatedCadets));
+        setCadets(updatedCadets);
+        toast.success('Cadet removed successfully');
       } else {
-        const delBody = await deleteRes.json();
-        console.log('Delete success:', delBody);
+        toast.error(res?.error || 'Failed to remove cadet');
       }
-
-      // Delete from local storage
-      const existingCadets = JSON.parse(localStorage.getItem('cadets') || '[]');
-      const updatedCadets = existingCadets.filter((cadet: Cadet) => cadet.id !== cadetId);
-      localStorage.setItem('cadets', JSON.stringify(updatedCadets));
-      
-      // Update state
-      setCadets(updatedCadets);
-      toast.success('Cadet removed successfully');
     } catch (error) {
       console.error('Error deleting cadet:', error);
       toast.error(`Failed to remove cadet: ${error instanceof Error ? error.message : String(error)}`);
