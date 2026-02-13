@@ -7,6 +7,8 @@ import multer from 'multer';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { query } from './db';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config();
@@ -35,6 +37,59 @@ const upload = multer({ storage });
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(UPLOADS_DIR));
+
+// JWT secret
+const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
+
+// Middleware to require authentication
+function requireAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
+  const token = authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Missing token' });
+  try {
+    const user = jwt.verify(token, JWT_SECRET);
+    req.user = user;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+// POST /api/auth/login
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password required' });
+  }
+  try {
+    const result = await query('SELECT id, email, name, role, password_hash FROM app_users WHERE email = $1', [email]);
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    const user = result.rows[0];
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    // Create JWT
+    const token = jwt.sign({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role
+    }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({ token });
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/auth/me
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  // req.user is set by requireAuth
+  res.json({ user: req.user });
+});
 type DataType = 'cadets' | 'points' | 'attendance' | 'attendanceBulks' | 'rewards';
 
 const typeConfig: Record<DataType, { table: string; columns: Record<string, string>; orderBy?: string; hasUpdatedAt?: boolean }> = {
