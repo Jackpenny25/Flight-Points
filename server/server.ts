@@ -7,6 +7,24 @@ import multer from 'multer';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { query } from './db';
+
+// --- Types ---
+import type { Request, Response, NextFunction } from 'express';
+interface UserJwtPayload {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  iat?: number;
+  exp?: number;
+}
+interface AuthRequest extends Request {
+  user?: UserJwtPayload;
+}
+interface LoginRequestBody {
+  email: string;
+  password: string;
+}
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 const __filename = fileURLToPath(import.meta.url);
@@ -34,21 +52,26 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 // JWT secret
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 
+
 // Middleware to require authentication
-function requireAuth(req, res, next) {
+function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers['authorization'];
   if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
   const token = authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Missing token' });
   try {
-    const user = jwt.verify(token, JWT_SECRET);
+    const user = jwt.verify(token, JWT_SECRET) as UserJwtPayload;
     req.user = user;
     next();
   } catch (err) {
@@ -56,9 +79,19 @@ function requireAuth(req, res, next) {
   }
 }
 
+// Middleware to require specific roles
+function requireRole(allowedRoles: string[]) {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  };
+}
+
 // POST /api/auth/login
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
+app.post('/api/auth/login', async (req: Request, res: Response) => {
+  const { email, password } = req.body as LoginRequestBody;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password required' });
   }
@@ -85,9 +118,14 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// POST /api/auth/logout
+app.post('/api/auth/logout', (req: Request, res: Response) => {
+  // JWT is client-side, so just return success
+  res.json({ success: true });
+});
+
 // GET /api/auth/me
-app.get('/api/auth/me', requireAuth, async (req, res) => {
-  // req.user is set by requireAuth
+app.get('/api/auth/me', requireAuth, async (req: AuthRequest, res: Response) => {
   res.json({ user: req.user });
 });
 type DataType = 'cadets' | 'points' | 'attendance' | 'attendanceBulks' | 'rewards';
@@ -245,7 +283,7 @@ app.get('/api/data/:type/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch item' });
   }
 });
-app.post('/api/data/:type', async (req, res) => {
+app.post('/api/data/:type', requireAuth, requireRole(['snco', 'staff', 'admin']), async (req, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
@@ -273,7 +311,7 @@ app.post('/api/data/:type', async (req, res) => {
     res.status(500).json({ error: 'Failed to create data' });
   }
 });
-app.put('/api/data/:type/:id', async (req, res) => {
+app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'staff', 'admin']), async (req, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
@@ -311,7 +349,7 @@ app.put('/api/data/:type/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to update data' });
   }
 });
-app.delete('/api/data/:type/:id', async (req, res) => {
+app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'staff', 'admin']), async (req, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
