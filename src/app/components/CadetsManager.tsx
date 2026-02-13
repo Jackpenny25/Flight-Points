@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { FileStorage } from '../../../utils/fileStorage';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { api } from '../../../utils/api';
+import { api } from '../../utils/api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
