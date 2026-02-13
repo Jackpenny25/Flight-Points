@@ -15,7 +15,7 @@ for /f "delims=" %%A in ('git status --porcelain') do set "HAS_CHANGES=1"
 if defined HAS_CHANGES (
 	call git stash push -u -m "auto-stash before pull"
 )
-call git pull
+call git pull --no-rebase
 if defined HAS_CHANGES (
 	call git stash pop
 )
