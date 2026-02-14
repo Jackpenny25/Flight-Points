@@ -1,11 +1,247 @@
 import { useEffect, useState } from 'react';
+import { api } from '../../../utils/api';
+import { getCurrentUser } from '../../../utils/auth';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { toast } from 'sonner';
+
+interface PendingSignup {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  flight?: string | null;
+}
+
+interface User {
+  id: string;
+  email: string;
+  user_metadata: any;
+  created_at: string;
+}
+
+interface JoinCodeInfo {
+  joinCode: string | null;
+  expiresAt: string | null;
+  durationSeconds: number | null;
+}
+
+export default function AdminSignups() {
+  const [pending, setPending] = useState<PendingSignup[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [joinCodeInfo, setJoinCodeInfo] = useState<JoinCodeInfo | null>(null);
+  const [roleSelections, setRoleSelections] = useState<Record<string, string>>({});
+
+  const fetchData = async () => {
+    setLoading(true);
+    setFetchError(null);
+    try {
+      // 1. Fetch pending signups
+      const pendingRes = await api.getPendingSignups();
+      if (pendingRes.error) throw new Error(pendingRes.error);
+      setPending(pendingRes.signups || []);
+
+      // 2. Fetch join code info
+      const joinCodeRes = await api.getJoinCode?.();
+      if (joinCodeRes) setJoinCodeInfo(joinCodeRes);
+
+      // 3. Fetch all users for admin management
+      const usersRes = await api.getUsers();
+      if (usersRes.error) throw new Error(usersRes.error);
+      setUsers((usersRes.users || []).map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        user_metadata: u.user_metadata || {},
+        created_at: u.created_at
+      })));
+    } catch (e: any) {
+      setFetchError(String(e));
+      setPending([]);
+      setJoinCodeInfo(null);
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveUser = async (userId: string) => {
+    try {
+      const res = await api.approveUser(userId);
+      if (res?.error) throw new Error(res.error);
+      toast.success('User approved');
+      fetchData();
+    } catch (e: any) {
+      toast.error('Failed to approve user: ' + String(e));
+    }
+  };
+
+  const handleChangeRole = async (userId: string, newRole: string) => {
+    try {
+      const res = await api.updateUserRole(userId, newRole);
+      if (res?.error) throw new Error(res.error);
+      toast.success('Role updated');
+      fetchData();
+    } catch (e: any) {
+      toast.error('Failed to update role: ' + String(e));
+    }
+  };
+
+  const handleUpdateJoinCode = async (durationHours: number) => {
+    try {
+      const res = await api.createJoinCode?.({ durationSeconds: Math.round(durationHours * 3600) });
+      if (res?.error) throw new Error(res.error);
+      setJoinCodeInfo(res);
+      toast.success('Join code updated');
+    } catch (e: any) {
+      toast.error('Failed to update join code: ' + String(e));
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Join Code</CardTitle>
+          <CardDescription>Generate a temporary code cadets must enter to request accounts</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4 items-end">
+            <Input type="number" min="0.5" step="0.5" placeholder="1" id="joincode-duration" />
+            <Button onClick={() => {
+              const input = document.getElementById('joincode-duration') as HTMLInputElement;
+              const duration = Number(input.value) || 1;
+              handleUpdateJoinCode(duration);
+            }}>Create / Rotate Code</Button>
+          </div>
+          <div className="mt-4 rounded-md border p-4 bg-muted/30">
+            {joinCodeInfo?.joinCode ? (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <div className="text-sm text-muted-foreground">Current Join Code</div>
+                  <div className="text-2xl font-bold tracking-widest">{joinCodeInfo.joinCode}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Expires</div>
+                  <div className="font-medium">{joinCodeInfo.expiresAt ? new Date(joinCodeInfo.expiresAt).toLocaleString() : 'N/A'}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">No active join code. Create one above.</div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Pending Signups</CardTitle>
+          <CardDescription>Requests awaiting approval</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div>Loading…</div>
+          ) : fetchError ? (
+            <div className="text-red-600">{fetchError}</div>
+          ) : pending.length === 0 ? (
+            <div>No pending requests</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Flight</TableHead>
+                  <TableHead>Requested</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pending.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>{r.name}</TableCell>
+                    <TableCell>{r.email}</TableCell>
+                    <TableCell>{r.flight || '—'}</TableCell>
+                    <TableCell>{new Date(r.createdAt).toLocaleString()}</TableCell>
+                    <TableCell>
+                      <Button size="sm" onClick={() => handleApproveUser(r.id)}>Approve</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Existing Accounts</CardTitle>
+          <CardDescription>Manage user roles</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div>Loading…</div>
+          ) : fetchError ? (
+            <div className="text-red-600">{fetchError}</div>
+          ) : users.length === 0 ? (
+            <div>No managed accounts found</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.map((u) => (
+                  <TableRow key={u.id}>
+                    <TableCell>{u.email}</TableCell>
+                    <TableCell>{u.user_metadata?.name || '—'}</TableCell>
+                    <TableCell>
+                      <Select value={u.user_metadata?.role || 'cadet'} onValueChange={(v) => setRoleSelections(prev => ({ ...prev, [u.id]: v }))}>
+                        <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cadet">Cadet</SelectItem>
+                          <SelectItem value="pointgiver">Point Giver</SelectItem>
+                          <SelectItem value="snco">Flight Point Lead</SelectItem>
+                          <SelectItem value="staff">Staff</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Button size="sm" onClick={() => handleChangeRole(u.id, roleSelections[u.id] || u.user_metadata?.role || 'cadet')}>Save</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { formatFlight } from './ui/utils';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { api } from '../../../utils/api';
+import { getCurrentUser } from '../../../utils/auth';
 
 interface AdminSignupsProps {
   accessToken: string;
@@ -25,60 +261,33 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
   const [joinCodeInfo, setJoinCodeInfo] = useState<{joinCode:string|null;expiresAt:string|null;durationSeconds:number|null} | null>(null);
   const [duration, setDuration] = useState<number>(1); // in hours
 
-  const makeHeaders = () => {
-    const h: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (accessToken) h['Authorization'] = `Bearer ${accessToken}`;
-    return h;
-  };
-
   const fetchData = async () => {
+    setLoading(true);
+    setFetchError(null);
     try {
-      setFetchError(null);
-      const reqRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/auth/requests`,
-        { headers: makeHeaders() }
-      );
-      if (!reqRes.ok) {
-        const errJson = await reqRes.json().catch(() => ({}));
-        const msg = errJson?.error || reqRes.statusText || `Status ${reqRes.status}`;
-        setFetchError(String(msg));
-        setPending([]);
-        setLoading(false);
-        return;
-      }
-      const reqData = await reqRes.json();
-      setPending((reqData.requests || []).sort((a:any,b:any)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()));
+      // 1. Fetch pending signups
+      const pendingRes = await api.getPendingSignups();
+      if (pendingRes.error) throw new Error(pendingRes.error);
+      setPending(pendingRes.signups || []);
 
-      const cadRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/data/cadets`,
-        { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
-      );
-      const cadData = await cadRes.json();
-      setCadets((cadData.cadets || []).map((c:any)=>({ id: c.id, name: c.name, flight: c.flight })));
+      // 2. Fetch join code info
+      const joinCodeRes = await api.getJoinCode?.();
+      if (joinCodeRes) setJoinCodeInfo(joinCodeRes);
 
-      const jcRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/admin/join-code`,
-        { headers: makeHeaders() }
-      );
-      const jcData = await jcRes.json();
-      if (jcRes.ok) setJoinCodeInfo(jcData);
-
-      // Fetch existing Supabase users for admin management
-      try {
-        const usersRes = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/server/auth/users`,
-          { headers: makeHeaders() }
-        );
-        const usersData = await usersRes.json().catch(()=>({}));
-        if (usersRes.ok) setUsers((usersData.users || []).map((u:any)=>({ id: u.id, email: u.email, user_metadata: u.user_metadata || {}, created_at: u.created_at })));
-      } catch (e) {
-        setUsers([]);
-      }
-    } catch (e) {
+      // 3. Fetch all users for admin management
+      const usersRes = await api.getUsers();
+      if (usersRes.error) throw new Error(usersRes.error);
+      setUsers((usersRes.users || []).map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        user_metadata: u.user_metadata || {},
+        created_at: u.created_at
+      })));
+    } catch (e: any) {
+      setFetchError(String(e));
       setPending([]);
       setJoinCodeInfo(null);
-      setCadets([]);
-      setFetchError(String(e));
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -102,15 +311,13 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
           onClick={async () => {
             if (!confirm('Run data retention cleanup now? This will permanently delete records older than 4 years.')) return;
             try {
-              const url = `https://${projectId}.supabase.co/functions/v1/server/retention/cleanup`;
-              const res = await fetch(url, { method: 'POST', headers: makeHeaders() });
-              const data = await res.json();
-              if (!res.ok) {
-                alert('Cleanup failed: ' + (data.error || res.statusText));
+              // Replace with local API call if available
+              const res = await api.cleanupRetention?.();
+              if (!res?.ok) {
+                alert('Cleanup failed: ' + (res?.error || res?.statusText));
                 return;
               }
-              alert('Cleanup completed. Deleted: ' + JSON.stringify(data.deleted));
-              // refresh list after cleanup
+              alert('Cleanup completed. Deleted: ' + JSON.stringify(res?.deleted));
               fetchData();
             } catch (e) {
               console.error('Cleanup request failed', e);
@@ -142,11 +349,8 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
             </div>
             <div className="flex justify-start sm:justify-end">
               <Button onClick={async ()=>{
-                const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/join-code`,{
-                  method:'POST', headers: makeHeaders(), body: JSON.stringify({ durationSeconds: Math.round(duration * 3600) })
-                });
-                const data = await res.json();
-                if (res.ok) setJoinCodeInfo(data);
+                const res = await api.createJoinCode?.({ durationSeconds: Math.round(duration * 3600) });
+                if (res?.ok) setJoinCodeInfo(res);
               }}>Create / Rotate Code</Button>
             </div>
           </div>
@@ -218,13 +422,11 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                             <Button size="sm" onClick={async ()=>{
                               if (!confirm(`Change role for ${u.email} to ${u.user_metadata?.role || 'cadet'}?`)) return;
                               try {
-                                const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/users/${u.id}`, { method: 'PUT', headers: makeHeaders(), body: JSON.stringify({ role: u.user_metadata?.role || 'cadet' }) });
-                                const data = await res.json().catch(()=>({}));
-                                if (!res.ok) {
-                                  alert('Update failed: ' + (data.error || res.statusText));
+                                const res = await api.updateUserRole(u.id, u.user_metadata?.role || 'cadet');
+                                if (res?.error) {
+                                  alert('Update failed: ' + (res.error));
                                   return;
                                 }
-                                // refresh lists
                                 fetchData();
                                 alert('User updated');
                               } catch (e:any) {
@@ -342,13 +544,9 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                                   <Button size="sm" onClick={async ()=>{
                                     const password = window.prompt('Set a password for the existing account (leave blank to keep current):') || null;
                                     try {
-                                      const body: any = { userId: a.id, role: roleSelections[r.id] || 'cadet' };
-                                      if (cadetSelections[r.id]) body.cadetId = cadetSelections[r.id];
-                                      if (password) body.password = password;
-                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/requests/${r.id}/link`, { method: 'POST', headers: makeHeaders(), body: JSON.stringify(body) });
-                                      const data = await res.json().catch(()=>({}));
-                                      if (!res.ok) {
-                                        alert('Link failed: ' + (data.error || res.statusText));
+                                      const res = await api.linkExistingAccount?.({ userId: a.id, role: roleSelections[r.id] || 'cadet', cadetId: cadetSelections[r.id], password });
+                                      if (res?.error) {
+                                        alert('Link failed: ' + (res.error));
                                         return;
                                       }
                                       fetchData();
@@ -361,11 +559,9 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                                     const pass = window.prompt('Set a new password for this account (leave blank to cancel):');
                                     if (!pass) return;
                                     try {
-                                      const body = { userId: a.id, password: pass };
-                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/requests/${r.id}/link`, { method: 'POST', headers: makeHeaders(), body: JSON.stringify(body) });
-                                      const data = await res.json().catch(()=>({}));
-                                      if (!res.ok) {
-                                        alert('Set password failed: ' + (data.error || res.statusText));
+                                      const res = await api.setUserPassword?.({ userId: a.id, password: pass });
+                                      if (res?.error) {
+                                        alert('Set password failed: ' + (res.error));
                                         return;
                                       }
                                       fetchData();
@@ -400,27 +596,17 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                               alert('Please select a cadet to map this account to.');
                               return;
                             }
-                            const requestBody: any = { 
-                              role: roleSelections[r.id] || 'cadet', 
-                              cadetId 
-                            };
-
-                            // Include name suggestion if provided
-                            if (nameSuggestions[r.id]?.trim()) {
-                              requestBody.suggestedName = nameSuggestions[r.id].trim();
-                              requestBody.forceNameChange = forceNameChange[r.id] || false;
-                            }
-
                             try {
-                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/requests/${r.id}/approve`,{
-                                method:'POST', headers: makeHeaders(), body: JSON.stringify(requestBody)
+                              const res = await api.approveUser(r.id, {
+                                role: roleSelections[r.id] || 'cadet',
+                                cadetId,
+                                suggestedName: nameSuggestions[r.id]?.trim(),
+                                forceNameChange: forceNameChange[r.id] || false
                               });
-                              const data = await res.json().catch(()=>({}));
-                              if (!res.ok) {
-                                alert('Approve failed: ' + (data.error || res.statusText));
+                              if (res?.error) {
+                                alert('Approve failed: ' + (res.error));
                                 return;
                               }
-                              // success
                               fetchData();
                             } catch (e:any) {
                               console.error('Approve request failed', e);
@@ -429,12 +615,9 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                           }}>Approve</Button>
                           <Button size="sm" variant="outline" onClick={async ()=>{
                             try {
-                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/requests/${r.id}`,{
-                                method:'DELETE', headers: makeHeaders()
-                              });
-                              const data = await res.json().catch(()=>({}));
-                              if (!res.ok) {
-                                alert('Reject failed: ' + (data.error || res.statusText));
+                              const res = await api.rejectUser?.(r.id);
+                              if (res?.error) {
+                                alert('Reject failed: ' + (res.error));
                                 return;
                               }
                               fetchData();

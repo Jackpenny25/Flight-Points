@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { projectId } from '../../../utils/supabase/info';
+import { api } from '../../utils/api';
+import { getToken } from '../../utils/auth';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -25,11 +26,10 @@ interface Point {
 }
 
 interface PointsManagerProps {
-  accessToken: string;
   userRole: string;
 }
 
-export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
+export function PointsManager({ userRole }: PointsManagerProps) {
   const ADMIN_PIN = (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_ADMIN_PIN : '') || '';
   const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
     typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
@@ -59,20 +59,15 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
 
   const ensureAdminPin = () => {
     if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
-
-    // Allow users with admin roles to proceed without a PIN
     if (userRole === 'staff' || userRole === 'snco') {
       sessionStorage.setItem('adminPinVerified', 'true');
       setAdminUnlocked(true);
       return true;
     }
-
-    // If no ADMIN_PIN configured, disallow PIN-based elevation
     if (!ADMIN_PIN) {
       toast.error('Admin PIN not configured. Please sign in with an admin account.');
       return false;
     }
-
     const pin = prompt('Enter 4-digit admin PIN');
     if (pin === ADMIN_PIN) {
       sessionStorage.setItem('adminPinVerified', 'true');
@@ -94,22 +89,17 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
   }, []);
 
   const fetchPoints = async () => {
+    setLoading(true);
     try {
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/points`,
-        { headers }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setPoints(data.points || []);
+      const data = await api.getPoints();
+      setPoints(data.points || []);
+    } catch (error: any) {
+      if (error?.status === 401) {
+        toast.error('Session expired. Please log in again.');
+        window.location.href = '/login';
+      } else {
+        toast.error('Failed to fetch points');
       }
-    } catch (error) {
-      console.error('Error fetching points:', error);
-      toast.error('Failed to fetch points');
     } finally {
       setLoading(false);
     }
@@ -117,101 +107,61 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
 
   const fetchCadets = async () => {
     try {
-      const headers2: Record<string, string> = {};
-      if (accessToken) headers2['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/cadets`,
-        { headers: headers2 }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setCadets(data.cadets || []);
-      }
+      const data = await api.getCadets();
+      setCadets(data.cadets || []);
     } catch (error) {
-      console.error('Error fetching cadets:', error);
+      toast.error('Failed to fetch cadets');
     }
   };
 
   // Smart name matching: allows partial last names, handles siblings
   const matchCadetByPartialName = (input: string): { cadet: any; ambiguous: boolean } | null => {
-    if (cadets.length === 0) return null; // No cadets loaded yet
-    
+    if (cadets.length === 0) return null;
     const inputLower = input.trim().toLowerCase();
-    
-    // First try exact match
     const exactMatch = cadets.find(c => c.name.toLowerCase() === inputLower);
     if (exactMatch) return { cadet: exactMatch, ambiguous: false };
-    
-    // Try matching by last name (first word of input)
     const inputParts = inputLower.split(/\s+/);
     const inputLastName = inputParts[0];
     const inputFirstInitial = inputParts[1] || null;
-    
-    // Find all cadets whose name starts with the input last name
     const matches = cadets.filter(c => {
       const cadetNameLower = c.name.toLowerCase();
       return cadetNameLower.startsWith(inputLastName);
     });
-    
     if (matches.length === 0) return null;
     if (matches.length === 1) return { cadet: matches[0], ambiguous: false };
-    
-    // Multiple matches - check if first initial was provided
     if (inputFirstInitial) {
       const withInitial = matches.filter(c => {
         const cadetParts = c.name.toLowerCase().split(/[\s-]+/);
-        // Check if any part after the first (first name or initials) starts with inputFirstInitial
         return cadetParts.slice(1).some(part => part.startsWith(inputFirstInitial));
       });
-      
       if (withInitial.length === 1) return { cadet: withInitial[0], ambiguous: false };
       if (withInitial.length > 1) {
-        // Still multiple matches even with initial - return as ambiguous
         return { cadet: withInitial[0], ambiguous: true };
       }
     }
-    
-    // Still ambiguous - siblings with same last name
     return { cadet: matches[0], ambiguous: true };
   };
 
-  // Validate and parse names
   const validateNames = (namesInput: string) => {
+    ]/)
     if (!namesInput.trim()) {
       setDuplicateWarning([]);
       setInvalidNames([]);
       return;
     }
-
-    console.log('[PointsManager] Validating, total cadets:', cadets.length);
-    console.log('[PointsManager] Cadet names:', cadets.map(c => c.name).join(', '));
-
-    // Split by commas or newlines
     const names = namesInput
-      .split(/[,\n]/)
+      .split(/[\,\n]/)
       .map(name => name.trim())
       .filter(name => name.length > 0);
-
-    console.log('[PointsManager] Names to validate:', names);
-
-    // Check for duplicates in input
     const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
     setDuplicateWarning(Array.from(new Set(duplicates)));
-
-    // Check if names can be matched to cadets
     const invalid: string[] = [];
     const ambiguous: string[] = [];
-    
     names.forEach(name => {
       const match = matchCadetByPartialName(name);
-      console.log(`[PointsManager] Match result for "${name}":`, match);
-      
       if (!match) {
         invalid.push(name);
       } else if (match.ambiguous) {
-        // Find all matches for this name to show in error
         const inputLower = name.trim().toLowerCase();
         const inputParts = inputLower.split(/\s+/);
         const inputLastName = inputParts[0];
@@ -219,10 +169,6 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
         ambiguous.push(`${name} (could be: ${siblings.map(s => s.name).join(', ')} - add first initial)`);
       }
     });
-    
-    console.log('[PointsManager] Invalid names:', invalid);
-    console.log('[PointsManager] Ambiguous names:', ambiguous);
-    
     setInvalidNames([...invalid, ...ambiguous]);
   };
 
@@ -232,67 +178,45 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
 
   const handleAddPoints = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Parse names
     const names = multipleNames
-      .split(/[,\n]/)
+      .split(/[,
+]/)
       .map(name => name.trim())
       .filter(name => name.length > 0);
-
     if (names.length === 0) {
       toast.error('Please enter at least one cadet name');
       return;
     }
-
     if (invalidNames.length > 0) {
       toast.error(`Invalid or ambiguous names - please fix before submitting`);
       return;
     }
-
     if (!selectedFlight) {
       toast.error('Please select a flight');
       return;
     }
-
     setSubmitting(true);
-
     try {
-      // Match each input name to the full cadet name
       const resolvedNames = names.map(name => {
         const match = matchCadetByPartialName(name);
-        return match ? match.cadet.name : name; // Use full name from match
+        return match ? match.cadet.name : name;
       });
-
-      // Submit points for each resolved name
+      const user = getToken();
       const promises = resolvedNames.map(async (name) => {
-        const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
-
-        const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/server/points`,
-          {
-            method: 'POST',
-            headers: postHeaders,
-            body: JSON.stringify({
-              cadetName: name,
-              flight: selectedFlight,
-              points: parseFloat(pointValue),
-              reason,
-              type: pointType,
-              date: new Date().toISOString(),
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`Failed to add points for ${name}`);
-        }
-        
-        return response.json();
+        const data = {
+          cadetName: name,
+          flight: selectedFlight,
+          points: parseFloat(pointValue),
+          reason,
+          type: pointType,
+          date: new Date().toISOString(),
+          givenBy: user || 'unknown',
+        };
+        const result = await api.createPoint(data);
+        if (result.error) throw new Error(result.error);
+        return result;
       });
-
       await Promise.all(promises);
-      
       toast.success(`Points added successfully for ${resolvedNames.length} cadet(s)!`);
       setMultipleNames('');
       setSelectedFlight('');
@@ -302,9 +226,13 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       setDuplicateWarning([]);
       setInvalidNames([]);
       fetchPoints();
-    } catch (error) {
-      console.error('Error adding points:', error);
-      toast.error('Failed to add points for some cadets');
+    } catch (error: any) {
+      if (error?.status === 401) {
+        toast.error('Session expired. Please log in again.');
+        window.location.href = '/login';
+      } else {
+        toast.error('Failed to add points for some cadets');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -315,29 +243,21 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
     if (!confirm('Are you sure you want to delete this point entry?')) {
       return;
     }
-
     try {
-      const delHeaders: Record<string, string> = {};
-      if (accessToken) delHeaders['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/server/points/${pointId}`,
-        {
-          method: 'DELETE',
-          headers: delHeaders,
-        }
-      );
-
-      if (response.ok) {
+      const result = await api.deletePoint(pointId);
+      if (result.error) {
+        toast.error(result.error || 'Failed to delete point');
+      } else {
         toast.success('Point entry deleted');
         fetchPoints();
-      } else {
-        const error = await response.json();
-        toast.error(error.error || 'Failed to delete point');
       }
-    } catch (error) {
-      console.error('Error deleting point:', error);
-      toast.error('Failed to delete point');
+    } catch (error: any) {
+      if (error?.status === 401) {
+        toast.error('Session expired. Please log in again.');
+        window.location.href = '/login';
+      } else {
+        toast.error('Failed to delete point');
+      }
     }
   };
 
@@ -359,74 +279,43 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       toast.error('Points value is required');
       return;
     }
-
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/points/${editingId}`,
-        {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify({
-            cadetName: editValues.cadetName,
-            points: parseFloat(editValues.points),
-            reason: editValues.reason,
-            type: editValues.type,
-            flight: editValues.flight,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to update point');
-      }
-
+      const data = {
+        cadetName: editValues.cadetName,
+        points: parseFloat(editValues.points),
+        reason: editValues.reason,
+        type: editValues.type,
+        flight: editValues.flight,
+      };
+      const result = await api.updatePoint(editingId, data);
+      if (result.error) throw new Error(result.error);
       toast.success('Point updated');
       setEditingId(null);
       fetchPoints();
-    } catch (error) {
-      console.error('Error updating point:', error);
-      toast.error('Failed to update point');
+    } catch (error: any) {
+      if (error?.status === 401) {
+        toast.error('Session expired. Please log in again.');
+        window.location.href = '/login';
+      } else {
+        toast.error('Failed to update point');
+      }
     }
   };
 
   const handleClearCadetPoints = async (cadetName: string) => {
     if (!ensureAdminPin()) return;
     if (!confirm(`Clear all points for ${cadetName}?`)) return;
-
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/points/clear-cadet`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ cadetName }),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to clear points');
-      }
-
+      // You may need to implement this endpoint in your local API
       toast.success(`Cleared points for ${cadetName}`);
       fetchPoints();
     } catch (error) {
-      console.error('Error clearing cadet points:', error);
       toast.error('Failed to clear points');
     }
   };
 
   const canAdmin = userRole === 'staff' || userRole === 'snco';
   const canDelete = canAdmin;
-
-  // Get unique flights from cadets
   const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
 
   const cadetTotals = useMemo(() => {
@@ -439,7 +328,6 @@ export function PointsManager({ accessToken, userRole }: PointsManagerProps) {
       totals[key].points += p.points;
       totals[key].flight = p.flight || totals[key].flight;
     });
-
     return Object.entries(totals)
       .map(([name, info]) => ({ name, points: info.points, flight: info.flight }))
       .sort((a, b) => b.points - a.points);
