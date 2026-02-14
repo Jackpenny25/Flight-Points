@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../../../utils/api';
-import { getToken } from '../../../utils/auth';
+import { api } from '../../utils/api';
+import { getToken } from '../../utils/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';

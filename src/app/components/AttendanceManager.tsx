@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../../utils/api';
-import { getToken } from '../../../utils/auth';
+import { api } from '../../utils/api';
+import { getToken } from '../../utils/auth';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -111,14 +111,14 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
           : await Promise.all(entries.map(entry => api.createAttendance(entry)));
 
         if (res && res.error) {
-          setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: res.error || 'Failed' }));
+          setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: res.error || 'Failed' })));
           setBulkFailedEntries(entries);
           toast.error(`Saved 0 succeeded, ${entries.length} failed`);
         } else {
           toast.success(`Saved ${entries.length} attendance records`);
         }
       } catch (err: any) {
-        setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: String(err) }));
+        setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: String(err) })));
         setBulkFailedEntries(entries);
         toast.error(`Saved 0 succeeded, ${entries.length} failed`);
       }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { api } from '../../../utils/api';
-import { getToken } from '../../../utils/auth';
+import { api } from '../../utils/api';
+import { getToken } from '../../utils/auth';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -150,10 +150,10 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     }
 ]/)
         const names = namesInput
-      .split(/[,
+          .split(/[,
     ]/)
-      .map(name => name.trim())
-      .filter(name => name.length > 0);
+          .map(name => name.trim())
+          .filter(name => name.length > 0);
     const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
     setDuplicateWarning(Array.from(new Set(duplicates)));
     const invalid: string[] = [];
