@@ -1,4 +1,239 @@
 import { useEffect, useState } from 'react';
+import { api } from '../../../utils/api';
+import { getCurrentUser } from '../../../utils/auth';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { toast } from 'sonner';
+
+interface PendingSignup {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  flight?: string | null;
+}
+
+interface User {
+  id: string;
+  email: string;
+  user_metadata: any;
+  created_at: string;
+}
+
+interface JoinCodeInfo {
+  joinCode: string | null;
+  expiresAt: string | null;
+  durationSeconds: number | null;
+}
+
+export default function AdminSignups() {
+  const [pending, setPending] = useState<PendingSignup[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [joinCodeInfo, setJoinCodeInfo] = useState<JoinCodeInfo | null>(null);
+  const [roleSelections, setRoleSelections] = useState<Record<string, string>>({});
+
+  const fetchData = async () => {
+    setLoading(true);
+    setFetchError(null);
+    try {
+      // 1. Fetch pending signups
+      const pendingRes = await api.getPendingSignups();
+      if (pendingRes.error) throw new Error(pendingRes.error);
+      setPending(pendingRes.signups || []);
+
+      // 2. Fetch join code info
+      const joinCodeRes = await api.getJoinCode?.();
+      if (joinCodeRes) setJoinCodeInfo(joinCodeRes);
+
+      // 3. Fetch all users for admin management
+      const usersRes = await api.getUsers();
+      if (usersRes.error) throw new Error(usersRes.error);
+      setUsers((usersRes.users || []).map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        user_metadata: u.user_metadata || {},
+        created_at: u.created_at
+      })));
+    } catch (e: any) {
+      setFetchError(String(e));
+      setPending([]);
+      setJoinCodeInfo(null);
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveUser = async (userId: string) => {
+    try {
+      const res = await api.approveUser(userId);
+      if (res?.error) throw new Error(res.error);
+      toast.success('User approved');
+      fetchData();
+    } catch (e: any) {
+      toast.error('Failed to approve user: ' + String(e));
+    }
+  };
+
+  const handleChangeRole = async (userId: string, newRole: string) => {
+    try {
+      const res = await api.updateUserRole(userId, newRole);
+      if (res?.error) throw new Error(res.error);
+      toast.success('Role updated');
+      fetchData();
+    } catch (e: any) {
+      toast.error('Failed to update role: ' + String(e));
+    }
+  };
+
+  const handleUpdateJoinCode = async (durationHours: number) => {
+    try {
+      const res = await api.createJoinCode?.({ durationSeconds: Math.round(durationHours * 3600) });
+      if (res?.error) throw new Error(res.error);
+      setJoinCodeInfo(res);
+      toast.success('Join code updated');
+    } catch (e: any) {
+      toast.error('Failed to update join code: ' + String(e));
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Join Code</CardTitle>
+          <CardDescription>Generate a temporary code cadets must enter to request accounts</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4 items-end">
+            <Input type="number" min="0.5" step="0.5" placeholder="1" id="joincode-duration" />
+            <Button onClick={() => {
+              const input = document.getElementById('joincode-duration') as HTMLInputElement;
+              const duration = Number(input.value) || 1;
+              handleUpdateJoinCode(duration);
+            }}>Create / Rotate Code</Button>
+          </div>
+          <div className="mt-4 rounded-md border p-4 bg-muted/30">
+            {joinCodeInfo?.joinCode ? (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <div className="text-sm text-muted-foreground">Current Join Code</div>
+                  <div className="text-2xl font-bold tracking-widest">{joinCodeInfo.joinCode}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Expires</div>
+                  <div className="font-medium">{joinCodeInfo.expiresAt ? new Date(joinCodeInfo.expiresAt).toLocaleString() : 'N/A'}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">No active join code. Create one above.</div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Pending Signups</CardTitle>
+          <CardDescription>Requests awaiting approval</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div>Loading…</div>
+          ) : fetchError ? (
+            <div className="text-red-600">{fetchError}</div>
+          ) : pending.length === 0 ? (
+            <div>No pending requests</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Flight</TableHead>
+                  <TableHead>Requested</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pending.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>{r.name}</TableCell>
+                    <TableCell>{r.email}</TableCell>
+                    <TableCell>{r.flight || '—'}</TableCell>
+                    <TableCell>{new Date(r.createdAt).toLocaleString()}</TableCell>
+                    <TableCell>
+                      <Button size="sm" onClick={() => handleApproveUser(r.id)}>Approve</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Existing Accounts</CardTitle>
+          <CardDescription>Manage user roles</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div>Loading…</div>
+          ) : fetchError ? (
+            <div className="text-red-600">{fetchError}</div>
+          ) : users.length === 0 ? (
+            <div>No managed accounts found</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.map((u) => (
+                  <TableRow key={u.id}>
+                    <TableCell>{u.email}</TableCell>
+                    <TableCell>{u.user_metadata?.name || '—'}</TableCell>
+                    <TableCell>
+                      <Select value={u.user_metadata?.role || 'cadet'} onValueChange={(v) => setRoleSelections(prev => ({ ...prev, [u.id]: v }))}>
+                        <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cadet">Cadet</SelectItem>
+                          <SelectItem value="pointgiver">Point Giver</SelectItem>
+                          <SelectItem value="snco">Flight Point Lead</SelectItem>
+                          <SelectItem value="staff">Staff</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Button size="sm" onClick={() => handleChangeRole(u.id, roleSelections[u.id] || u.user_metadata?.role || 'cadet')}>Save</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Button } from './ui/button';
