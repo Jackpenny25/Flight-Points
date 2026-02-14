@@ -14,6 +14,10 @@ cd /d "%~dp0"
 :: Prevent commits from this device
 call git config --local core.hooksPath /dev/null
 
+:: Automatically resolve conflicts by resetting unmerged files
+call git reset --merge
+call git clean -fd
+
 set "HAS_CHANGES="
 for /f "delims=" %%A in ('git status --porcelain') do set "HAS_CHANGES=1"
 if defined HAS_CHANGES (
