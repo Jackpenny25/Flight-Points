@@ -7,7 +7,7 @@ export interface User {
   id: string;
   email: string;
   [key: string]: any;
-// Removed extra closing brace
+}
 
 export async function login(email: string, password: string): Promise<User> {
   const res = await fetch(`${API_URL}/auth/login`, {
