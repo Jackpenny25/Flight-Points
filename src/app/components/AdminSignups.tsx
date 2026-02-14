@@ -27,44 +27,32 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
   const [duration, setDuration] = useState<number>(1); // in hours
 
   const fetchData = async () => {
+    setLoading(true);
+    setFetchError(null);
     try {
-      setFetchError(null);
-      // Fetch pending signups
-      const pendingRes = await api.getUsers({ status: 'pending' });
-      setPending((pendingRes.requests || pendingRes || []).sort((a:any,b:any)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()));
-      // Fetch cadets
-      const cadetRes = await api.getCadets();
-      setCadets((cadetRes.cadets || cadetRes || []).map((c:any)=>({ id: c.id, name: c.name, flight: c.flight })));
-      // Fetch join code info (simulate as needed)
+      // 1. Fetch pending signups
+      const pendingRes = await api.getPendingSignups();
+      if (pendingRes.error) throw new Error(pendingRes.error);
+      setPending(pendingRes.signups || []);
+
+      // 2. Fetch join code info
       const joinCodeRes = await api.getJoinCode?.();
       if (joinCodeRes) setJoinCodeInfo(joinCodeRes);
-      // Fetch all users for admin management
-      try {
-        const usersRes = await api.getUsers();
-        setUsers((usersRes.users || usersRes || []).map((u:any)=>({ id: u.id, email: u.email, user_metadata: u.user_metadata || {}, created_at: u.created_at })));
-      } catch (e) {
-        setUsers([]);
-      }
-    } catch (e) {
+
+      // 3. Fetch all users for admin management
+      const usersRes = await api.getUsers();
+      if (usersRes.error) throw new Error(usersRes.error);
+      setUsers((usersRes.users || []).map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        user_metadata: u.user_metadata || {},
+        created_at: u.created_at
+      })));
+    } catch (e: any) {
+      setFetchError(String(e));
       setPending([]);
       setJoinCodeInfo(null);
-      setCadets([]);
-      setFetchError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-        );
-        const usersData = await usersRes.json().catch(()=>({}));
-        if (usersRes.ok) setUsers((usersData.users || []).map((u:any)=>({ id: u.id, email: u.email, user_metadata: u.user_metadata || {}, created_at: u.created_at })));
-      } catch (e) {
-        setUsers([]);
-      }
-    } catch (e) {
-      setPending([]);
-      setJoinCodeInfo(null);
-      setCadets([]);
-      setFetchError(String(e));
+      setUsers([]);
     } finally {
       setLoading(false);
     }
