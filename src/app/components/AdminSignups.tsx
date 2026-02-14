@@ -6,6 +6,7 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { formatFlight } from './ui/utils';
 import { api } from '../../../utils/api';
+import { getCurrentUser } from '../../../utils/auth';
 
 interface AdminSignupsProps {
   accessToken: string;
@@ -28,18 +29,28 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
   const fetchData = async () => {
     try {
       setFetchError(null);
-      const reqData = await api.getPendingSignups();
-      setPending((reqData.requests || reqData || []).sort((a:any,b:any)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()));
-
-      const cadData = await api.getCadets();
-      setCadets((cadData.cadets || cadData || []).map((c:any)=>({ id: c.id, name: c.name, flight: c.flight }));
-
-      // Replace join code fetch with local API if needed
-      // const jcData = await api.getJoinCode?.();
-      // setJoinCodeInfo(jcData);
-      setLoading(false);
+      // Fetch pending signups
+      const pendingRes = await api.getUsers({ status: 'pending' });
+      setPending((pendingRes.requests || pendingRes || []).sort((a:any,b:any)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()));
+      // Fetch cadets
+      const cadetRes = await api.getCadets();
+      setCadets((cadetRes.cadets || cadetRes || []).map((c:any)=>({ id: c.id, name: c.name, flight: c.flight })));
+      // Fetch join code info (simulate as needed)
+      const joinCodeRes = await api.getJoinCode?.();
+      if (joinCodeRes) setJoinCodeInfo(joinCodeRes);
+      // Fetch all users for admin management
+      try {
+        const usersRes = await api.getUsers();
+        setUsers((usersRes.users || usersRes || []).map((u:any)=>({ id: u.id, email: u.email, user_metadata: u.user_metadata || {}, created_at: u.created_at })));
+      } catch (e) {
+        setUsers([]);
+      }
     } catch (e) {
+      setPending([]);
+      setJoinCodeInfo(null);
+      setCadets([]);
       setFetchError(String(e));
+    } finally {
       setLoading(false);
     }
   };
@@ -77,15 +88,13 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
           onClick={async () => {
             if (!confirm('Run data retention cleanup now? This will permanently delete records older than 4 years.')) return;
             try {
-              const url = `https://${projectId}.supabase.co/functions/v1/server/retention/cleanup`;
-              const res = await fetch(url, { method: 'POST', headers: makeHeaders() });
-              const data = await res.json();
-              if (!res.ok) {
-                alert('Cleanup failed: ' + (data.error || res.statusText));
+              // Replace with local API call if available
+              const res = await api.cleanupRetention?.();
+              if (!res?.ok) {
+                alert('Cleanup failed: ' + (res?.error || res?.statusText));
                 return;
               }
-              alert('Cleanup completed. Deleted: ' + JSON.stringify(data.deleted));
-              // refresh list after cleanup
+              alert('Cleanup completed. Deleted: ' + JSON.stringify(res?.deleted));
               fetchData();
             } catch (e) {
               console.error('Cleanup request failed', e);
@@ -117,11 +126,8 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
             </div>
             <div className="flex justify-start sm:justify-end">
               <Button onClick={async ()=>{
-                const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/join-code`,{
-                  method:'POST', headers: makeHeaders(), body: JSON.stringify({ durationSeconds: Math.round(duration * 3600) })
-                });
-                const data = await res.json();
-                if (res.ok) setJoinCodeInfo(data);
+                const res = await api.createJoinCode?.({ durationSeconds: Math.round(duration * 3600) });
+                if (res?.ok) setJoinCodeInfo(res);
               }}>Create / Rotate Code</Button>
             </div>
           </div>
@@ -193,13 +199,11 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                             <Button size="sm" onClick={async ()=>{
                               if (!confirm(`Change role for ${u.email} to ${u.user_metadata?.role || 'cadet'}?`)) return;
                               try {
-                                const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/users/${u.id}`, { method: 'PUT', headers: makeHeaders(), body: JSON.stringify({ role: u.user_metadata?.role || 'cadet' }) });
-                                const data = await res.json().catch(()=>({}));
-                                if (!res.ok) {
-                                  alert('Update failed: ' + (data.error || res.statusText));
+                                const res = await api.updateUserRole(u.id, u.user_metadata?.role || 'cadet');
+                                if (res?.error) {
+                                  alert('Update failed: ' + (res.error));
                                   return;
                                 }
-                                // refresh lists
                                 fetchData();
                                 alert('User updated');
                               } catch (e:any) {
@@ -317,13 +321,9 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                                   <Button size="sm" onClick={async ()=>{
                                     const password = window.prompt('Set a password for the existing account (leave blank to keep current):') || null;
                                     try {
-                                      const body: any = { userId: a.id, role: roleSelections[r.id] || 'cadet' };
-                                      if (cadetSelections[r.id]) body.cadetId = cadetSelections[r.id];
-                                      if (password) body.password = password;
-                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/requests/${r.id}/link`, { method: 'POST', headers: makeHeaders(), body: JSON.stringify(body) });
-                                      const data = await res.json().catch(()=>({}));
-                                      if (!res.ok) {
-                                        alert('Link failed: ' + (data.error || res.statusText));
+                                      const res = await api.linkExistingAccount?.({ userId: a.id, role: roleSelections[r.id] || 'cadet', cadetId: cadetSelections[r.id], password });
+                                      if (res?.error) {
+                                        alert('Link failed: ' + (res.error));
                                         return;
                                       }
                                       fetchData();
@@ -336,11 +336,9 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                                     const pass = window.prompt('Set a new password for this account (leave blank to cancel):');
                                     if (!pass) return;
                                     try {
-                                      const body = { userId: a.id, password: pass };
-                                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/requests/${r.id}/link`, { method: 'POST', headers: makeHeaders(), body: JSON.stringify(body) });
-                                      const data = await res.json().catch(()=>({}));
-                                      if (!res.ok) {
-                                        alert('Set password failed: ' + (data.error || res.statusText));
+                                      const res = await api.setUserPassword?.({ userId: a.id, password: pass });
+                                      if (res?.error) {
+                                        alert('Set password failed: ' + (res.error));
                                         return;
                                       }
                                       fetchData();
@@ -375,27 +373,17 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                               alert('Please select a cadet to map this account to.');
                               return;
                             }
-                            const requestBody: any = { 
-                              role: roleSelections[r.id] || 'cadet', 
-                              cadetId 
-                            };
-
-                            // Include name suggestion if provided
-                            if (nameSuggestions[r.id]?.trim()) {
-                              requestBody.suggestedName = nameSuggestions[r.id].trim();
-                              requestBody.forceNameChange = forceNameChange[r.id] || false;
-                            }
-
                             try {
-                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/requests/${r.id}/approve`,{
-                                method:'POST', headers: makeHeaders(), body: JSON.stringify(requestBody)
+                              const res = await api.approveUser(r.id, {
+                                role: roleSelections[r.id] || 'cadet',
+                                cadetId,
+                                suggestedName: nameSuggestions[r.id]?.trim(),
+                                forceNameChange: forceNameChange[r.id] || false
                               });
-                              const data = await res.json().catch(()=>({}));
-                              if (!res.ok) {
-                                alert('Approve failed: ' + (data.error || res.statusText));
+                              if (res?.error) {
+                                alert('Approve failed: ' + (res.error));
                                 return;
                               }
-                              // success
                               fetchData();
                             } catch (e:any) {
                               console.error('Approve request failed', e);
@@ -404,12 +392,9 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                           }}>Approve</Button>
                           <Button size="sm" variant="outline" onClick={async ()=>{
                             try {
-                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/requests/${r.id}`,{
-                                method:'DELETE', headers: makeHeaders()
-                              });
-                              const data = await res.json().catch(()=>({}));
-                              if (!res.ok) {
-                                alert('Reject failed: ' + (data.error || res.statusText));
+                              const res = await api.rejectUser?.(r.id);
+                              if (res?.error) {
+                                alert('Reject failed: ' + (res.error));
                                 return;
                               }
                               fetchData();
