@@ -23,7 +23,6 @@ export async function login(email: string, password: string): Promise<User> {
     localStorage.setItem('token', data.token);
   }
   return data.user;
-}
 
 export function logout() {
   localStorage.removeItem('token');
