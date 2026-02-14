@@ -148,9 +148,10 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       setInvalidNames([]);
       return;
     }
-    const names = namesInput
-      .split(/[,
 ]/)
+        const names = namesInput
+      .split(/[,
+    ]/)
       .map(name => name.trim())
       .filter(name => name.length > 0);
     const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
