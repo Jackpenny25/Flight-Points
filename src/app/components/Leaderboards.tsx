@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { projectId } from '../../../utils/supabase/info';
+import { api } from '../../../utils/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
@@ -9,12 +9,18 @@ import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { AttendanceReports } from './AttendanceReports';
 
-interface LeaderboardsProps {
-  accessToken: string;
+interface LeaderboardsData {
+  cadetLeaderboard: Array<{ name: string; points: number; flight: string }>;
+  flightLeaderboard: Array<{ flight: string; points: number }>;
+  recentPoints: Array<any>;
+  winningCadet?: { name: string; points: number };
+  winningFlight?: { flight: string; points: number };
+  winnersCadets?: Array<{ name: string; points: number }>;
+  winnersFlights?: Array<{ flight: string; points: number }>;
 }
 
-export function Leaderboards({ accessToken }: LeaderboardsProps) {
-  const [data, setData] = useState<any>(null);
+export function Leaderboards() {
+  const [data, setData] = useState<LeaderboardsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,21 +31,11 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
   }, []);
 
   const fetchLeaderboards = async () => {
+    setLoading(true);
     try {
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/leaderboards`,
-        { headers }
-      );
-
-      if (response.ok) {
-        const result = await response.json();
-        setData(result);
-      }
+      const result = await api.getLeaderboards();
+      setData(result);
     } catch (error) {
-      console.error('Error fetching leaderboards:', error);
       toast.error('Failed to fetch leaderboards');
     } finally {
       setLoading(false);
@@ -68,7 +64,6 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
         <TabsTrigger value="points">Points Leaderboards</TabsTrigger>
         <TabsTrigger value="attendance">Attendance Reports</TabsTrigger>
       </TabsList>
-
       <TabsContent value="points" className="space-y-6">
         {/* Winners Cards */}
         <div className="grid gap-4 md:grid-cols-2">
@@ -101,7 +96,6 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
               )}
             </CardContent>
           </Card>
-
           <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -132,7 +126,6 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
             </CardContent>
           </Card>
         </div>
-
         {/* Leaderboard Tables */}
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Flight Leaderboard */}
@@ -175,7 +168,6 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
               )}
             </CardContent>
           </Card>
-
           {/* Cadet Leaderboard */}
           <Card>
             <CardHeader>
@@ -217,7 +209,6 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
             </CardContent>
           </Card>
         </div>
-
         {/* Recent Points (excluding attendance) */}
         <Card>
           <CardHeader>
@@ -255,9 +246,8 @@ export function Leaderboards({ accessToken }: LeaderboardsProps) {
           </CardContent>
         </Card>
       </TabsContent>
-
       <TabsContent value="attendance">
-        <AttendanceReports accessToken={accessToken} />
+        <AttendanceReports />
       </TabsContent>
     </Tabs>
   );

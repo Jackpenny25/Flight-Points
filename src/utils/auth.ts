@@ -25,8 +25,14 @@ export async function login(email: string, password: string): Promise<User> {
   return data.user;
 }
 
-export function logout() {
   localStorage.removeItem('token');
+  localStorage.removeItem('localStore_73a3871f_v1');
+  // Remove any Supabase-related keys
+  Object.keys(localStorage).forEach(key => {
+    if (key.toLowerCase().includes('supabase')) {
+      localStorage.removeItem(key);
+    }
+  });
 }
 
 export function getToken(): string | null {

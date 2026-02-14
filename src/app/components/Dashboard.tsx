@@ -14,7 +14,7 @@ import { CadetsManager } from './CadetsManager';
 import { AttendanceManager } from './AttendanceManager';
 import { DataIntegrity } from './DataIntegrity';
 import { ReportsExport } from './ReportsExport';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { api } from '../../../utils/api';
 import { exportAllCsvs } from './downloadCsvUtil';
 import AdminSignups from './AdminSignups';
 import { MyPoints } from './MyPoints';
@@ -114,52 +114,23 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     setMyRoleSaving(true)
     try {
       let res;
-      if (temporaryRole) {
-        // call temp endpoint (requires admin pin)
-        res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/me/role/temp`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-            'x-admin-pin': adminPinInput
-          },
-          body: JSON.stringify({ role: myRoleSelection, seconds: Math.max(60, Math.round(tempDurationMinutes * 60)) })
-        });
-      } else if (useAdminPin) {
-        // admin-assisted permanent set
-        res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/me/role/set`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-            'x-admin-pin': adminPinInput
-          },
-          body: JSON.stringify({ role: myRoleSelection })
-        });
-      } else {
-        // default self-role flow (demote/restore allowed only per previous-role rules)
-        res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/me/role`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({ role: myRoleSelection })
-        });
+      // Replace with local API call
+      res = await api.changeUserRole?.(user.id, myRoleSelection, {
+        adminPin: useAdminPin ? adminPinInput : undefined,
+        temporary: temporaryRole,
+        durationSeconds: temporaryRole ? Math.max(60, Math.round(tempDurationMinutes * 60)) : undefined
+      });
+      if (!res || res.error) {
+        alert('Failed to update role: ' + (res?.error || 'Unknown error'));
+        return;
       }
-
-      const data = await res.json().catch(()=>({}));
-      if (!res.ok) {
-        alert('Failed to update role: ' + (data.error || res.statusText))
-        return
-      }
-      alert('Role updated. Please sign out and sign in to refresh permissions.')
-      setShowMyRoleEditor(false)
+      alert('Role updated. Please sign out and sign in to refresh permissions.');
+      setShowMyRoleEditor(false);
     } catch (e:any) {
-      console.error('Save role failed', e)
-      alert('Save failed: ' + String(e))
+      console.error('Save role failed', e);
+      alert('Save failed: ' + String(e));
     } finally {
-      setMyRoleSaving(false)
+      setMyRoleSaving(false);
     }
   }
 
@@ -191,19 +162,11 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   // Poll pending signup requests count for Flight Point Leads/Staff to show a badge on the NCO's tab
   useEffect(() => {
     if (!canManageCadets) return;
-    const url = `https://${projectId}.supabase.co/functions/v1/server/data/signups-count`;
     let timer: any;
     const fetchCount = async () => {
       try {
-        const res = await fetch(url, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`,
-          }
-        });
-        const data = await res.json();
-        // suppressed noisy console output
-        if (typeof data.count === 'number') setAdminPendingCount(data.count);
+        const res = await api.getPendingSignupsCount?.();
+        if (typeof res?.count === 'number') setAdminPendingCount(res.count);
       } catch (e) {
         console.error('Failed to fetch pending signups count:', e);
       }
@@ -225,19 +188,11 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   // Poll open tickets count for Flight Point Leads/Staff to show a badge on the Tickets tab
   useEffect(() => {
     if (!canManageCadets) return;
-    const url = `https://${projectId}.supabase.co/functions/v1/server/data/tickets-count`;
     let timer: any;
     const fetchCount = async () => {
       try {
-        const res = await fetch(url, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`,
-          }
-        });
-        const data = await res.json();
-        // suppressed noisy console output
-        if (typeof data.count === 'number') setTicketsCount(data.count);
+        const res = await api.getTicketsCount?.();
+        if (typeof res?.count === 'number') setTicketsCount(res.count);
       } catch (e) {
         console.error('Failed to fetch open tickets count:', e);
       }
@@ -635,25 +590,11 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                   return;
                 }
                 try {
-                  const response = await fetch(
-                    `https://${projectId}.supabase.co/functions/v1/server/auth/update-name`,
-                    {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${accessToken}`,
-                      },
-                      body: JSON.stringify({ name: newName.trim() }),
-                    }
-                  );
-                  
-                  if (!response.ok) {
-                    const error = await response.json();
-                    setNameChangeError(error.error || 'Failed to update name');
+                  const response = await api.updateUserName?.(user.id, newName.trim());
+                  if (!response || response.error) {
+                    setNameChangeError(response?.error || 'Failed to update name');
                     return;
                   }
-                  
-                  // Success - reload to get updated user data
                   alert('Name updated successfully! Please log in again.');
                   onLogout();
                 } catch (err) {

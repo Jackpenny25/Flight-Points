@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { projectId } from '../../../utils/supabase/info';
+import { api } from '../../../utils/api';
+import { getToken } from '../../../utils/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -9,7 +10,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from 'sonner';
 
 interface RewardsProps {
-  accessToken: string;
   userRole: string;
 }
 
@@ -25,7 +25,7 @@ type Reward = {
   createdBy?: string;
 };
 
-export function Rewards({ accessToken, userRole }: RewardsProps) {
+export function Rewards({ userRole }: RewardsProps) {
   const canManageRewards = userRole === 'snco' || userRole === 'staff';
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,24 +52,11 @@ export function Rewards({ accessToken, userRole }: RewardsProps) {
   }, []);
 
   const fetchRewards = async () => {
+    setLoading(true);
     try {
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/rewards`,
-        { headers }
-      );
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || response.statusText);
-      }
-
-      const result = await response.json();
-      setRewards(Array.isArray(result.rewards) ? result.rewards : []);
+      const data = await api.getRewards();
+      setRewards(Array.isArray(data.rewards) ? data.rewards : []);
     } catch (error: any) {
-      console.error('Error fetching rewards:', error);
       toast.error(error?.message || 'Failed to fetch rewards');
     } finally {
       setLoading(false);
@@ -115,36 +102,21 @@ export function Rewards({ accessToken, userRole }: RewardsProps) {
       toast.error('Please fill in the title, how to win, prize, and end date.');
       return;
     }
-
     setSaving(true);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/rewards`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            title: title.trim(),
-            howToWin: howToWin.trim(),
-            prize: prize.trim(),
-            endsAt: endsAt ? new Date(endsAt).toISOString() : null,
-          }),
-        }
-      );
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(result.error || response.statusText);
-      }
-
+      const data = {
+        title: title.trim(),
+        howToWin: howToWin.trim(),
+        prize: prize.trim(),
+        endsAt: endsAt ? new Date(endsAt).toISOString() : null,
+        createdBy: getToken() || 'unknown',
+      };
+      const result = await api.createReward(data);
+      if (result.error) throw new Error(result.error);
       toast.success('Reward created');
       resetCreateForm();
       setRewards((prev) => [result.reward, ...prev]);
     } catch (error: any) {
-      console.error('Error creating reward:', error);
       toast.error(error?.message || 'Failed to create reward');
     } finally {
       setSaving(false);
@@ -167,37 +139,22 @@ export function Rewards({ accessToken, userRole }: RewardsProps) {
       toast.error('Please fill in the title, how to win, prize, and end date.');
       return;
     }
-
     setEditSaving(true);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/rewards/${editReward.id}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            title: editTitle.trim(),
-            howToWin: editHowToWin.trim(),
-            prize: editPrize.trim(),
-            endsAt: editEndsAt ? new Date(editEndsAt).toISOString() : null,
-            winnerName: editWinnerName.trim() || null,
-          }),
-        }
-      );
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(result.error || response.statusText);
-      }
-
+      const data = {
+        title: editTitle.trim(),
+        howToWin: editHowToWin.trim(),
+        prize: editPrize.trim(),
+        endsAt: editEndsAt ? new Date(editEndsAt).toISOString() : null,
+        winnerName: editWinnerName.trim() || null,
+        updatedBy: getToken() || 'unknown',
+      };
+      const result = await api.updateReward(editReward.id, data);
+      if (result.error) throw new Error(result.error);
       toast.success('Reward updated');
       setRewards((prev) => prev.map((r) => (r.id === editReward.id ? result.reward : r)));
       setEditOpen(false);
     } catch (error: any) {
-      console.error('Error updating reward:', error);
       toast.error(error?.message || 'Failed to update reward');
     } finally {
       setEditSaving(false);
@@ -205,27 +162,17 @@ export function Rewards({ accessToken, userRole }: RewardsProps) {
   };
 
   const handleDelete = async (reward: Reward) => {
+    if (!canManageRewards) {
+      toast.error('You are not authorized to delete rewards.');
+      return;
+    }
     if (!confirm(`Delete reward "${reward.title}"?`)) return;
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/rewards/${reward.id}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        }
-      );
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(result.error || response.statusText);
-      }
-
+      const result = await api.deleteReward(reward.id);
+      if (result.error) throw new Error(result.error);
       toast.success('Reward deleted');
       setRewards((prev) => prev.filter((r) => r.id !== reward.id));
     } catch (error: any) {
-      console.error('Error deleting reward:', error);
       toast.error(error?.message || 'Failed to delete reward');
     }
   };
@@ -238,41 +185,30 @@ export function Rewards({ accessToken, userRole }: RewardsProps) {
   };
 
   const saveWinner = async (reward: Reward) => {
+    if (!canManageRewards) {
+      toast.error('You are not authorized to set winners.');
+      return;
+    }
     const winnerName = (winnerInputs[reward.id] ?? '').trim();
     if (!winnerName) {
       toast.error('Please enter a winner name.');
       return;
     }
-
     setWinnerSavingId(reward.id);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/make-server-73a3871f/rewards/${reward.id}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            title: reward.title,
-            howToWin: reward.howToWin,
-            prize: reward.prize,
-            endsAt: reward.endsAt,
-            winnerName,
-          }),
-        }
-      );
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(result.error || response.statusText);
-      }
-
+      const data = {
+        title: reward.title,
+        howToWin: reward.howToWin,
+        prize: reward.prize,
+        endsAt: reward.endsAt,
+        winnerName,
+        updatedBy: getToken() || 'unknown',
+      };
+      const result = await api.updateReward(reward.id, data);
+      if (result.error) throw new Error(result.error);
       setRewards((prev) => prev.map((r) => (r.id === reward.id ? result.reward : r)));
       toast.success('Winner saved');
     } catch (error: any) {
-      console.error('Error saving winner:', error);
       toast.error(error?.message || 'Failed to save winner');
     } finally {
       setWinnerSavingId(null);
@@ -282,15 +218,12 @@ export function Rewards({ accessToken, userRole }: RewardsProps) {
   const renderRewardCard = (reward: Reward) => {
     const expired = reward.endsAt ? new Date(reward.endsAt).getTime() < Date.now() : false;
     const winnerValue = winnerInputs[reward.id] ?? reward.winnerName ?? '';
-
     return (
       <Card key={reward.id} className="border-slate-200 shadow-sm">
         <CardHeader className={`rounded-t-lg ${expired ? 'bg-slate-50' : 'bg-gradient-to-r from-sky-50 to-blue-50'}`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${expired ? 'bg-slate-200 text-slate-600' : 'bg-primary/10 text-primary'}`}>
-                ★
-              </div>
+              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${expired ? 'bg-slate-200 text-slate-600' : 'bg-primary/10 text-primary'}`}>★</div>
               <div>
                 <CardTitle className="text-lg text-slate-900">{reward.title}</CardTitle>
                 <CardDescription className="text-slate-600">Ends {formatDate(reward.endsAt)}</CardDescription>
@@ -312,12 +245,10 @@ export function Rewards({ accessToken, userRole }: RewardsProps) {
               <p className="text-base font-semibold text-slate-900">{reward.winnerName || 'TBD'}</p>
             </div>
           </div>
-
           <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
             <p className="text-xs uppercase tracking-wide text-slate-500">How to win</p>
             <p className="text-sm text-slate-700 whitespace-pre-wrap mt-1">{reward.howToWin}</p>
           </div>
-
           {canManageRewards && (
             <div className="rounded-md border border-slate-200 bg-white p-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -333,7 +264,7 @@ export function Rewards({ accessToken, userRole }: RewardsProps) {
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Input
                   value={winnerValue}
-                  onChange={(e) => setWinnerInputs((prev) => ({ ...prev, [reward.id]: e.target.value }))}
+                  onChange={(e) => setWinnerInputs((prev) => ({ ...prev, [reward.id]: e.target.value }))
                   placeholder="Winner name"
                 />
                 <Button
@@ -370,7 +301,6 @@ export function Rewards({ accessToken, userRole }: RewardsProps) {
           )}
         </CardContent>
       </Card>
-
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="bg-slate-50 rounded-t-lg">
           <CardTitle>Previous Rewards</CardTitle>
@@ -388,7 +318,6 @@ export function Rewards({ accessToken, userRole }: RewardsProps) {
           )}
         </CardContent>
       </Card>
-
       {canManageRewards && (
         <Card>
           <CardHeader>
@@ -418,7 +347,6 @@ export function Rewards({ accessToken, userRole }: RewardsProps) {
           </CardContent>
         </Card>
       )}
-
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>

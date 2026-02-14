@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { formatFlight } from './ui/utils';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { api } from '../../../utils/api';
 
 interface AdminSignupsProps {
   accessToken: string;
@@ -25,49 +25,24 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
   const [joinCodeInfo, setJoinCodeInfo] = useState<{joinCode:string|null;expiresAt:string|null;durationSeconds:number|null} | null>(null);
   const [duration, setDuration] = useState<number>(1); // in hours
 
-  const makeHeaders = () => {
-    const h: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (accessToken) h['Authorization'] = `Bearer ${accessToken}`;
-    return h;
-  };
-
   const fetchData = async () => {
     try {
       setFetchError(null);
-      const reqRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/auth/requests`,
-        { headers: makeHeaders() }
-      );
-      if (!reqRes.ok) {
-        const errJson = await reqRes.json().catch(() => ({}));
-        const msg = errJson?.error || reqRes.statusText || `Status ${reqRes.status}`;
-        setFetchError(String(msg));
-        setPending([]);
-        setLoading(false);
-        return;
-      }
-      const reqData = await reqRes.json();
-      setPending((reqData.requests || []).sort((a:any,b:any)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()));
+      const reqData = await api.getPendingSignups();
+      setPending((reqData.requests || reqData || []).sort((a:any,b:any)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()));
 
-      const cadRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/data/cadets`,
-        { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
-      );
-      const cadData = await cadRes.json();
-      setCadets((cadData.cadets || []).map((c:any)=>({ id: c.id, name: c.name, flight: c.flight })));
+      const cadData = await api.getCadets();
+      setCadets((cadData.cadets || cadData || []).map((c:any)=>({ id: c.id, name: c.name, flight: c.flight }));
 
-      const jcRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/admin/join-code`,
-        { headers: makeHeaders() }
-      );
-      const jcData = await jcRes.json();
-      if (jcRes.ok) setJoinCodeInfo(jcData);
-
-      // Fetch existing Supabase users for admin management
-      try {
-        const usersRes = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/server/auth/users`,
-          { headers: makeHeaders() }
+      // Replace join code fetch with local API if needed
+      // const jcData = await api.getJoinCode?.();
+      // setJoinCodeInfo(jcData);
+      setLoading(false);
+    } catch (e) {
+      setFetchError(String(e));
+      setLoading(false);
+    }
+  };
         );
         const usersData = await usersRes.json().catch(()=>({}));
         if (usersRes.ok) setUsers((usersData.users || []).map((u:any)=>({ id: u.id, email: u.email, user_metadata: u.user_metadata || {}, created_at: u.created_at })));

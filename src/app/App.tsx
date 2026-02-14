@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import Login from '../components/Login';
+import { Login } from './components/Login';
 import Dashboard from './components/Dashboard';
 import { Toaster } from './components/ui/sonner';
 import { getToken, isAuthenticated, logout } from '../utils/auth';
@@ -10,6 +10,12 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Clean up legacy localStorage keys on app load
+    Object.keys(localStorage).forEach(key => {
+      if (key === 'localStore_73a3871f_v1' || key.toLowerCase().includes('supabase')) {
+        localStorage.removeItem(key);
+      }
+    });
     setAuthed(isAuthenticated());
     setLoading(false);
   }, []);

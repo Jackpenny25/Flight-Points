@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { projectId } from '../../../utils/supabase/info';
+import { api } from '../../../utils/api';
+import { getToken } from '../../../utils/auth';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -23,11 +24,10 @@ interface AttendanceRecord {
 }
 
 interface AttendanceManagerProps {
-  accessToken: string;
   userRole: string;
 }
 
-export function AttendanceManager({ accessToken, userRole }: AttendanceManagerProps) {
+export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [cadets, setCadets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,38 +96,29 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
     setBulkErrors([]);
 
     try {
-      const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) postHeaders['Authorization'] = `Bearer ${accessToken}`;
-
       const entries = targets.map(c => ({
         cadetName: c.name,
         flight: c.flight,
         date: new Date(selectedDate).toISOString(),
         status: attendanceStatuses[c.id] || 'absent',
+        submittedBy: getToken() || 'unknown',
       }));
 
       // Submit as a single bulk request to avoid many parallel calls
       try {
-        const res = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/server/attendance/bulk`,
-          {
-            method: 'POST',
-            headers: postHeaders,
-            body: JSON.stringify({ entries, date: new Date(selectedDate).toISOString(), flightFilter }),
-          }
-        );
+        const res = await api.createBulkAttendance
+          ? await api.createBulkAttendance({ entries, date: new Date(selectedDate).toISOString(), flightFilter })
+          : await Promise.all(entries.map(entry => api.createAttendance(entry)));
 
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: 'unknown' }));
-          setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: err.error || res.statusText || 'Failed' })));
+        if (res && res.error) {
+          setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: res.error || 'Failed' }));
           setBulkFailedEntries(entries);
           toast.error(`Saved 0 succeeded, ${entries.length} failed`);
         } else {
-          const data = await res.json().catch(() => ({}));
           toast.success(`Saved ${entries.length} attendance records`);
         }
       } catch (err: any) {
-        setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: String(err) })));
+        setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: String(err) }));
         setBulkFailedEntries(entries);
         toast.error(`Saved 0 succeeded, ${entries.length} failed`);
       }
@@ -146,23 +137,10 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
 
   const fetchAttendance = async () => {
     try {
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/attendance`,
-        { headers }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const attendanceData = data.attendance || [];
-        setAttendance(attendanceData);
-        try { localStorage.setItem('attendance', JSON.stringify(attendanceData)); } catch (e) { }
-      } else {
-        const localData = JSON.parse(localStorage.getItem('attendance') || '[]');
-        setAttendance(localData);
-      }
+      const data = await api.getAttendance();
+      const attendanceData = data.attendance || [];
+      setAttendance(attendanceData);
+      try { localStorage.setItem('attendance', JSON.stringify(attendanceData)); } catch (e) { }
     } catch (error) {
       console.error('Error fetching attendance:', error);
       const localData = JSON.parse(localStorage.getItem('attendance') || '[]');
@@ -175,18 +153,8 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
 
   const fetchBulkAttendance = async () => {
     try {
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/attendance/bulk`,
-        { headers }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setBulkEvents(data.bulks || []);
-      }
+      const data = await api.getAttendanceReports ? await api.getAttendanceReports() : {};
+      setBulkEvents(data.bulks || []);
     } catch (error) {
       console.error('Error fetching bulk attendance:', error);
     }
@@ -194,26 +162,16 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
 
   const fetchCadets = async () => {
     try {
-      const headers2: Record<string, string> = {};
-      if (accessToken) headers2['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/cadets`,
-        { headers: headers2 }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const cadetList = data.cadets || [];
-        setCadets(cadetList);
-        setAttendanceStatuses(prev => {
-          const next = { ...prev };
-          cadetList.forEach((c: any) => {
-            if (!next[c.id]) next[c.id] = 'present';
-          });
-          return next;
+      const data = await api.getCadets();
+      const cadetList = data.cadets || [];
+      setCadets(cadetList);
+      setAttendanceStatuses(prev => {
+        const next = { ...prev };
+        cadetList.forEach((c: any) => {
+          if (!next[c.id]) next[c.id] = 'present';
         });
-      }
+        return next;
+      });
     } catch (error) {
       console.error('Error fetching cadets:', error);
       toast.error('Failed to load cadets from local storage');
@@ -223,21 +181,13 @@ export function AttendanceManager({ accessToken, userRole }: AttendanceManagerPr
   const handleDeleteBulk = async (bulkId: string) => {
     if (!confirm('Delete this bulk attendance session and its attendance records? This is irreversible.')) return;
     try {
-      const delHeaders: Record<string, string> = {};
-      if (accessToken) delHeaders['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/attendance/bulk/${bulkId}`,
-        { method: 'DELETE', headers: delHeaders }
-      );
-
-      if (response.ok) {
+      const res = await api.deleteAttendance ? await api.deleteAttendance(bulkId) : null;
+      if (res && res.error) {
+        toast.error(res.error || 'Failed to delete bulk attendance session');
+      } else {
         toast.success('Bulk attendance session deleted');
         fetchAttendance();
         fetchBulkAttendance();
-      } else {
-        const error = await response.json();
-        toast.error(error.error || 'Failed to delete bulk attendance session');
       }
     } catch (error) {
       console.error('Error deleting bulk attendance session:', error);
