@@ -143,17 +143,16 @@ export function PointsManager({ userRole }: PointsManagerProps) {
   };
 
   const validateNames = (namesInput: string) => {
+    ]/)
     if (!namesInput.trim()) {
       setDuplicateWarning([]);
       setInvalidNames([]);
       return;
     }
-]/)
-        const names = namesInput
-          .split(/[,
-    ]/)
-          .map(name => name.trim())
-          .filter(name => name.length > 0);
+    const names = namesInput
+      .split(/[\,\n]/)
+      .map(name => name.trim())
+      .filter(name => name.length > 0);
     const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
     setDuplicateWarning(Array.from(new Set(duplicates)));
     const invalid: string[] = [];
