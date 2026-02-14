@@ -15,7 +15,7 @@ cd /d "%~dp0"
 call git config --local core.hooksPath /dev/null
 
 :: Automatically resolve conflicts by resetting unmerged files
-call git reset --merge
+call git reset --hard
 call git clean -fd
 
 set "HAS_CHANGES="
