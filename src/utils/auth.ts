@@ -7,7 +7,6 @@ export interface User {
   id: string;
   email: string;
   [key: string]: any;
-}
 
 export async function login(email: string, password: string): Promise<User> {
   const res = await fetch(`${API_URL}/auth/login`, {
@@ -23,6 +22,7 @@ export async function login(email: string, password: string): Promise<User> {
     localStorage.setItem('token', data.token);
   }
   return data.user;
+}
 
 export function logout() {
   localStorage.removeItem('token');
