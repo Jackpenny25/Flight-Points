@@ -264,7 +264,7 @@ export function Rewards({ userRole }: RewardsProps) {
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Input
                   value={winnerValue}
-                  onChange={(e) => setWinnerInputs((prev) => ({ ...prev, [reward.id]: e.target.value }))
+                  onChange={(e) => setWinnerInputs((prev) => ({ ...prev, [reward.id]: e.target.value }))}
                   placeholder="Winner name"
                 />
                 <Button
