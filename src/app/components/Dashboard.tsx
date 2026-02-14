@@ -14,7 +14,7 @@ import { CadetsManager } from './CadetsManager';
 import { AttendanceManager } from './AttendanceManager';
 import { DataIntegrity } from './DataIntegrity';
 import { ReportsExport } from './ReportsExport';
-import { api } from '../../../utils/api';
+import { api } from '../../utils/api';
 import { exportAllCsvs } from './downloadCsvUtil';
 import AdminSignups from './AdminSignups';
 import { MyPoints } from './MyPoints';
