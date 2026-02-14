@@ -1,9 +1,5 @@
 import { useState, useEffect } from 'react';
-<<<<<<< HEAD
-import Login from '../../components/Login';
-=======
-import { Login } from './components/Login';
->>>>>>> bc206a3ead2384a07e8c1b608c6d43ec57fd1321
+import Login from '../components/Login';
 import Dashboard from './components/Dashboard';
 import { Toaster } from './components/ui/sonner';
 import { getToken, isAuthenticated, logout } from '../utils/auth';

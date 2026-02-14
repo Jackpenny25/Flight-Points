@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../../utils/api';
 import { getToken } from '../../utils/auth';
@@ -83,11 +84,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     ensureAdminPin();
   };
 
-  useEffect(() => {
-    fetchPoints();
-    fetchCadets();
-  }, []);
-
+  // Fetch points from API
   const fetchPoints = async () => {
     setLoading(true);
     try {
@@ -105,6 +102,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     }
   };
 
+  // Fetch cadets from API
   const fetchCadets = async () => {
     try {
       const data = await api.getCadets();
@@ -113,6 +111,11 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       toast.error('Failed to fetch cadets');
     }
   };
+
+  useEffect(() => {
+    fetchPoints();
+    fetchCadets();
+  }, []);
 
   // Smart name matching: allows partial last names, handles siblings
   const matchCadetByPartialName = (input: string): { cadet: any; ambiguous: boolean } | null => {
@@ -143,7 +146,6 @@ export function PointsManager({ userRole }: PointsManagerProps) {
   };
 
   const validateNames = (namesInput: string) => {
-    ]/)
     if (!namesInput.trim()) {
       setDuplicateWarning([]);
       setInvalidNames([]);
@@ -172,23 +174,19 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     setInvalidNames([...invalid, ...ambiguous]);
   };
 
+
   useEffect(() => {
     validateNames(multipleNames);
   }, [multipleNames, cadets]);
 
   const handleAddPoints = async (e: React.FormEvent) => {
     e.preventDefault();
-    const names = multipleNames
-      .split(/[,
-]/)
-      .map(name => name.trim())
-      .filter(name => name.length > 0);
-    if (names.length === 0) {
+    if (!multipleNames.trim()) {
       toast.error('Please enter at least one cadet name');
       return;
     }
     if (invalidNames.length > 0) {
-      toast.error(`Invalid or ambiguous names - please fix before submitting`);
+      toast.error('Invalid or ambiguous names - please fix before submitting');
       return;
     }
     if (!selectedFlight) {
@@ -197,6 +195,10 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     }
     setSubmitting(true);
     try {
+      const names = multipleNames
+        .split(/[\,\n]/)
+        .map(name => name.trim())
+        .filter(name => name.length > 0);
       const resolvedNames = names.map(name => {
         const match = matchCadetByPartialName(name);
         return match ? match.cadet.name : name;
@@ -585,9 +587,9 @@ export function PointsManager({ userRole }: PointsManagerProps) {
         </CardContent>
       </Card>
       )}
-      </div>
+    </div>
 
-      {canAdmin && (
+    {canAdmin && (
         <Card>
           <CardHeader>
             <CardTitle>Cadet Totals & Clear</CardTitle>

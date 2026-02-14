@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { FileStorage } from '../../../utils/fileStorage';
+import { FileStorage } from '../../utils/fileStorage';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { api } from '../../utils/api';

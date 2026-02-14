@@ -3,7 +3,7 @@ import { Bell } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
-import { api } from '../../../utils/api';
+import { api } from '../../utils/api';
 
 interface Notification {
   id: string;
