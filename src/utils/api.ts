@@ -1,7 +1,7 @@
 // src/utils/api.ts
 import { getToken } from './auth';
 
-const API_URL = 'https://flightpoints.uk/api';
+const API_URL = 'http://192.168.1.68:3001/api';
 
 function fetchWithAuth(url: string, options: RequestInit = {}) {
   const token = getToken();
