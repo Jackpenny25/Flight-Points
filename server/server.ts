@@ -587,8 +587,15 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   }
 });
 
-// Serve static files from dist directory
+// Serve static files from the dist folder
 app.use(express.static(path.join(__dirname, '../dist')));
+
+// For any route not starting with /api, serve index.html (SPA fallback)
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+  }
+});
 
 // Start server
 app.listen(PORT, () => {
