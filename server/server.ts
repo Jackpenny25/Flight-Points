@@ -59,7 +59,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
-app.use('/uploads', express.static(UPLOADS_DIR));
 
 // JWT secret
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
@@ -588,6 +587,7 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 });
 
 // Serve static files from the dist folder
+app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.static(path.join(__dirname, '../dist')));
 
 // SPA fallback - must be AFTER all API routes
