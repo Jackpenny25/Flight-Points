@@ -586,9 +586,11 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     res.status(500).json({ error: 'Failed to handle file upload' });
   }
 });
+
+// Serve static files from dist directory
+app.use(express.static(path.join(__dirname, '../dist')));
+
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`Data directory: ${DATA_DIR}`);
-  console.log(`Uploads directory: ${UPLOADS_DIR}`);
 });
