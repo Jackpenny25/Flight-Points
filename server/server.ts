@@ -53,8 +53,9 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 // Middleware
 app.use(cors({
-  origin: true,
+  origin: ['https://flightpoints.uk', 'https://api.flightpoints.uk'],
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
