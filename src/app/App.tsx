@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import Login from '../components/Login';
+import { Login } from './components/Login';
 import Dashboard from './components/Dashboard';
 import { Toaster } from './components/ui/sonner';
 import { getToken, isAuthenticated, logout } from '../utils/auth';
@@ -20,7 +20,7 @@ export default function App() {
     setLoading(false);
   }, []);
 
-  const handleLogin = () => {
+  const handleLogin = (accessToken: string, user: any) => {
     setAuthed(true);
   };
 

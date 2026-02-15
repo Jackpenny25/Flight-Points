@@ -19,8 +19,8 @@
   --destructive: #C8102E;
   --destructive-foreground: #ffffff;
   --border: rgba(93, 138, 168, 0.2);
-  --input: transparent;
-  --input-background: #f8fafc;
+  --input: #e5e7eb; /* Light gray for better visibility */
+  --input-background: #ffffff; /* White background for input fields */
   --switch-background: #cbd5e1;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
@@ -59,7 +59,8 @@
   --destructive: oklch(0.396 0.141 25.723);
   --destructive-foreground: oklch(0.637 0.237 25.331);
   --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
+  --input: #374151; /* Dark gray for dark theme */
+  --input-background: #1f2937; /* Darker background for input fields */
   --ring: oklch(0.439 0 0);
   --font-weight-medium: 500;
   --font-weight-normal: 400;
