@@ -1,7 +1,7 @@
 // src/utils/auth.ts
 import { useState } from 'react';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'https://flightpoints.uk/api';
 
 export interface User {
   id: string;
@@ -21,12 +21,33 @@ export async function login(email: string, password: string): Promise<User> {
   const data = await res.json();
   if (data.token) {
     localStorage.setItem('token', data.token);
+    
+    // Decode JWT to extract user data
+    try {
+      const payload = JSON.parse(atob(data.token.split('.')[1]));
+      const user = {
+        id: payload.id,
+        email: payload.email,
+        name: payload.name,
+        role: payload.role,
+        user_metadata: {
+          name: payload.name,
+          role: payload.role,
+          cadetName: payload.cadetName
+        }
+      };
+      localStorage.setItem('user', JSON.stringify(user));
+      return user;
+    } catch (err) {
+      console.error('Failed to decode token:', err);
+    }
   }
   return data.user;
 }
 
 export function logout() {
   localStorage.removeItem('token');
+  localStorage.removeItem('user');
   localStorage.removeItem('localStore_73a3871f_v1');
   // Remove any Supabase-related keys
   Object.keys(localStorage).forEach(key => {
@@ -42,4 +63,14 @@ export function getToken(): string | null {
 
 export function isAuthenticated(): boolean {
   return !!getToken();
+}
+
+export function getUser(): User | null {
+  const userStr = localStorage.getItem('user');
+  if (!userStr) return null;
+  try {
+    return JSON.parse(userStr);
+  } catch {
+    return null;
+  }
 }

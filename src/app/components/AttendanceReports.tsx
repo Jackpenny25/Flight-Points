@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { projectId } from '../../../utils/supabase/info';
+import { api } from '../../utils/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
@@ -38,23 +38,13 @@ export function AttendanceReports({ accessToken }: AttendanceReportsProps) {
 
   const fetchAttendanceReports = async () => {
     try {
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/attendance-summary`,
-        { headers }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setSummary(data.summary || []);
-        setStats(data.stats || {
-          totalPresent: 0,
-          totalAbsent: 0,
-          averageAttendanceRate: 0,
-        });
-      }
+      const data = await api.getAttendanceSummary();
+      setSummary(data.summary || []);
+      setStats(data.stats || {
+        totalPresent: 0,
+        totalAbsent: 0,
+        averageAttendanceRate: 0,
+      });
     } catch (error) {
       console.error('Error fetching attendance reports:', error);
       toast.error('Failed to fetch attendance reports');

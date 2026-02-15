@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { MessageSquare } from 'lucide-react';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { api } from '../../utils/api';
 import { toast } from 'sonner';
 
 interface TicketsProps {
@@ -31,10 +31,7 @@ export function Tickets({ accessToken }: TicketsProps) {
   const fetchTickets = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/tickets`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const data = await res.json();
+      const data = await api.getTickets();
       setTickets(data.tickets || []);
     } catch (e) {
       console.error('Fetch tickets error', e);
@@ -59,28 +56,11 @@ export function Tickets({ accessToken }: TicketsProps) {
         // Upload via server to bypass Storage RLS
         const fd = new FormData();
         fd.append('file', file);
-        const up = await fetch(`https://${projectId}.supabase.co/functions/v1/server/upload/ticket-evidence`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
-          body: fd,
-        });
-        if (!up.ok) {
-          const err = await up.json().catch(() => ({}));
-          throw new Error(err.error || 'Upload failed');
-        }
-        const upData = await up.json();
+        const upData = await api.uploadTicketEvidence(fd);
         uploadedUrl = upData.url || null;
       }
 
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/tickets`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ type, category, description, evidenceUrl: uploadedUrl || evidenceUrl }),
-      });
-      if (!res.ok) throw new Error('Submit failed');
+      await api.createTicket({ type, category, description, evidenceUrl: uploadedUrl || evidenceUrl });
       toast.success('Ticket submitted');
       setDescription('');
       
@@ -103,12 +83,7 @@ export function Tickets({ accessToken }: TicketsProps) {
   const addComment = async () => {
     if (!commentText.trim() || !selectedTicket) return;
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/tickets/${selectedTicket.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ action: 'comment', comment: commentText }),
-      });
-      if (!res.ok) throw new Error('Failed to add comment');
+      await api.updateTicket(selectedTicket.id, { action: 'comment', comment: commentText });
       toast.success('Comment added');
       setCommentText('');
       await fetchTickets();

@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { FileStorage } from '../../utils/fileStorage';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { api } from '../../utils/api';
@@ -283,17 +282,13 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     setBulkRemoveConfirmText('');
 
     try {
-      const delHeaders: Record<string, string> = {};
-      if (accessToken) delHeaders['Authorization'] = `Bearer ${accessToken}`;
-
       const results = await Promise.all(ids.map(async (id) => {
         try {
-          const res = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/server/cadets/${id}`,
-            { method: 'DELETE', headers: delHeaders }
-          );
-          return res.ok ? { id, ok: true } : { id, ok: false };
-        } catch (e) { return { id, ok: false }; }
+          await api.deleteCadet(id);
+          return { id, ok: true };
+        } catch (e) { 
+          return { id, ok: false };
+        }
       }));
 
       const failed = results.filter(r => !r.ok);

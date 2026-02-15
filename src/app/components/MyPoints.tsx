@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { Award, TrendingUp, TrendingDown } from 'lucide-react';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { api } from '../../utils/api';
 
 interface MyPointsProps {
   accessToken: string;
@@ -34,23 +34,8 @@ export function MyPoints({ accessToken, cadetName }: MyPointsProps) {
   const fetchMyPoints = async () => {
     try {
       setLoading(true);
-      const functionBase = `https://${projectId}.supabase.co/functions/v1/server`;
       console.log('Fetching my points for:', cadetName);
-      const url = `${functionBase}/data/my-points?name=${encodeURIComponent(cadetName)}`;
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Failed to fetch points:', response.status, errorData);
-        throw new Error('Failed to fetch points');
-      }
-      
-      const data = await response.json();
+      const data = await api.getMyPoints(cadetName);
       console.log('Received points data:', data);
       setPoints(data.points || []);
       setTotal(data.total || 0);

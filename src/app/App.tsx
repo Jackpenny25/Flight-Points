@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { Login } from './components/Login';
 import Dashboard from './components/Dashboard';
 import { Toaster } from './components/ui/sonner';
-import { getToken, isAuthenticated, logout } from '../utils/auth';
+import { getToken, isAuthenticated, logout, getUser } from '../utils/auth';
 
 
 export default function App() {
   const [authed, setAuthed] = useState(isAuthenticated());
   const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [accessToken, setAccessToken] = useState<string>('');
 
   useEffect(() => {
     // Clean up legacy localStorage keys on app load
@@ -16,17 +18,31 @@ export default function App() {
         localStorage.removeItem(key);
       }
     });
-    setAuthed(isAuthenticated());
+    
+    // Load user and token from localStorage
+    const user = getUser();
+    const token = getToken();
+    
+    if (user && token) {
+      setCurrentUser(user);
+      setAccessToken(token);
+      setAuthed(true);
+    }
+    
     setLoading(false);
   }, []);
 
   const handleLogin = (accessToken: string, user: any) => {
+    setAccessToken(accessToken);
+    setCurrentUser(user);
     setAuthed(true);
   };
 
 
   const handleLogout = () => {
     logout();
+    setCurrentUser(null);
+    setAccessToken('');
     setAuthed(false);
   };
 
@@ -42,7 +58,7 @@ export default function App() {
   return (
     <>
       {authed ? (
-        <Dashboard onLogout={handleLogout} />
+        <Dashboard user={currentUser} accessToken={accessToken} onLogout={handleLogout} />
       ) : (
         <Login onLogin={handleLogin} />
       )}

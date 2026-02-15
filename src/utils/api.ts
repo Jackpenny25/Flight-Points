@@ -41,6 +41,49 @@ export const api = {
   getLeaderboards: () => fetchWithAuth('/leaderboards', { method: 'GET' }).then(r => r.json()),
   getReports: () => fetchWithAuth('/reports', { method: 'GET' }).then(r => r.json()),
   runIntegrityCheck: () => fetchWithAuth('/integrity-check', { method: 'POST' }).then(r => r.json()),
+  getAttendanceSummary: () => fetchWithAuth('/attendance-summary', { method: 'GET' }).then(r => r.json()),
+  
+  // Admin Point Givers
+  getPointGivers: () => fetchWithAuth('/admin/point-givers', { method: 'GET' }).then(r => r.json()),
+  
+  // Tickets
+  getTickets: () => fetchWithAuth('/tickets', { method: 'GET' }).then(r => r.json()),
+  createTicket: (data: any) => fetchWithAuth('/tickets', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+  updateTicket: (id: string, data: any) => fetchWithAuth(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => r.json()),
+  deleteTicket: (id: string) => fetchWithAuth(`/tickets/${id}`, { method: 'DELETE' }).then(r => r.json()),
+  uploadTicketEvidence: (formData: FormData) => {
+    const token = getToken();
+    return fetch(`${API_URL}/upload/ticket-evidence`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    }).then(r => r.json());
+  },
+  
+  // Notifications
+  getNotifications: () => fetchWithAuth('/notifications', { method: 'GET' }).then(r => r.json()),
+  markNotificationRead: (id: string) => fetchWithAuth(`/notifications/${id}/read`, { method: 'POST' }).then(r => r.json()),
+  markAllNotificationsRead: () => fetchWithAuth('/notifications/read-all', { method: 'POST' }).then(r => r.json()),
+  
+  // User's own points
+  getMyPoints: (cadetName: string) => fetchWithAuth(`/data/my-points?name=${encodeURIComponent(cadetName)}`, { method: 'GET' }).then(r => r.json()),
+  
+  // CSV Export
+  exportCsv: (type: string) => fetchWithAuth(`/export/${type}`, { method: 'GET' }).then(r => r.blob()),
+  
+  // Auth helpers
+  lookupEmail: (username: string) => fetch(`${API_URL}/auth/lookup-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username }),
+  }).then(r => r.json()),
+  
+  requestSignup: (data: { email: string; password: string; name: string; joinCode: string; flight: string }) => 
+    fetch(`${API_URL}/auth/request-signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(r => r.json()),
 };
 
 export { fetchWithAuth };

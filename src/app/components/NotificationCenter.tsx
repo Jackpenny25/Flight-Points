@@ -55,10 +55,7 @@ export function NotificationCenter({ accessToken }: Props) {
 
   const markAsRead = async (id: string) => {
     try {
-      await fetch(`https://${projectId}.supabase.co/functions/v1/server/notifications/${id}/read`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      await api.markNotificationRead(id);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     } catch (e) {
       console.error('Failed to mark notification as read:', e);
@@ -67,10 +64,7 @@ export function NotificationCenter({ accessToken }: Props) {
 
   const markAllAsRead = async () => {
     try {
-      await fetch(`https://${projectId}.supabase.co/functions/v1/server/notifications/read-all`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      await api.markAllNotificationsRead();
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     } catch (e) {
       console.error('Failed to mark all as read:', e);
