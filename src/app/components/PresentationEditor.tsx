@@ -12,16 +12,6 @@ import { toast } from 'sonner';
 interface PresentationSettings {
   slideDuration: number; // in seconds
   dataRefreshInterval: number; // in seconds
-  enabledSlides: {
-    winningCadet: boolean;
-    winningFlight: boolean;
-    topCadets: boolean;
-    topFlights: boolean;
-    recentActivity: boolean;
-    specialAchievements: boolean;
-    flightPointsSummary: boolean;
-    completeLeaderboard: boolean;
-  };
   customText: {
     squadronName: string;
     headerSubtitle: string;
@@ -36,24 +26,14 @@ interface PresentationSettings {
 const DEFAULT_SETTINGS: PresentationSettings = {
   slideDuration: 10,
   dataRefreshInterval: 30,
-  enabledSlides: {
-    winningCadet: true,
-    winningFlight: true,
-    topCadets: true,
-    topFlights: true,
-    recentActivity: true,
-    specialAchievements: true,
-    flightPointsSummary: true,
-    completeLeaderboard: true,
-  },
   customText: {
     squadronName: '2427 (Biggin Hill) Squadron',
     headerSubtitle: 'RAF Air Cadets',
   },
   colors: {
-    primaryColor: '#1e40af',
-    secondaryColor: '#7c3aed',
-    accentColor: '#f59e0b',
+    primaryColor: '#004B87',
+    secondaryColor: '#5b9bd5',
+    accentColor: '#dceaf6',
   },
 };
 
@@ -99,8 +79,6 @@ export function PresentationEditor() {
     setHasChanges(true);
   };
 
-  const enabledSlidesCount = Object.values(settings.enabledSlides).filter(Boolean).length;
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -121,9 +99,8 @@ export function PresentationEditor() {
       </div>
 
       <Tabs defaultValue="general" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="slides">Slides</TabsTrigger>
           <TabsTrigger value="branding">Branding</TabsTrigger>
           <TabsTrigger value="colors">Colors</TabsTrigger>
         </TabsList>
@@ -164,116 +141,6 @@ export function PresentationEditor() {
                   Leaderboard data will refresh every {settings.dataRefreshInterval} seconds
                 </p>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="slides" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Enabled Slides ({enabledSlidesCount}/8)</CardTitle>
-              <CardDescription>Choose which slides to include in the presentation</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="flightPointsSummary">Flight Points Summary</Label>
-                  <p className="text-sm text-muted-foreground">Shows flight totals and top cadet/flight side by side</p>
-                </div>
-                <Switch
-                  id="flightPointsSummary"
-                  checked={settings.enabledSlides.flightPointsSummary}
-                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'flightPointsSummary', checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="completeLeaderboard">Complete Leaderboard</Label>
-                  <p className="text-sm text-muted-foreground">Shows all cadets in a full ranking table</p>
-                </div>
-                <Switch
-                  id="completeLeaderboard"
-                  checked={settings.enabledSlides.completeLeaderboard}
-                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'completeLeaderboard', checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="winningCadet">Winning Cadet Slide</Label>
-                  <p className="text-sm text-muted-foreground">Shows the top cadet with highest points</p>
-                </div>
-                <Switch
-                  id="winningCadet"
-                  checked={settings.enabledSlides.winningCadet}
-                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'winningCadet', checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="winningFlight">Winning Flight Slide</Label>
-                  <p className="text-sm text-muted-foreground">Shows the top flight with highest points</p>
-                </div>
-                <Switch
-                  id="winningFlight"
-                  checked={settings.enabledSlides.winningFlight}
-                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'winningFlight', checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="topCadets">Top 5 Cadets Leaderboard</Label>
-                  <p className="text-sm text-muted-foreground">Displays the top 5 cadets with medals</p>
-                </div>
-                <Switch
-                  id="topCadets"
-                  checked={settings.enabledSlides.topCadets}
-                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'topCadets', checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="topFlights">Top 3 Flights Leaderboard</Label>
-                  <p className="text-sm text-muted-foreground">Displays the top 3 flights with medals</p>
-                </div>
-                <Switch
-                  id="topFlights"
-                  checked={settings.enabledSlides.topFlights}
-                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'topFlights', checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="recentActivity">Recent Points Activity</Label>
-                  <p className="text-sm text-muted-foreground">Shows the latest 5 point awards</p>
-                </div>
-                <Switch
-                  id="recentActivity"
-                  checked={settings.enabledSlides.recentActivity}
-                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'recentActivity', checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="specialAchievements">Special Achievements</Label>
-                  <p className="text-sm text-muted-foreground">Highlights special accomplishments</p>
-                </div>
-                <Switch
-                  id="specialAchievements"
-                  checked={settings.enabledSlides.specialAchievements}
-                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'specialAchievements', checked)}
-                />
-              </div>
-
-              {enabledSlidesCount === 0 && (
-                <p className="text-sm text-red-600">⚠️ Warning: You must enable at least one slide</p>
-              )}
             </CardContent>
           </Card>
         </TabsContent>
