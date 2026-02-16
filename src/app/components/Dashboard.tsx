@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from './ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileSpreadsheet, FileText, Gift } from 'lucide-react';
+import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileSpreadsheet, FileText, Gift, Presentation } from 'lucide-react';
 import { PointsManager } from './PointsManager';
 import { Leaderboards } from './Leaderboards';
 import { AdminPointGivers } from './AdminPointGivers';
@@ -23,6 +23,7 @@ import { Tickets } from './Tickets';
 import { TicketsAdmin } from './TicketsAdmin';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { Rewards } from './Rewards';
+import { PresentationMode } from './PresentationMode';
 
 interface DashboardProps {
   user: any;
@@ -53,6 +54,9 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<string>('leaderboards');
   const [adminPendingCount, setAdminPendingCount] = useState<number>(0);
   const [ticketsCount, setTicketsCount] = useState<number>(0);
+  
+  // Presentation Mode state
+  const [showPresentationMode, setShowPresentationMode] = useState<boolean>(false);
   
   // Name change dialog state
   const [nameChangeDialogOpen, setNameChangeDialogOpen] = useState<boolean>(false);
@@ -304,6 +308,15 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                   <p className="text-xs text-gray-500">{displayRole}</p>
                 )}
               </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowPresentationMode(true)}
+                className="bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700 border-0"
+              >
+                <Presentation className="size-4 mr-2" />
+                Presentation Mode
+              </Button>
               <Button variant="outline" size="sm" onClick={onLogout}>
                 <LogOut className="size-4 mr-2" />
                 Logout
@@ -608,6 +621,11 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Presentation Mode */}
+      {showPresentationMode && (
+        <PresentationMode onClose={() => setShowPresentationMode(false)} />
+      )}
     </div>
   );
 }
