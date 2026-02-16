@@ -37,10 +37,13 @@ export const api = {
   updateAttendance: (id: string, data: Partial<Attendance>) => fetchWithAuth(`/data/attendance/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => r.json()),
   deleteAttendance: (id: string) => fetchWithAuth(`/data/attendance/${id}`, { method: 'DELETE' }).then(r => r.json()),
 
+  // Rewards
+  getRewards: () => fetchWithAuth('/data/rewards', { method: 'GET' }).then(r => r.json()),
+
   // Other endpoints
   getLeaderboards: () => fetchWithAuth('/leaderboards', { method: 'GET' }).then(r => r.json()),
   getReports: () => fetchWithAuth('/reports', { method: 'GET' }).then(r => r.json()),
-  runIntegrityCheck: () => fetchWithAuth('/integrity-check', { method: 'POST' }).then(r => r.json()),
+  runIntegrityCheck: () => fetchWithAuth('/integrity-check', { method: 'GET' }).then(r => r.json()),
   getAttendanceSummary: () => fetchWithAuth('/attendance-summary', { method: 'GET' }).then(r => r.json()),
   
   // Admin Point Givers
