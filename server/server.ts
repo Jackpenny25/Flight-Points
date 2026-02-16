@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
 import { query } from './db';
 
 // --- Types ---
@@ -51,6 +52,14 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage });
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.'
+});
+
 // Middleware
 app.use(cors({
   origin: ['https://flightpoints.uk', 'https://api.flightpoints.uk'],
@@ -59,6 +68,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+app.use('/api/', limiter);
 
 // JWT secret
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
