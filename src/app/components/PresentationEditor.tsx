@@ -12,6 +12,11 @@ import { toast } from 'sonner';
 interface PresentationSettings {
   slideDuration: number; // in seconds
   dataRefreshInterval: number; // in seconds
+  enabledSlides: {
+    flightPoints: boolean;
+    recentActivity: boolean;
+    completeLeaderboard: boolean;
+  };
   customText: {
     squadronName: string;
     headerSubtitle: string;
@@ -21,11 +26,23 @@ interface PresentationSettings {
     secondaryColor: string;
     accentColor: string;
   };
+  tableScale: number; // Scale multiplier for table sizes (0.5 - 1.5)
+  elementColors: {
+    tableHeaderBg?: string;
+    tableRowAlt?: string;
+    textColor?: string;
+    recentActivityBg?: string;
+  };
 }
 
 const DEFAULT_SETTINGS: PresentationSettings = {
   slideDuration: 10,
   dataRefreshInterval: 30,
+  enabledSlides: {
+    flightPoints: true,
+    recentActivity: true,
+    completeLeaderboard: true,
+  },
   customText: {
     squadronName: '2427 (Biggin Hill) Squadron',
     headerSubtitle: 'RAF Air Cadets',
@@ -35,6 +52,8 @@ const DEFAULT_SETTINGS: PresentationSettings = {
     secondaryColor: '#5b9bd5',
     accentColor: '#dceaf6',
   },
+  tableScale: 1,
+  elementColors: {},
 };
 
 export function PresentationEditor() {
@@ -79,6 +98,8 @@ export function PresentationEditor() {
     setHasChanges(true);
   };
 
+  const enabledSlidesCount = Object.values(settings.enabledSlides).filter(Boolean).length;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -99,8 +120,10 @@ export function PresentationEditor() {
       </div>
 
       <Tabs defaultValue="general" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="slides">Slides</TabsTrigger>
+          <TabsTrigger value="styling">Styling</TabsTrigger>
           <TabsTrigger value="branding">Branding</TabsTrigger>
           <TabsTrigger value="colors">Colors</TabsTrigger>
         </TabsList>
@@ -140,6 +163,178 @@ export function PresentationEditor() {
                 <p className="text-sm text-muted-foreground">
                   Leaderboard data will refresh every {settings.dataRefreshInterval} seconds
                 </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="slides" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Enabled Slides ({enabledSlidesCount}/3)</CardTitle>
+              <CardDescription>Choose which slides to include in the presentation</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="flightPoints">Flight Points Summary</Label>
+                  <p className="text-sm text-muted-foreground">Shows flight totals and top cadet/flight side by side</p>
+                </div>
+                <Switch
+                  id="flightPoints"
+                  checked={settings.enabledSlides.flightPoints}
+                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'flightPoints', checked)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="recentActivity">Recent Points Activity</Label>
+                  <p className="text-sm text-muted-foreground">Shows latest point awards with teal background</p>
+                </div>
+                <Switch
+                  id="recentActivity"
+                  checked={settings.enabledSlides.recentActivity}
+                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'recentActivity', checked)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="completeLeaderboard">Complete Leaderboard</Label>
+                  <p className="text-sm text-muted-foreground">Shows all cadets in a full ranking table</p>
+                </div>
+                <Switch
+                  id="completeLeaderboard"
+                  checked={settings.enabledSlides.completeLeaderboard}
+                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'completeLeaderboard', checked)}
+                />
+              </div>
+
+              {enabledSlidesCount === 0 && (
+                <p className="text-sm text-red-600">⚠️ Warning: You must enable at least one slide</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="styling" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Slide Styling</CardTitle>
+              <CardDescription>Customize the appearance of elements in your slides</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="tableScale">Table Size Scale: {settings.tableScale.toFixed(2)}x</Label>
+                <Input
+                  id="tableScale"
+                  type="range"
+                  min={0.5}
+                  max={1.5}
+                  step={0.05}
+                  value={settings.tableScale}
+                  onChange={(e) => updateSetting('tableScale', parseFloat(e.target.value))}
+                  className="w-full"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Adjust the size of tables and text in the presentation (50% - 150%)
+                </p>
+              </div>
+
+              <div className="space-y-4 pt-4 border-t">
+                <h3 className="font-semibold">Element Colors (Optional Overrides)</h3>
+                <p className="text-sm text-muted-foreground">Leave blank to use primary/secondary/accent colors</p>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="tableHeaderBg">Table Header Background</Label>
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        id="tableHeaderBg"
+                        type="color"
+                        value={settings.elementColors?.tableHeaderBg || settings.colors.secondaryColor}
+                        onChange={(e) => updateNestedSetting('elementColors', 'tableHeaderBg', e.target.value)}
+                        className="w-16 h-10"
+                      />
+                      <Input
+                        type="text"
+                        value={settings.elementColors?.tableHeaderBg || ''}
+                        onChange={(e) => updateNestedSetting('elementColors', 'tableHeaderBg', e.target.value)}
+                        placeholder="Use secondary color"
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="tableRowAlt">Alternate Row Background</Label>
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        id="tableRowAlt"
+                        type="color"
+                        value={settings.elementColors?.tableRowAlt || settings.colors.accentColor}
+                        onChange={(e) => updateNestedSetting('elementColors', 'tableRowAlt', e.target.value)}
+                        className="w-16 h-10"
+                      />
+                      <Input
+                        type="text"
+                        value={settings.elementColors?.tableRowAlt || ''}
+                        onChange={(e) => updateNestedSetting('elementColors', 'tableRowAlt', e.target.value)}
+                        placeholder="Use accent color"
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="textColor">Text Color</Label>
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        id="textColor"
+                        type="color"
+                        value={settings.elementColors?.textColor || settings.colors.primaryColor}
+                        onChange={(e) => updateNestedSetting('elementColors', 'textColor', e.target.value)}
+                        className="w-16 h-10"
+                      />
+                      <Input
+                        type="text"
+                        value={settings.elementColors?.textColor || ''}
+                        onChange={(e) => updateNestedSetting('elementColors', 'textColor', e.target.value)}
+                        placeholder="Use primary color"
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="recentActivityBg">Recent Activity Background</Label>
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        id="recentActivityBg"
+                        type="color"
+                        value={settings.elementColors?.recentActivityBg || '#4a7a8f'}
+                        onChange={(e) => updateNestedSetting('elementColors', 'recentActivityBg', e.target.value)}
+                        className="w-16 h-10"
+                      />
+                      <Input
+                        type="text"
+                        value={settings.elementColors?.recentActivityBg || ''}
+                        onChange={(e) => updateNestedSetting('elementColors', 'recentActivityBg', e.target.value)}
+                        placeholder="#4a7a8f (dark teal)"
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <Button 
+                  onClick={() => updateSetting('elementColors', {})} 
+                  variant="outline" 
+                  className="w-full"
+                >
+                  Clear All Element Color Overrides
+                </Button>
               </div>
             </CardContent>
           </Card>

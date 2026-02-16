@@ -24,6 +24,11 @@ interface LeaderboardData {
 interface PresentationSettings {
   slideDuration: number;
   dataRefreshInterval: number;
+  enabledSlides: {
+    flightPoints: boolean;
+    recentActivity: boolean;
+    completeLeaderboard: boolean;
+  };
   customText: {
     squadronName: string;
     headerSubtitle: string;
@@ -33,11 +38,23 @@ interface PresentationSettings {
     secondaryColor: string;
     accentColor: string;
   };
+  tableScale: number; // Scale multiplier for table sizes (0.5 - 1.5)
+  elementColors: {
+    tableHeaderBg?: string;
+    tableRowAlt?: string;
+    textColor?: string;
+    recentActivityBg?: string;
+  };
 }
 
 const DEFAULT_SETTINGS: PresentationSettings = {
   slideDuration: 10,
   dataRefreshInterval: 30,
+  enabledSlides: {
+    flightPoints: true,
+    recentActivity: true,
+    completeLeaderboard: true,
+  },
   customText: {
     squadronName: '2427 (Biggin Hill) Squadron',
     headerSubtitle: 'RAF Air Cadets',
@@ -47,6 +64,8 @@ const DEFAULT_SETTINGS: PresentationSettings = {
     secondaryColor: '#5b9bd5',
     accentColor: '#dceaf6',
   },
+  tableScale: 1,
+  elementColors: {},
 };
 
 const SLIDES = ['flightPoints', 'recentActivity', 'completeLeaderboard'] as const;
@@ -81,6 +100,9 @@ export function PresentationMode({
   const SLIDE_DURATION = settings.slideDuration * 1000;
   const DATA_REFRESH_INTERVAL = settings.dataRefreshInterval * 1000;
 
+  // Get only enabled slides
+  const enabledSlidesList = SLIDES.filter(slide => settings.enabledSlides[slide as keyof typeof settings.enabledSlides]);
+
   // Fetch leaderboard data
   const fetchData = useCallback(async () => {
     try {
@@ -103,27 +125,32 @@ export function PresentationMode({
   // Auto-advance slides
   useEffect(() => {
     if (isPaused || loading) return;
+    const enabledCount = enabledSlidesList.length;
+    if (enabledCount === 0) return;
     
     const slideInterval = setInterval(() => {
-      setCurrentSlide(prev => (prev + 1) % SLIDES.length);
+      setCurrentSlide(prev => (prev + 1) % enabledCount);
     }, SLIDE_DURATION);
     
     return () => clearInterval(slideInterval);
-  }, [isPaused, loading]);
+  }, [isPaused, loading, enabledSlidesList.length]);
 
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const enabledCount = enabledSlidesList.length;
+      if (enabledCount === 0) return;
+      
       switch (e.key) {
         case 'Escape':
           exitFullscreen();
           onClose();
           break;
         case 'ArrowLeft':
-          setCurrentSlide(prev => (prev - 1 + SLIDES.length) % SLIDES.length);
+          setCurrentSlide(prev => (prev - 1 + enabledCount) % enabledCount);
           break;
         case 'ArrowRight':
-          setCurrentSlide(prev => (prev + 1) % SLIDES.length);
+          setCurrentSlide(prev => (prev + 1) % enabledCount);
           break;
         case ' ':
           e.preventDefault();
@@ -176,7 +203,15 @@ export function PresentationMode({
       );
     }
 
-    const slideType = SLIDES[currentSlide];
+    if (enabledSlidesList.length === 0) {
+      return (
+        <div className="flex items-center justify-center w-full h-full">
+          <div className="text-gray-500 text-5xl font-light">No slides enabled</div>
+        </div>
+      );
+    }
+
+    const slideType = enabledSlidesList[currentSlide];
     
     switch (slideType) {
       case 'flightPoints':
@@ -212,7 +247,7 @@ export function PresentationMode({
 
       {/* Progress Dots */}
       <div className="absolute bottom-24 left-0 right-0 flex justify-center gap-3 z-10">
-        {Array.from({ length: SLIDES.length }).map((_, index) => (
+        {Array.from({ length: enabledSlidesList.length }).map((_, index) => (
           <button
             key={index}
             onClick={() => setCurrentSlide(index)}
@@ -231,7 +266,7 @@ export function PresentationMode({
         className="absolute bottom-24 right-12 text-sm font-medium z-10"
         style={{ color: settings.colors.primaryColor }}
       >
-        {currentSlide + 1} / {SLIDES.length}
+        {currentSlide + 1} / {enabledSlidesList.length}
       </div>
 
       {/* Controls */}
@@ -239,7 +274,7 @@ export function PresentationMode({
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setCurrentSlide(prev => (prev - 1 + SLIDES.length) % SLIDES.length)}
+          onClick={() => setCurrentSlide(prev => (prev - 1 + enabledSlidesList.length) % enabledSlidesList.length)}
           className="h-10 w-10"
           style={{
             backgroundColor: settings.colors.accentColor,
@@ -267,7 +302,7 @@ export function PresentationMode({
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setCurrentSlide(prev => (prev + 1) % SLIDES.length)}
+          onClick={() => setCurrentSlide(prev => (prev + 1) % enabledSlidesList.length)}
           className="h-10 w-10"
           style={{
             backgroundColor: settings.colors.accentColor,
@@ -317,12 +352,15 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
   const flightTotals = data.flightLeaderboard || [];
   const winningCadet = data.winningCadet;
   const winningFlight = data.winningFlight;
+  const headerBg = settings.elementColors?.tableHeaderBg || settings.colors.secondaryColor;
+  const rowAltBg = settings.elementColors?.tableRowAlt || settings.colors.accentColor;
+  const textCol = settings.elementColors?.textColor || settings.colors.primaryColor;
 
   return (
-    <div className="w-full max-w-7xl mx-auto">
+    <div className="w-full max-w-7xl mx-auto" style={{ transform: `scale(${settings.tableScale})`, transformOrigin: 'center' }}>
       <h1 
         className="text-6xl font-bold text-center mb-12"
-        style={{ color: settings.colors.primaryColor, textDecoration: 'underline' }}
+        style={{ color: textCol, textDecoration: 'underline' }}
       >
         Flight points:
       </h1>
@@ -332,14 +370,14 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
         <div>
           <h2 
             className="text-4xl font-bold mb-6"
-            style={{ color: settings.colors.primaryColor }}
+            style={{ color: textCol }}
           >
             Flight point totals:
           </h2>
           
-          <table className="w-full border-2" style={{ borderColor: settings.colors.secondaryColor }}>
+          <table className="w-full border-2" style={{ borderColor: headerBg }}>
             <thead>
-              <tr style={{ backgroundColor: settings.colors.secondaryColor }}>
+              <tr style={{ backgroundColor: headerBg }}>
                 <th className="p-3 text-left text-white font-bold text-2xl">Flight</th>
                 <th className="p-3 text-right text-white font-bold text-2xl">Points</th>
               </tr>
@@ -349,19 +387,19 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
                 <tr
                   key={flight.flight}
                   style={{
-                    backgroundColor: idx % 2 === 0 ? settings.colors.accentColor : '#ffffff',
-                    borderTop: `2px solid ${settings.colors.secondaryColor}`
+                    backgroundColor: idx % 2 === 0 ? rowAltBg : '#ffffff',
+                    borderTop: `2px solid ${headerBg}`
                   }}
                 >
                   <td 
                     className="p-3 text-left text-2xl font-bold"
-                    style={{ color: settings.colors.primaryColor }}
+                    style={{ color: textCol }}
                   >
                     {flight.flight} Flight
                   </td>
                   <td 
                     className="p-3 text-right text-2xl font-bold"
-                    style={{ color: settings.colors.primaryColor }}
+                    style={{ color: textCol }}
                   >
                     {flight.points}
                   </td>
@@ -375,7 +413,7 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
         <div>
           <h2 
             className="text-4xl font-bold mb-6"
-            style={{ color: settings.colors.primaryColor }}
+            style={{ color: textCol }}
           >
             Who has the most points:
           </h2>
@@ -383,9 +421,9 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
           <div className="space-y-6">
             {/* Winning Cadet */}
             {winningCadet && (
-              <table className="w-full border-2" style={{ borderColor: settings.colors.secondaryColor }}>
+              <table className="w-full border-2" style={{ borderColor: headerBg }}>
                 <thead>
-                  <tr style={{ backgroundColor: settings.colors.secondaryColor }}>
+                  <tr style={{ backgroundColor: headerBg }}>
                     <th className="p-3 text-left text-white font-bold text-xl">Winning cadet</th>
                     <th className="p-3 text-right text-white font-bold text-xl">Points</th>
                   </tr>
@@ -394,13 +432,13 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
                   <tr style={{ backgroundColor: '#ffffff' }}>
                     <td 
                       className="p-3 text-left text-2xl font-bold"
-                      style={{ color: settings.colors.primaryColor }}
+                      style={{ color: textCol }}
                     >
                       {winningCadet.name}
                     </td>
                     <td 
                       className="p-3 text-right text-2xl font-bold"
-                      style={{ color: settings.colors.primaryColor }}
+                      style={{ color: textCol }}
                     >
                       {winningCadet.points}
                     </td>
@@ -411,9 +449,9 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
             
             {/* Winning Flight */}
             {winningFlight && (
-              <table className="w-full border-2" style={{ borderColor: settings.colors.secondaryColor }}>
+              <table className="w-full border-2" style={{ borderColor: headerBg }}>
                 <thead>
-                  <tr style={{ backgroundColor: settings.colors.secondaryColor }}>
+                  <tr style={{ backgroundColor: headerBg }}>
                     <th className="p-3 text-left text-white font-bold text-xl">Flight</th>
                     <th className="p-3 text-right text-white font-bold text-xl">Points</th>
                   </tr>
@@ -422,13 +460,13 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
                   <tr style={{ backgroundColor: '#ffffff' }}>
                     <td 
                       className="p-3 text-left text-2xl font-bold"
-                      style={{ color: settings.colors.primaryColor }}
+                      style={{ color: textCol }}
                     >
                       {winningFlight.flight} Flight
                     </td>
                     <td 
                       className="p-3 text-right text-2xl font-bold"
-                      style={{ color: settings.colors.primaryColor }}
+                      style={{ color: textCol }}
                     >
                       {winningFlight.points}
                     </td>
@@ -446,69 +484,75 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
 // SLIDE 2: Who Got Points Recently
 function SlideRecentActivity({ data, settings }: { data: LeaderboardData; settings: PresentationSettings }) {
   const recentPoints = data.recentPoints.slice(0, 12); // Show top 12 recent
+  const bgColor = settings.elementColors?.recentActivityBg || '#4a7a8f';
+  const headerBg = settings.elementColors?.tableHeaderBg || settings.colors.secondaryColor;
+  const rowAltBg = settings.elementColors?.tableRowAlt || settings.colors.accentColor;
+  const textCol = settings.elementColors?.textColor || settings.colors.primaryColor;
 
   return (
     <div 
       className="w-full h-full flex flex-col items-center justify-center px-12"
-      style={{ backgroundColor: '#4a7a8f' }}
+      style={{ backgroundColor: bgColor }}
     >
-      <h1 
-        className="text-5xl font-bold text-white mb-8"
-        style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.3)' }}
-      >
-        Who Got Points Recently
-      </h1>
+      <div style={{ transform: `scale(${settings.tableScale})`, transformOrigin: 'center' }}>
+        <h1 
+          className="text-5xl font-bold text-white mb-8"
+          style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.3)' }}
+        >
+          Who Got Points Recently
+        </h1>
 
-      <div 
-        className="w-full max-w-5xl rounded-lg overflow-hidden border-4"
-        style={{ backgroundColor: '#ffffff', borderColor: settings.colors.primaryColor }}
-      >
-        <table className="w-full">
-          <thead>
-            <tr style={{ backgroundColor: settings.colors.secondaryColor }}>
-              <th className="p-4 text-left text-white font-bold text-lg">Date</th>
-              <th className="p-4 text-left text-white font-bold text-lg">Name</th>
-              <th className="p-4 text-left text-white font-bold text-lg">Reason</th>
-              <th className="p-4 text-right text-white font-bold text-lg">Points</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recentPoints.map((point, idx) => (
-              <tr
-                key={point.id}
-                style={{
-                  backgroundColor: idx % 2 === 0 ? settings.colors.accentColor : '#ffffff',
-                  borderBottom: idx < recentPoints.length - 1 ? `1px solid ${settings.colors.accentColor}` : 'none'
-                }}
-              >
-                <td 
-                  className="p-4 text-left font-medium"
-                  style={{ color: settings.colors.primaryColor }}
-                >
-                  {new Date(point.date).toLocaleDateString('en-GB')}
-                </td>
-                <td 
-                  className="p-4 text-left font-medium"
-                  style={{ color: settings.colors.primaryColor }}
-                >
-                  {point.cadetName}
-                </td>
-                <td 
-                  className="p-4 text-left font-medium"
-                  style={{ color: settings.colors.primaryColor }}
-                >
-                  {point.reason}
-                </td>
-                <td 
-                  className="p-4 text-right font-bold text-lg"
-                  style={{ color: settings.colors.primaryColor }}
-                >
-                  {point.points}
-                </td>
+        <div 
+          className="w-full max-w-5xl rounded-lg overflow-hidden border-4"
+          style={{ backgroundColor: '#ffffff', borderColor: textCol }}
+        >
+          <table className="w-full">
+            <thead>
+              <tr style={{ backgroundColor: headerBg }}>
+                <th className="p-4 text-left text-white font-bold text-lg">Date</th>
+                <th className="p-4 text-left text-white font-bold text-lg">Name</th>
+                <th className="p-4 text-left text-white font-bold text-lg">Reason</th>
+                <th className="p-4 text-right text-white font-bold text-lg">Points</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {recentPoints.map((point, idx) => (
+                <tr
+                  key={point.id}
+                  style={{
+                    backgroundColor: idx % 2 === 0 ? rowAltBg : '#ffffff',
+                    borderBottom: idx < recentPoints.length - 1 ? `1px solid ${rowAltBg}` : 'none'
+                  }}
+                >
+                  <td 
+                    className="p-4 text-left font-medium"
+                    style={{ color: textCol }}
+                  >
+                    {new Date(point.date).toLocaleDateString('en-GB')}
+                  </td>
+                  <td 
+                    className="p-4 text-left font-medium"
+                    style={{ color: textCol }}
+                  >
+                    {point.cadetName}
+                  </td>
+                  <td 
+                    className="p-4 text-left font-medium"
+                    style={{ color: textCol }}
+                  >
+                    {point.reason}
+                  </td>
+                  <td 
+                    className="p-4 text-right font-bold text-lg"
+                    style={{ color: textCol }}
+                  >
+                    {point.points}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -517,10 +561,13 @@ function SlideRecentActivity({ data, settings }: { data: LeaderboardData; settin
 // SLIDE 3: Complete Leaderboard
 function SlideCompleteLeaderboard({ data, settings }: { data: LeaderboardData; settings: PresentationSettings }) {
   const leaderboard = data.cadetLeaderboard || [];
+  const headerBg = settings.elementColors?.tableHeaderBg || settings.colors.secondaryColor;
+  const rowAltBg = settings.elementColors?.tableRowAlt || settings.colors.accentColor;
+  const textCol = settings.elementColors?.textColor || settings.colors.primaryColor;
 
   if (leaderboard.length === 0) {
     return (
-      <div className="flex items-center justify-center w-full h-full text-4xl" style={{ color: settings.colors.primaryColor }}>
+      <div className="flex items-center justify-center w-full h-full text-4xl" style={{ color: textCol }}>
         Loading leaderboard...
       </div>
     );
@@ -531,70 +578,72 @@ function SlideCompleteLeaderboard({ data, settings }: { data: LeaderboardData; s
       className="w-full h-full flex flex-col items-center justify-center px-6"
       style={{ backgroundColor: '#ffffff' }}
     >
-      <h1 
-        className="text-5xl font-bold mb-8"
-        style={{ color: settings.colors.primaryColor }}
-      >
-        Complete Leaderboard
-      </h1>
+      <div style={{ transform: `scale(${settings.tableScale})`, transformOrigin: 'center', width: '100%', maxWidth: '1280px' }}>
+        <h1 
+          className="text-5xl font-bold mb-8 text-center"
+          style={{ color: textCol }}
+        >
+          Complete Leaderboard
+        </h1>
 
-      <div 
-        className="w-full max-w-6xl rounded-lg overflow-hidden border-2"
-        style={{ borderColor: settings.colors.secondaryColor, maxHeight: '70vh', overflowY: 'auto' }}
-      >
-        <table className="w-full">
-          <thead style={{ position: 'sticky', top: 0 }}>
-            <tr style={{ backgroundColor: settings.colors.secondaryColor }}>
-              <th className="p-3 text-center text-white font-bold text-base">Rank</th>
-              <th className="p-3 text-left text-white font-bold text-base">Cadet Name</th>
-              <th className="p-3 text-center text-white font-bold text-base">Flight points</th>
-              <th className="p-3 text-center text-white font-bold text-base">Attendance</th>
-              <th className="p-3 text-center text-white font-bold text-base">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leaderboard.map((cadet, idx) => (
-              <tr
-                key={cadet.name}
-                style={{
-                  backgroundColor: idx % 2 === 0 ? settings.colors.accentColor : '#ffffff',
-                  borderBottom: `1px solid ${settings.colors.secondaryColor}`
-                }}
-              >
-                <td 
-                  className="p-3 text-center font-bold text-base"
-                  style={{ color: settings.colors.primaryColor }}
-                >
-                  {idx + 1}
-                </td>
-                <td 
-                  className="p-3 text-left font-medium text-base"
-                  style={{ color: settings.colors.primaryColor }}
-                >
-                  {cadet.name}
-                </td>
-                <td 
-                  className="p-3 text-center font-medium text-base"
-                  style={{ color: settings.colors.primaryColor }}
-                >
-                  {cadet.points}
-                </td>
-                <td 
-                  className="p-3 text-center font-medium text-base"
-                  style={{ color: settings.colors.primaryColor }}
-                >
-                  0
-                </td>
-                <td 
-                  className="p-3 text-center font-bold text-base"
-                  style={{ color: settings.colors.primaryColor }}
-                >
-                  {cadet.points}
-                </td>
+        <div 
+          className="w-full rounded-lg overflow-hidden border-2"
+          style={{ borderColor: headerBg, maxHeight: '70vh', overflowY: 'auto' }}
+        >
+          <table className="w-full">
+            <thead style={{ position: 'sticky', top: 0 }}>
+              <tr style={{ backgroundColor: headerBg }}>
+                <th className="p-3 text-center text-white font-bold text-base">Rank</th>
+                <th className="p-3 text-left text-white font-bold text-base">Cadet Name</th>
+                <th className="p-3 text-center text-white font-bold text-base">Flight points</th>
+                <th className="p-3 text-center text-white font-bold text-base">Attendance</th>
+                <th className="p-3 text-center text-white font-bold text-base">Total</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {leaderboard.map((cadet, idx) => (
+                <tr
+                  key={cadet.name}
+                  style={{
+                    backgroundColor: idx % 2 === 0 ? rowAltBg : '#ffffff',
+                    borderBottom: `1px solid ${headerBg}`
+                  }}
+                >
+                  <td 
+                    className="p-3 text-center font-bold text-base"
+                    style={{ color: textCol }}
+                  >
+                    {idx + 1}
+                  </td>
+                  <td 
+                    className="p-3 text-left font-medium text-base"
+                    style={{ color: textCol }}
+                  >
+                    {cadet.name}
+                  </td>
+                  <td 
+                    className="p-3 text-center font-medium text-base"
+                    style={{ color: textCol }}
+                  >
+                    {cadet.points}
+                  </td>
+                  <td 
+                    className="p-3 text-center font-medium text-base"
+                    style={{ color: textCol }}
+                  >
+                    0
+                  </td>
+                  <td 
+                    className="p-3 text-center font-bold text-base"
+                    style={{ color: textCol }}
+                  >
+                    {cadet.points}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
