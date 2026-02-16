@@ -45,6 +45,30 @@ interface PresentationSettings {
     textColor?: string;
     recentActivityBg?: string;
   };
+  // Individual slide customization
+  slideCustomization?: {
+    flightPoints?: {
+      title?: string;
+      leftTableTitle?: string;
+      rightTableTitle?: string;
+      leftTableScale?: number;
+      rightTableScale?: number;
+      titleFontSize?: number;
+      sectionTitleFontSize?: number;
+      tableFontSize?: number;
+    };
+    recentActivity?: {
+      title?: string;
+      rowCount?: number;
+      tableFontSize?: number;
+      titleFontSize?: number;
+    };
+    completeLeaderboard?: {
+      title?: string;
+      tableFontSize?: number;
+      titleFontSize?: number;
+    };
+  };
 }
 
 const DEFAULT_SETTINGS: PresentationSettings = {
@@ -66,6 +90,29 @@ const DEFAULT_SETTINGS: PresentationSettings = {
   },
   tableScale: 1,
   elementColors: {},
+  slideCustomization: {
+    flightPoints: {
+      title: 'Flight points:',
+      leftTableTitle: 'Flight point totals:',
+      rightTableTitle: 'Who has the most points:',
+      leftTableScale: 1,
+      rightTableScale: 1,
+      titleFontSize: 60,
+      sectionTitleFontSize: 40,
+      tableFontSize: 24,
+    },
+    recentActivity: {
+      title: 'Who Got Points Recently',
+      rowCount: 12,
+      tableFontSize: 16,
+      titleFontSize: 50,
+    },
+    completeLeaderboard: {
+      title: 'Complete Leaderboard',
+      tableFontSize: 16,
+      titleFontSize: 50,
+    },
+  },
 };
 
 const SLIDES = ['flightPoints', 'recentActivity', 'completeLeaderboard'] as const;
@@ -88,6 +135,11 @@ export function PresentationMode({
         customText: { ...DEFAULT_SETTINGS.customText, ...(propSettings.customText || {}) },
         colors: { ...DEFAULT_SETTINGS.colors, ...(propSettings.colors || {}) },
         elementColors: { ...DEFAULT_SETTINGS.elementColors, ...(propSettings.elementColors || {}) },
+        slideCustomization: {
+          flightPoints: { ...DEFAULT_SETTINGS.slideCustomization!.flightPoints, ...(propSettings.slideCustomization?.flightPoints || {}) },
+          recentActivity: { ...DEFAULT_SETTINGS.slideCustomization!.recentActivity, ...(propSettings.slideCustomization?.recentActivity || {}) },
+          completeLeaderboard: { ...DEFAULT_SETTINGS.slideCustomization!.completeLeaderboard, ...(propSettings.slideCustomization?.completeLeaderboard || {}) },
+        },
       };
     }
     const saved = localStorage.getItem('presentationSettings');
@@ -102,6 +154,11 @@ export function PresentationMode({
           customText: { ...DEFAULT_SETTINGS.customText, ...(parsed.customText || {}) },
           colors: { ...DEFAULT_SETTINGS.colors, ...(parsed.colors || {}) },
           elementColors: { ...DEFAULT_SETTINGS.elementColors, ...(parsed.elementColors || {}) },
+          slideCustomization: {
+            flightPoints: { ...DEFAULT_SETTINGS.slideCustomization!.flightPoints, ...(parsed.slideCustomization?.flightPoints || {}) },
+            recentActivity: { ...DEFAULT_SETTINGS.slideCustomization!.recentActivity, ...(parsed.slideCustomization?.recentActivity || {}) },
+            completeLeaderboard: { ...DEFAULT_SETTINGS.slideCustomization!.completeLeaderboard, ...(parsed.slideCustomization?.completeLeaderboard || {}) },
+          },
         };
       } catch {
         return DEFAULT_SETTINGS;
@@ -374,31 +431,42 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
   const headerBg = settings.elementColors?.tableHeaderBg || settings.colors.secondaryColor;
   const rowAltBg = settings.elementColors?.tableRowAlt || settings.colors.accentColor;
   const textCol = settings.elementColors?.textColor || settings.colors.primaryColor;
+  
+  // Individual slide customization
+  const custom = settings.slideCustomization?.flightPoints || DEFAULT_SETTINGS.slideCustomization!.flightPoints!;
+  const titleText = custom.title || 'Flight points:';
+  const leftTitle = custom.leftTableTitle || 'Flight point totals:';
+  const rightTitle = custom.rightTableTitle || 'Who has the most points:';
+  const leftScale = custom.leftTableScale || 1;
+  const rightScale = custom.rightTableScale || 1;
+  const titleSize = custom.titleFontSize || 60;
+  const sectionTitleSize = custom.sectionTitleFontSize || 40;
+  const tableSize = custom.tableFontSize || 24;
 
   return (
     <div className="w-full max-w-7xl mx-auto" style={{ transform: `scale(${settings.tableScale || 1})`, transformOrigin: 'center' }}>
       <h1 
-        className="text-6xl font-bold text-center mb-12"
-        style={{ color: textCol, textDecoration: 'underline' }}
+        className="font-bold text-center mb-12"
+        style={{ color: textCol, textDecoration: 'underline', fontSize: `${titleSize}px` }}
       >
-        Flight points:
+        {titleText}
       </h1>
       
       <div className="grid grid-cols-2 gap-12">
         {/* LEFT: Flight Point Totals */}
-        <div>
+        <div style={{ transform: `scale(${leftScale})`, transformOrigin: 'top left' }}>
           <h2 
-            className="text-4xl font-bold mb-6"
-            style={{ color: textCol }}
+            className="font-bold mb-6"
+            style={{ color: textCol, fontSize: `${sectionTitleSize}px` }}
           >
-            Flight point totals:
+            {leftTitle}
           </h2>
           
           <table className="w-full border-2" style={{ borderColor: headerBg }}>
             <thead>
               <tr style={{ backgroundColor: headerBg }}>
-                <th className="p-3 text-left text-white font-bold text-2xl">Flight</th>
-                <th className="p-3 text-right text-white font-bold text-2xl">Points</th>
+                <th className="p-3 text-left text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Flight</th>
+                <th className="p-3 text-right text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Points</th>
               </tr>
             </thead>
             <tbody>
@@ -411,14 +479,14 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
                   }}
                 >
                   <td 
-                    className="p-3 text-left text-2xl font-bold"
-                    style={{ color: textCol }}
+                    className="p-3 text-left font-bold"
+                    style={{ color: textCol, fontSize: `${tableSize}px` }}
                   >
                     {flight.flight} Flight
                   </td>
                   <td 
-                    className="p-3 text-right text-2xl font-bold"
-                    style={{ color: textCol }}
+                    className="p-3 text-right font-bold"
+                    style={{ color: textCol, fontSize: `${tableSize}px` }}
                   >
                     {flight.points}
                   </td>
@@ -429,12 +497,12 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
         </div>
         
         {/* RIGHT: Who has the most points */}
-        <div>
+        <div style={{ transform: `scale(${rightScale})`, transformOrigin: 'top right' }}>
           <h2 
-            className="text-4xl font-bold mb-6"
-            style={{ color: textCol }}
+            className="font-bold mb-6"
+            style={{ color: textCol, fontSize: `${sectionTitleSize}px` }}
           >
-            Who has the most points:
+            {rightTitle}
           </h2>
           
           <div className="space-y-6">
@@ -443,21 +511,21 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
               <table className="w-full border-2" style={{ borderColor: headerBg }}>
                 <thead>
                   <tr style={{ backgroundColor: headerBg }}>
-                    <th className="p-3 text-left text-white font-bold text-xl">Winning cadet</th>
-                    <th className="p-3 text-right text-white font-bold text-xl">Points</th>
+                    <th className="p-3 text-left text-white font-bold" style={{ fontSize: `${tableSize * 0.85}px` }}>Winning cadet</th>
+                    <th className="p-3 text-right text-white font-bold" style={{ fontSize: `${tableSize * 0.85}px` }}>Points</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr style={{ backgroundColor: '#ffffff' }}>
                     <td 
-                      className="p-3 text-left text-2xl font-bold"
-                      style={{ color: textCol }}
+                      className="p-3 text-left font-bold"
+                      style={{ color: textCol, fontSize: `${tableSize}px` }}
                     >
                       {winningCadet.name}
                     </td>
                     <td 
-                      className="p-3 text-right text-2xl font-bold"
-                      style={{ color: textCol }}
+                      className="p-3 text-right font-bold"
+                      style={{ color: textCol, fontSize: `${tableSize}px` }}
                     >
                       {winningCadet.points}
                     </td>
@@ -471,21 +539,21 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
               <table className="w-full border-2" style={{ borderColor: headerBg }}>
                 <thead>
                   <tr style={{ backgroundColor: headerBg }}>
-                    <th className="p-3 text-left text-white font-bold text-xl">Flight</th>
-                    <th className="p-3 text-right text-white font-bold text-xl">Points</th>
+                    <th className="p-3 text-left text-white font-bold" style={{ fontSize: `${tableSize * 0.85}px` }}>Flight</th>
+                    <th className="p-3 text-right text-white font-bold" style={{ fontSize: `${tableSize * 0.85}px` }}>Points</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr style={{ backgroundColor: '#ffffff' }}>
                     <td 
-                      className="p-3 text-left text-2xl font-bold"
-                      style={{ color: textCol }}
+                      className="p-3 text-left font-bold"
+                      style={{ color: textCol, fontSize: `${tableSize}px` }}
                     >
                       {winningFlight.flight} Flight
                     </td>
                     <td 
-                      className="p-3 text-right text-2xl font-bold"
-                      style={{ color: textCol }}
+                      className="p-3 text-right font-bold"
+                      style={{ color: textCol, fontSize: `${tableSize}px` }}
                     >
                       {winningFlight.points}
                     </td>
@@ -502,11 +570,19 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
 
 // SLIDE 2: Who Got Points Recently
 function SlideRecentActivity({ data, settings }: { data: LeaderboardData; settings: PresentationSettings }) {
-  const recentPoints = data.recentPoints.slice(0, 12); // Show top 12 recent
   const bgColor = settings.elementColors?.recentActivityBg || '#4a7a8f';
   const headerBg = settings.elementColors?.tableHeaderBg || settings.colors.secondaryColor;
   const rowAltBg = settings.elementColors?.tableRowAlt || settings.colors.accentColor;
   const textCol = settings.elementColors?.textColor || settings.colors.primaryColor;
+  
+  // Individual slide customization
+  const custom = settings.slideCustomization?.recentActivity || DEFAULT_SETTINGS.slideCustomization!.recentActivity!;
+  const titleText = custom.title || 'Who Got Points Recently';
+  const rowCount = custom.rowCount || 12;
+  const tableSize = custom.tableFontSize || 16;
+  const titleSize = custom.titleFontSize || 50;
+  
+  const recentPoints = data.recentPoints.slice(0, rowCount);
 
   return (
     <div 
@@ -515,10 +591,10 @@ function SlideRecentActivity({ data, settings }: { data: LeaderboardData; settin
     >
       <div style={{ transform: `scale(${settings.tableScale || 1})`, transformOrigin: 'center' }}>
         <h1 
-          className="text-5xl font-bold text-white mb-8"
-          style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.3)' }}
+          className="font-bold text-white mb-8"
+          style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.3)', fontSize: `${titleSize}px` }}
         >
-          Who Got Points Recently
+          {titleText}
         </h1>
 
         <div 
@@ -528,10 +604,10 @@ function SlideRecentActivity({ data, settings }: { data: LeaderboardData; settin
           <table className="w-full">
             <thead>
               <tr style={{ backgroundColor: headerBg }}>
-                <th className="p-4 text-left text-white font-bold text-lg">Date</th>
-                <th className="p-4 text-left text-white font-bold text-lg">Name</th>
-                <th className="p-4 text-left text-white font-bold text-lg">Reason</th>
-                <th className="p-4 text-right text-white font-bold text-lg">Points</th>
+                <th className="p-4 text-left text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Date</th>
+                <th className="p-4 text-left text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Name</th>
+                <th className="p-4 text-left text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Reason</th>
+                <th className="p-4 text-right text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Points</th>
               </tr>
             </thead>
             <tbody>
@@ -545,25 +621,25 @@ function SlideRecentActivity({ data, settings }: { data: LeaderboardData; settin
                 >
                   <td 
                     className="p-4 text-left font-medium"
-                    style={{ color: textCol }}
+                    style={{ color: textCol, fontSize: `${tableSize}px` }}
                   >
                     {new Date(point.date).toLocaleDateString('en-GB')}
                   </td>
                   <td 
                     className="p-4 text-left font-medium"
-                    style={{ color: textCol }}
+                    style={{ color: textCol, fontSize: `${tableSize}px` }}
                   >
                     {point.cadetName}
                   </td>
                   <td 
                     className="p-4 text-left font-medium"
-                    style={{ color: textCol }}
+                    style={{ color: textCol, fontSize: `${tableSize}px` }}
                   >
                     {point.reason}
                   </td>
                   <td 
-                    className="p-4 text-right font-bold text-lg"
-                    style={{ color: textCol }}
+                    className="p-4 text-right font-bold"
+                    style={{ color: textCol, fontSize: `${tableSize * 1.125}px` }}
                   >
                     {point.points}
                   </td>
@@ -583,6 +659,12 @@ function SlideCompleteLeaderboard({ data, settings }: { data: LeaderboardData; s
   const headerBg = settings.elementColors?.tableHeaderBg || settings.colors.secondaryColor;
   const rowAltBg = settings.elementColors?.tableRowAlt || settings.colors.accentColor;
   const textCol = settings.elementColors?.textColor || settings.colors.primaryColor;
+  
+  // Individual slide customization
+  const custom = settings.slideCustomization?.completeLeaderboard || DEFAULT_SETTINGS.slideCustomization!.completeLeaderboard!;
+  const titleText = custom.title || 'Complete Leaderboard';
+  const tableSize = custom.tableFontSize || 16;
+  const titleSize = custom.titleFontSize || 50;
 
   if (leaderboard.length === 0) {
     return (
@@ -599,10 +681,10 @@ function SlideCompleteLeaderboard({ data, settings }: { data: LeaderboardData; s
     >
       <div style={{ transform: `scale(${settings.tableScale || 1})`, transformOrigin: 'center', width: '100%', maxWidth: '1280px' }}>
         <h1 
-          className="text-5xl font-bold mb-8 text-center"
-          style={{ color: textCol }}
+          className="font-bold mb-8 text-center"
+          style={{ color: textCol, fontSize: `${titleSize}px` }}
         >
-          Complete Leaderboard
+          {titleText}
         </h1>
 
         <div 
@@ -612,11 +694,11 @@ function SlideCompleteLeaderboard({ data, settings }: { data: LeaderboardData; s
           <table className="w-full">
             <thead style={{ position: 'sticky', top: 0 }}>
               <tr style={{ backgroundColor: headerBg }}>
-                <th className="p-3 text-center text-white font-bold text-base">Rank</th>
-                <th className="p-3 text-left text-white font-bold text-base">Cadet Name</th>
-                <th className="p-3 text-center text-white font-bold text-base">Flight points</th>
-                <th className="p-3 text-center text-white font-bold text-base">Attendance</th>
-                <th className="p-3 text-center text-white font-bold text-base">Total</th>
+                <th className="p-3 text-center text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Rank</th>
+                <th className="p-3 text-left text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Cadet Name</th>
+                <th className="p-3 text-center text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Flight points</th>
+                <th className="p-3 text-center text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Attendance</th>
+                <th className="p-3 text-center text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Total</th>
               </tr>
             </thead>
             <tbody>
@@ -629,32 +711,32 @@ function SlideCompleteLeaderboard({ data, settings }: { data: LeaderboardData; s
                   }}
                 >
                   <td 
-                    className="p-3 text-center font-bold text-base"
-                    style={{ color: textCol }}
+                    className="p-3 text-center font-bold"
+                    style={{ color: textCol, fontSize: `${tableSize}px` }}
                   >
                     {idx + 1}
                   </td>
                   <td 
-                    className="p-3 text-left font-medium text-base"
-                    style={{ color: textCol }}
+                    className="p-3 text-left font-medium"
+                    style={{ color: textCol, fontSize: `${tableSize}px` }}
                   >
                     {cadet.name}
                   </td>
                   <td 
-                    className="p-3 text-center font-medium text-base"
-                    style={{ color: textCol }}
+                    className="p-3 text-center font-medium"
+                    style={{ color: textCol, fontSize: `${tableSize}px` }}
                   >
                     {cadet.points}
                   </td>
                   <td 
-                    className="p-3 text-center font-medium text-base"
-                    style={{ color: textCol }}
+                    className="p-3 text-center font-medium"
+                    style={{ color: textCol, fontSize: `${tableSize}px` }}
                   >
                     0
                   </td>
                   <td 
-                    className="p-3 text-center font-bold text-base"
-                    style={{ color: textCol }}
+                    className="p-3 text-center font-bold"
+                    style={{ color: textCol, fontSize: `${tableSize}px` }}
                   >
                     {cadet.points}
                   </td>
