@@ -66,7 +66,28 @@ export function PresentationEditor() {
     const savedSettings = localStorage.getItem('presentationSettings');
     if (savedSettings) {
       try {
-        setSettings(JSON.parse(savedSettings));
+        const parsed = JSON.parse(savedSettings);
+        // Merge with defaults to ensure all properties exist
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          ...parsed,
+          enabledSlides: {
+            ...DEFAULT_SETTINGS.enabledSlides,
+            ...(parsed.enabledSlides || {})
+          },
+          customText: {
+            ...DEFAULT_SETTINGS.customText,
+            ...(parsed.customText || {})
+          },
+          colors: {
+            ...DEFAULT_SETTINGS.colors,
+            ...(parsed.colors || {})
+          },
+          elementColors: {
+            ...DEFAULT_SETTINGS.elementColors,
+            ...(parsed.elementColors || {})
+          }
+        });
       } catch (error) {
         console.error('Failed to load settings:', error);
       }
@@ -226,14 +247,14 @@ export function PresentationEditor() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="tableScale">Table Size Scale: {settings.tableScale.toFixed(2)}x</Label>
+                <Label htmlFor="tableScale">Table Size Scale: {(settings.tableScale || 1).toFixed(2)}x</Label>
                 <Input
                   id="tableScale"
                   type="range"
                   min={0.5}
                   max={1.5}
                   step={0.05}
-                  value={settings.tableScale}
+                  value={settings.tableScale || 1}
                   onChange={(e) => updateSetting('tableScale', parseFloat(e.target.value))}
                   className="w-full"
                 />

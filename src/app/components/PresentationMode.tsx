@@ -79,11 +79,30 @@ export function PresentationMode({
   settings?: PresentationSettings;
 }) {
   const [settings] = useState<PresentationSettings>(() => {
-    if (propSettings) return propSettings;
+    if (propSettings) {
+      // Merge propSettings with defaults
+      return {
+        ...DEFAULT_SETTINGS,
+        ...propSettings,
+        enabledSlides: { ...DEFAULT_SETTINGS.enabledSlides, ...(propSettings.enabledSlides || {}) },
+        customText: { ...DEFAULT_SETTINGS.customText, ...(propSettings.customText || {}) },
+        colors: { ...DEFAULT_SETTINGS.colors, ...(propSettings.colors || {}) },
+        elementColors: { ...DEFAULT_SETTINGS.elementColors, ...(propSettings.elementColors || {}) },
+      };
+    }
     const saved = localStorage.getItem('presentationSettings');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        // Merge with defaults to ensure all properties exist
+        return {
+          ...DEFAULT_SETTINGS,
+          ...parsed,
+          enabledSlides: { ...DEFAULT_SETTINGS.enabledSlides, ...(parsed.enabledSlides || {}) },
+          customText: { ...DEFAULT_SETTINGS.customText, ...(parsed.customText || {}) },
+          colors: { ...DEFAULT_SETTINGS.colors, ...(parsed.colors || {}) },
+          elementColors: { ...DEFAULT_SETTINGS.elementColors, ...(parsed.elementColors || {}) },
+        };
       } catch {
         return DEFAULT_SETTINGS;
       }
@@ -357,7 +376,7 @@ function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings
   const textCol = settings.elementColors?.textColor || settings.colors.primaryColor;
 
   return (
-    <div className="w-full max-w-7xl mx-auto" style={{ transform: `scale(${settings.tableScale})`, transformOrigin: 'center' }}>
+    <div className="w-full max-w-7xl mx-auto" style={{ transform: `scale(${settings.tableScale || 1})`, transformOrigin: 'center' }}>
       <h1 
         className="text-6xl font-bold text-center mb-12"
         style={{ color: textCol, textDecoration: 'underline' }}
@@ -494,7 +513,7 @@ function SlideRecentActivity({ data, settings }: { data: LeaderboardData; settin
       className="w-full h-full flex flex-col items-center justify-center px-12"
       style={{ backgroundColor: bgColor }}
     >
-      <div style={{ transform: `scale(${settings.tableScale})`, transformOrigin: 'center' }}>
+      <div style={{ transform: `scale(${settings.tableScale || 1})`, transformOrigin: 'center' }}>
         <h1 
           className="text-5xl font-bold text-white mb-8"
           style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.3)' }}
@@ -578,7 +597,7 @@ function SlideCompleteLeaderboard({ data, settings }: { data: LeaderboardData; s
       className="w-full h-full flex flex-col items-center justify-center px-6"
       style={{ backgroundColor: '#ffffff' }}
     >
-      <div style={{ transform: `scale(${settings.tableScale})`, transformOrigin: 'center', width: '100%', maxWidth: '1280px' }}>
+      <div style={{ transform: `scale(${settings.tableScale || 1})`, transformOrigin: 'center', width: '100%', maxWidth: '1280px' }}>
         <h1 
           className="text-5xl font-bold mb-8 text-center"
           style={{ color: textCol }}
