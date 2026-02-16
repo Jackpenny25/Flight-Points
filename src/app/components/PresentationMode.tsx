@@ -67,9 +67,9 @@ const DEFAULT_SETTINGS: PresentationSettings = {
     headerSubtitle: 'RAF Air Cadets',
   },
   colors: {
-    primaryColor: '#1e40af',
-    secondaryColor: '#7c3aed',
-    accentColor: '#f59e0b',
+    primaryColor: '#004B87',      // RAF Blue
+    secondaryColor: '#5b9bd5',    // RAF Light Blue (table headings)
+    accentColor: '#dceaf6',       // RAF Very Light Blue (table rows)
   },
 };
 
@@ -256,18 +256,18 @@ export function PresentationMode({
 
   return (
     <div 
-      className="fixed inset-0 z-50 overflow-hidden"
-      style={{
-        background: `linear-gradient(135deg, ${settings.colors.primaryColor} 0%, ${settings.colors.secondaryColor} 100%)`
-      }}
+      className="fixed inset-0 z-50 overflow-hidden bg-white"
     >
-      {/* Squadron Header */}
-      <div className="absolute top-0 left-0 right-0 bg-black/20 backdrop-blur-sm border-b border-white/10 z-10 py-6">
+      {/* Squadron Header - RAF Blue */}
+      <div 
+        className="absolute top-0 left-0 right-0 border-b-4 z-10 py-6"
+        style={{ backgroundColor: settings.colors.primaryColor }}
+      >
         <div className="max-w-7xl mx-auto px-12">
-          <div className="text-white/95 text-3xl font-bold tracking-wide">
+          <div className="text-white text-3xl font-bold tracking-wide">
             {settings.customText.squadronName}
           </div>
-          <div className="text-white/70 text-lg mt-1">{settings.customText.headerSubtitle}</div>
+          <div className="text-white/90 text-lg mt-1">{settings.customText.headerSubtitle}</div>
         </div>
       </div>
 
@@ -282,18 +282,21 @@ export function PresentationMode({
           <button
             key={index}
             onClick={() => setCurrentSlide(index)}
-            className={`h-2 rounded-full transition-all duration-300 ${
-              index === currentSlide
-                ? 'bg-white w-12'
-                : 'bg-white/40 hover:bg-white/60 w-2'
-            }`}
+            className="h-2 rounded-full transition-all duration-300"
+            style={{
+              backgroundColor: index === currentSlide ? settings.colors.primaryColor : settings.colors.accentColor,
+              width: index === currentSlide ? '48px' : '8px'
+            }}
             aria-label={`Go to slide ${index + 1}`}
           />
         ))}
       </div>
 
       {/* Slide Number Indicator */}
-      <div className="absolute bottom-24 right-12 text-white/60 text-sm font-medium z-10">
+      <div 
+        className="absolute bottom-24 right-12 text-sm font-medium z-10"
+        style={{ color: settings.colors.primaryColor }}
+      >
         {currentSlide + 1} / {totalSlides}
       </div>
 
@@ -303,7 +306,12 @@ export function PresentationMode({
           variant="ghost"
           size="icon"
           onClick={() => setCurrentSlide(prev => (prev - 1 + totalSlides) % totalSlides)}
-          className="bg-black/20 hover:bg-black/30 border border-white/20 text-white h-10 w-10"
+          className="h-10 w-10"
+          style={{
+            backgroundColor: settings.colors.accentColor,
+            borderColor: settings.colors.secondaryColor,
+            color: settings.colors.primaryColor
+          }}
         >
           <ChevronLeft className="h-5 w-5" />
         </Button>
@@ -312,7 +320,12 @@ export function PresentationMode({
           variant="ghost"
           size="icon"
           onClick={() => setIsPaused(!isPaused)}
-          className="bg-black/20 hover:bg-black/30 border border-white/20 text-white h-10 w-10"
+          className="h-10 w-10"
+          style={{
+            backgroundColor: settings.colors.accentColor,
+            borderColor: settings.colors.secondaryColor,
+            color: settings.colors.primaryColor
+          }}
         >
           {isPaused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
         </Button>
@@ -321,12 +334,20 @@ export function PresentationMode({
           variant="ghost"
           size="icon"
           onClick={() => setCurrentSlide(prev => (prev + 1) % totalSlides)}
-          className="bg-black/20 hover:bg-black/30 border border-white/20 text-white h-10 w-10"
+          className="h-10 w-10"
+          style={{
+            backgroundColor: settings.colors.accentColor,
+            borderColor: settings.colors.secondaryColor,
+            color: settings.colors.primaryColor
+          }}
         >
           <ChevronRight className="h-5 w-5" />
         </Button>
         
-        <div className="mx-4 text-white/70 text-sm font-medium min-w-[140px] text-center">
+        <div 
+          className="mx-4 text-sm font-medium min-w-[140px] text-center"
+          style={{ color: settings.colors.primaryColor }}
+        >
           {isPaused ? 'Paused' : `Next in ${settings.slideDuration}s`}
         </div>
         
@@ -366,24 +387,36 @@ function SlideWinningCadet({ data, settings }: { data: LeaderboardData; settings
     : [];
 
   if (winners.length === 0) {
-    return <EmptySlide message="No cadet data available yet" />;
+    return <EmptySlide message="No cadet data available yet" settings={settings} />;
   }
 
   const isJointWin = winners.length > 1;
 
   return (
     <div className="w-full max-w-6xl mx-auto">
-      <div className="bg-white/10 backdrop-blur-md rounded-3xl border-2 border-white/20 p-16 shadow-2xl">
+      <div 
+        className="rounded-3xl p-16 shadow-2xl border-2"
+        style={{
+          backgroundColor: '#ffffff',
+          borderColor: settings.colors.secondaryColor
+        }}
+      >
         <div className="text-center">
           {/* Trophy Icon */}
           <div className="flex justify-center mb-8">
-            <div className="bg-yellow-400/20 p-8 rounded-full">
-              <Trophy className="w-20 h-20 text-yellow-400" />
+            <div 
+              className="p-8 rounded-full"
+              style={{ backgroundColor: settings.colors.accentColor }}
+            >
+              <Trophy className="w-20 h-20" style={{ color: settings.colors.primaryColor }} />
             </div>
           </div>
           
           {/* Title */}
-          <h1 className="text-5xl font-bold text-white mb-12 tracking-wide uppercase">
+          <h1 
+            className="text-5xl font-bold mb-12 tracking-wide uppercase"
+            style={{ color: settings.colors.primaryColor }}
+          >
             {isJointWin ? 'Joint Winning Cadets' : 'Winning Cadet'}
           </h1>
           
@@ -393,12 +426,12 @@ function SlideWinningCadet({ data, settings }: { data: LeaderboardData; settings
               <div key={index} className="space-y-4">
                 <div 
                   className="text-7xl font-extrabold tracking-tight"
-                  style={{ color: settings.colors.accentColor }}
+                  style={{ color: settings.colors.primaryColor }}
                 >
                   {winner.name}
                 </div>
                 {winner.flight && (
-                  <div className="text-3xl text-white/80">
+                  <div style={{ color: settings.colors.secondaryColor }} className="text-3xl">
                     Flight {formatFlight(winner.flight)}
                   </div>
                 )}
@@ -407,10 +440,16 @@ function SlideWinningCadet({ data, settings }: { data: LeaderboardData; settings
           </div>
           
           {/* Points */}
-          <div className="bg-gradient-to-r from-yellow-400/20 to-orange-400/20 rounded-2xl py-8 px-12 inline-block">
-            <div className="text-6xl font-bold text-white">
+          <div 
+            className="rounded-2xl py-8 px-12 inline-block"
+            style={{ backgroundColor: settings.colors.accentColor }}
+          >
+            <div 
+              className="text-6xl font-bold"
+              style={{ color: settings.colors.primaryColor }}
+            >
               {winners[0].points}
-              <span className="text-4xl text-white/80 ml-4">points</span>
+              <span style={{ color: settings.colors.secondaryColor }} className="text-4xl ml-4">points</span>
             </div>
           </div>
         </div>
@@ -428,24 +467,36 @@ function SlideWinningFlight({ data, settings }: { data: LeaderboardData; setting
     : [];
 
   if (winners.length === 0) {
-    return <EmptySlide message="No flight data available yet" />;
+    return <EmptySlide message="No flight data available yet" settings={settings} />;
   }
 
   const isJointWin = winners.length > 1;
 
   return (
     <div className="w-full max-w-6xl mx-auto">
-      <div className="bg-white/10 backdrop-blur-md rounded-3xl border-2 border-white/20 p-16 shadow-2xl">
+      <div 
+        className="rounded-3xl p-16 shadow-2xl border-2"
+        style={{
+          backgroundColor: '#ffffff',
+          borderColor: settings.colors.secondaryColor
+        }}
+      >
         <div className="text-center">
           {/* Award Icon */}
           <div className="flex justify-center mb-8">
-            <div className="bg-blue-400/20 p-8 rounded-full">
-              <Award className="w-20 h-20 text-blue-400" />
+            <div 
+              className="p-8 rounded-full"
+              style={{ backgroundColor: settings.colors.accentColor }}
+            >
+              <Award className="w-20 h-20" style={{ color: settings.colors.primaryColor }} />
             </div>
           </div>
           
           {/* Title */}
-          <h1 className="text-5xl font-bold text-white mb-12 tracking-wide uppercase">
+          <h1 
+            className="text-5xl font-bold mb-12 tracking-wide uppercase"
+            style={{ color: settings.colors.primaryColor }}
+          >
             {isJointWin ? 'Joint Winning Flights' : 'Winning Flight'}
           </h1>
           
@@ -455,7 +506,7 @@ function SlideWinningFlight({ data, settings }: { data: LeaderboardData; setting
               <div key={index}>
                 <div 
                   className="text-7xl font-extrabold tracking-tight"
-                  style={{ color: settings.colors.accentColor }}
+                  style={{ color: settings.colors.primaryColor }}
                 >
                   Flight {formatFlight(winner.flight)}
                 </div>
@@ -464,10 +515,16 @@ function SlideWinningFlight({ data, settings }: { data: LeaderboardData; setting
           </div>
           
           {/* Points */}
-          <div className="bg-gradient-to-r from-blue-400/20 to-cyan-400/20 rounded-2xl py-8 px-12 inline-block">
-            <div className="text-6xl font-bold text-white">
+          <div 
+            className="rounded-2xl py-8 px-12 inline-block"
+            style={{ backgroundColor: settings.colors.accentColor }}
+          >
+            <div 
+              className="text-6xl font-bold"
+              style={{ color: settings.colors.primaryColor }}
+            >
               {winners[0].points}
-              <span className="text-4xl text-white/80 ml-4">points</span>
+              <span style={{ color: settings.colors.secondaryColor }} className="text-4xl ml-4">points</span>
             </div>
           </div>
         </div>
@@ -481,7 +538,7 @@ function SlideTop5Cadets({ data, settings }: { data: LeaderboardData; settings: 
   const topCadets = data.cadetLeaderboard.slice(0, 5);
 
   if (topCadets.length === 0) {
-    return <EmptySlide message="No cadet leaderboard data yet" />;
+    return <EmptySlide message="No cadet leaderboard data yet" settings={settings} />;
   }
 
   const medals = ['🥇', '🥈', '🥉'];
@@ -489,60 +546,84 @@ function SlideTop5Cadets({ data, settings }: { data: LeaderboardData; settings: 
 
   return (
     <div className="w-full max-w-6xl mx-auto">
-      <div className="bg-white/10 backdrop-blur-md rounded-3xl border-2 border-white/20 p-12 shadow-2xl">
+      <div 
+        className="rounded-3xl p-12 shadow-2xl border-2"
+        style={{
+          backgroundColor: '#ffffff',
+          borderColor: settings.colors.secondaryColor
+        }}
+      >
         {/* Title */}
         <div className="flex items-center justify-center gap-4 mb-12">
-          <Star className="w-12 h-12" style={{ color: settings.colors.accentColor }} />
-          <h1 className="text-5xl font-bold text-white tracking-wide uppercase">
+          <Star className="w-12 h-12" style={{ color: settings.colors.primaryColor }} />
+          <h1 
+            className="text-5xl font-bold tracking-wide uppercase"
+            style={{ color: settings.colors.primaryColor }}
+          >
             Top 5 Cadets
           </h1>
-          <Star className="w-12 h-12" style={{ color: settings.colors.accentColor }} />
+          <Star className="w-12 h-12" style={{ color: settings.colors.primaryColor }} />
         </div>
         
-        {/* Leaderboard */}
-        <div className="space-y-4">
+        {/* Table Header */}
+        <div 
+          className="grid grid-cols-12 gap-4 p-6 rounded-t-xl font-bold text-lg mb-0"
+          style={{ backgroundColor: settings.colors.secondaryColor, color: '#ffffff' }}
+        >
+          <div className="col-span-1 text-center">Rank</div>
+          <div className="col-span-6">Cadet Name</div>
+          <div className="col-span-3">Flight</div>
+          <div className="col-span-2 text-right">Points</div>
+        </div>
+        
+        {/* Leaderboard Rows */}
+        <div className="border-x-2" style={{ borderColor: settings.colors.secondaryColor }}>
           {topCadets.map((cadet, index) => (
             <div
               key={cadet.name}
-              className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10 hover:bg-white/10 transition-all"
+              className="grid grid-cols-12 gap-4 p-6 border-b-2 items-center"
+              style={{
+                backgroundColor: index % 2 === 0 ? settings.colors.accentColor : '#ffffff',
+                borderColor: settings.colors.secondaryColor
+              }}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-6 flex-1">
-                  {/* Rank */}
-                  <div 
-                    className="text-4xl font-bold w-16 text-center"
-                    style={{ color: rankColors[index] }}
-                  >
-                    #{index + 1}
-                  </div>
-                  
-                  {/* Medal */}
-                  {index < 3 && (
-                    <div className="text-5xl">{medals[index]}</div>
-                  )}
-                  
-                  {/* Name & Flight */}
-                  <div className="flex-1">
-                    <div className="text-3xl font-bold text-white mb-1">
-                      {cadet.name}
-                    </div>
-                    <div className="text-xl text-white/60">
-                      Flight {formatFlight(cadet.flight)}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Points */}
-                <div 
-                  className="text-4xl font-bold px-8py-3 rounded-xl"
-                  style={{ color: index < 3 ? rankColors[index] : '#ffffff'}}
-                >
-                  {cadet.points}
-                  <span className="text-2xl text-white/70 ml-2">pts</span>
-                </div>
+              <div 
+                className="col-span-1 text-center text-3xl font-bold"
+                style={{ color: settings.colors.primaryColor }}
+              >
+                {index < 3 ? ['🥇', '🥈', '🥉'][index] : `#${index + 1}`}
+              </div>
+              
+              <div 
+                className="col-span-6 text-2xl font-bold"
+                style={{ color: settings.colors.primaryColor }}
+              >
+                {cadet.name}
+              </div>
+              
+              <div 
+                className="col-span-3 text-xl"
+                style={{ color: settings.colors.primaryColor }}
+              >
+                Flight {formatFlight(cadet.flight)}
+              </div>
+              
+              <div 
+                className="col-span-2 text-right text-3xl font-bold"
+                style={{ color: settings.colors.primaryColor }}
+              >
+                {cadet.points} pts
               </div>
             </div>
           ))}
+        </div>
+        
+        {/* Table Footer */}
+        <div 
+          className="p-4 rounded-b-xl text-sm"
+          style={{ backgroundColor: settings.colors.accentColor, color: settings.colors.primaryColor }}
+        >
+          Updated regularly
         </div>
       </div>
     </div>
@@ -554,7 +635,7 @@ function SlideTop3Flights({ data, settings }: { data: LeaderboardData; settings:
   const topFlights = data.flightLeaderboard.slice(0, 3);
 
   if (topFlights.length === 0) {
-    return <EmptySlide message="No flight leaderboard data yet" />;
+    return <EmptySlide message="No flight leaderboard data yet" settings={settings} />;
   }
 
   const medals = ['🥇', '🥈', '🥉'];
@@ -562,56 +643,84 @@ function SlideTop3Flights({ data, settings }: { data: LeaderboardData; settings:
 
   return (
     <div className="w-full max-w-6xl mx-auto">
-      <div className="bg-white/10 backdrop-blur-md rounded-3xl border-2 border-white/20 p-12 shadow-2xl">
+      <div 
+        className="rounded-3xl p-12 shadow-2xl border-2"
+        style={{
+          backgroundColor: '#ffffff',
+          borderColor: settings.colors.secondaryColor
+        }}
+      >
         {/* Title */}
         <div className="flex items-center justify-center gap-4 mb-12">
-          <Trophy className="w-12 h-12" style={{ color: settings.colors.accentColor }} />
-          <h1 className="text-5xl font-bold text-white tracking-wide uppercase">
+          <Trophy className="w-12 h-12" style={{ color: settings.colors.primaryColor }} />
+          <h1 
+            className="text-5xl font-bold tracking-wide uppercase"
+            style={{ color: settings.colors.primaryColor }}
+          >
             Top 3 Flights
           </h1>
-          <Trophy className="w-12 h-12" style={{ color: settings.colors.accentColor }} />
+          <Trophy className="w-12 h-12" style={{ color: settings.colors.primaryColor }} />
         </div>
         
-        {/* Leaderboard */}
-        <div className="space-y-6">
+        {/* Table Header */}
+        <div 
+          className="grid grid-cols-12 gap-4 p-6 rounded-t-xl font-bold text-lg mb-0"
+          style={{ backgroundColor: settings.colors.secondaryColor, color: '#ffffff' }}
+        >
+          <div className="col-span-2 text-center">Rank</div>
+          <div className="col-span-4">Flight</div>
+          <div className="col-span-3">Cadets</div>
+          <div className="col-span-3 text-right">Points</div>
+        </div>
+        
+        {/* Leaderboard Rows */}
+        <div className="border-x-2" style={{ borderColor: settings.colors.secondaryColor }}>
           {topFlights.map((flight, index) => (
             <div
               key={flight.flight}
-              className="bg-white/5 backdrop-blur-sm rounded-xl p-8 border border-white/10 hover:bg-white/10 transition-all"
+              className="grid grid-cols-12 gap-4 p-6 border-b-2 items-center"
+              style={{
+                backgroundColor: index % 2 === 0 ? settings.colors.accentColor : '#ffffff',
+                borderColor: settings.colors.secondaryColor
+              }}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-8">
-                  {/* Rank */}
-                  <div 
-                    className="text-5xl font-bold w-20 text-center"
-                    style={{ color: rankColors[index] }}
-                  >
-                    #{index + 1}
-                  </div>
-                  
-                  {/* Medal */}
-                  <div className="text-6xl">{medals[index]}</div>
-                  
-                  {/* Flight Name */}
-                  <div 
-                    className="text-5xl font-bold"
-                    style={{ color: rankColors[index] }}
-                  >
-                    Flight {formatFlight(flight.flight)}
-                  </div>
-                </div>
-                
-                {/* Points */}
-                <div 
-                  className="text-5xl font-bold"
-                  style={{ color: rankColors[index] }}
-                >
-                  {flight.points}
-                  <span className="text-3xl text-white/70 ml-2">pts</span>
-                </div>
+              <div 
+                className="col-span-2 text-center text-3xl font-bold"
+                style={{ color: settings.colors.primaryColor }}
+              >
+                {['🥇', '🥈', '🥉'][index]}
+              </div>
+              
+              <div 
+                className="col-span-4 text-2xl font-bold"
+                style={{ color: settings.colors.primaryColor }}
+              >
+                Flight {formatFlight(flight.flight)}
+              </div>
+              
+              <div 
+                className="col-span-3 text-xl"
+                style={{ color: settings.colors.primaryColor }}
+              >
+                {flight.cadetCount ? `${flight.cadetCount} cadets` : 'No data'}
+              </div>
+              
+              <div 
+                className="col-span-3 text-right text-3xl font-bold"
+                style={{ color: settings.colors.primaryColor }}
+              >
+                {flight.points} pts
               </div>
             </div>
           ))}
+        </div>
+        
+        {/* Table Footer */}
+        <div 
+          className="p-4 rounded-b-xl text-sm"
+          style={{ backgroundColor: settings.colors.accentColor, color: settings.colors.primaryColor }}
+        >
+          Updated regularly
         </div>
       </div>
     </div>
@@ -625,59 +734,95 @@ function SlideRecentActivity({ data, settings }: { data: LeaderboardData; settin
     .slice(0, 5);
 
   if (recentPoints.length === 0) {
-    return <EmptySlide message="No recent activity yet" />;
+    return <EmptySlide message="No recent activity yet" settings={settings} />;
   }
 
   return (
     <div className="w-full max-w-6xl mx-auto">
-      <div className="bg-white/10 backdrop-blur-md rounded-3xl border-2 border-white/20 p-12 shadow-2xl">
+      <div 
+        className="rounded-3xl p-12 shadow-2xl border-2"
+        style={{
+          backgroundColor: '#ffffff',
+          borderColor: settings.colors.secondaryColor
+        }}
+      >
         {/* Title */}
         <div className="flex items-center justify-center gap-4 mb-10">
-          <TrendingUp className="w-12 h-12" style={{ color: settings.colors.accentColor }} />
-          <h1 className="text-5xl font-bold text-white tracking-wide uppercase">
+          <TrendingUp className="w-12 h-12" style={{ color: settings.colors.primaryColor }} />
+          <h1 
+            className="text-5xl font-bold tracking-wide uppercase"
+            style={{ color: settings.colors.primaryColor }}
+          >
             Recent Activity
           </h1>
         </div>
         
         {/* Activity List */}
-        <div className="space-y-4">
-          {recentPoints.map((point) => (
+        <div className="space-y-3">
+          {recentPoints.map((point, idx) => (
             <div
               key={point.id}
-              className="bg-white/5 backdrop-blur-sm rounded-xl p-5 border border-white/10"
+              className="rounded-lg p-4 border-l-4"
+              style={{
+                backgroundColor: idx % 2 === 0 ? settings.colors.accentColor : '#ffffff',
+                borderColor: settings.colors.secondaryColor,
+                color: settings.colors.primaryColor
+              }}
             >
               <div className="flex items-start justify-between gap-6">
                 <div className="flex-1 min-w-0">
                   {/* Cadet Name & Flight */}
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl font-bold text-white truncate">
+                  <div className="flex items-center gap-3 mb-2 flex-wrap">
+                    <span 
+                      className="text-2xl font-bold truncate"
+                      style={{ color: settings.colors.primaryColor }}
+                    >
                       {point.cadetName}
                     </span>
-                    <span className="text-lg px-3 py-1 bg-white/10 rounded-full text-white/80 flex-shrink-0">
+                    <span 
+                      className="text-sm px-3 py-1 rounded-full font-medium"
+                      style={{ 
+                        backgroundColor: settings.colors.secondaryColor, 
+                        color: '#ffffff' 
+                      }}
+                    >
                       Flight {formatFlight(point.flight)}
                     </span>
                     <span 
-                      className="text-lg px-3 py-1 rounded-full text-white font-medium flex-shrink-0"
-                      style={{ backgroundColor: `${settings.colors.primaryColor}40` }}
+                      className="text-sm px-3 py-1 rounded-full font-medium"
+                      style={{ 
+                        backgroundColor: settings.colors.accentColor,
+                        color: settings.colors.primaryColor
+                      }}
                     >
                       {point.type}
                     </span>
                   </div>
                   
                   {/* Reason */}
-                  <p className="text-xl text-white/80 mb-2">{point.reason}</p>
+                  <p 
+                    className="text-lg mb-2"
+                    style={{ color: settings.colors.primaryColor }}
+                  >
+                    {point.reason}
+                  </p>
                   
                   {/* Date & Given By */}
-                  <p className="text-base text-white/50">
+                  <p 
+                    className="text-sm"
+                    style={{ color: `${settings.colors.primaryColor}99` }}
+                  >
                     {new Date(point.date).toLocaleDateString('en-GB')} • by {point.givenBy}
                   </p>
                 </div>
                 
                 {/* Points Badge */}
                 <div 
-                  className={`text-3xl font-bold px-6 py-3 rounded-xl flex-shrink-0 ${
-                    point.points >= 0 ? 'bg-green-500/30 text-green-300' : 'bg-red-500/30 text-red-300'
-                  }`}
+                  className="text-2xl font-bold px-4 py-2 rounded-lg flex-shrink-0"
+                  style={{ 
+                    backgroundColor: point.points >= 0 ? '#d4edda' : '#f8d7da',
+                    color: point.points >= 0 ? '#155724' : '#721c24'
+                  }}
                 >
                   {point.points >= 0 ? '+' : ''}{point.points}
                 </div>
@@ -694,66 +839,132 @@ function SlideSpecialAchievements({ achievements, settings }: { achievements: Sp
   const hasAny = achievements.highestSingleAward || achievements.mostAttendance || achievements.mostConsistent;
 
   if (!hasAny) {
-    return <EmptySlide message="No special achievements yet" />;
+    return <EmptySlide message="No special achievements yet" settings={settings} />;
   }
 
   return (
     <div className="w-full max-w-6xl mx-auto">
-      <div className="bg-white/10 backdrop-blur-md rounded-3xl border-2 border-white/20 p-12 shadow-2xl">
+      <div 
+        className="rounded-3xl p-12 shadow-2xl border-2"
+        style={{
+          backgroundColor: '#ffffff',
+          borderColor: settings.colors.secondaryColor
+        }}
+      >
         {/* Title */}
         <div className="flex items-center justify-center gap-4 mb-10">
-          <Medal className="w-12 h-12" style={{ color: settings.colors.accentColor }} />
-          <h1 className="text-5xl font-bold text-white tracking-wide uppercase">
+          <Medal className="w-12 h-12" style={{ color: settings.colors.primaryColor }} />
+          <h1 
+            className="text-5xl font-bold tracking-wide uppercase"
+            style={{ color: settings.colors.primaryColor }}
+          >
             Special Achievements
           </h1>
-          <Medal className="w-12 h-12" style={{ color: settings.colors.accentColor }} />
+          <Medal className="w-12 h-12" style={{ color: settings.colors.primaryColor }} />
         </div>
         
         {/* Achievements */}
         <div className="space-y-6">
           {achievements.highestSingleAward && (
-            <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-sm rounded-2xl p-8 border border-purple-400/30">
+            <div 
+              className="rounded-2xl p-8 border-l-4"
+              style={{
+                backgroundColor: settings.colors.accentColor,
+                borderColor: settings.colors.secondaryColor,
+                color: settings.colors.primaryColor
+              }}
+            >
               <div className="flex items-center gap-4 mb-4">
-                <Trophy className="w-10 h-10 text-purple-300" />
-                <h2 className="text-3xl font-bold text-purple-300">Highest Single Award</h2>
+                <Trophy className="w-10 h-10" style={{ color: settings.colors.secondaryColor }} />
+                <h2 
+                  className="text-3xl font-bold"
+                  style={{ color: settings.colors.secondaryColor }}
+                >
+                  Highest Single Award
+                </h2>
               </div>
-              <div className="text-4xl font-bold text-white mb-3">
+              <div 
+                className="text-4xl font-bold mb-3"
+                style={{ color: settings.colors.primaryColor }}
+              >
                 {achievements.highestSingleAward.cadetName}
               </div>
-              <div className="text-2xl text-white/80 mb-4">
+              <div 
+                className="text-2xl mb-4"
+                style={{ color: settings.colors.primaryColor }}
+              >
                 {achievements.highestSingleAward.reason}
               </div>
-              <div className="text-4xl font-bold text-purple-300">
+              <div 
+                className="text-4xl font-bold"
+                style={{ color: settings.colors.secondaryColor }}
+              >
                 +{achievements.highestSingleAward.points} points
               </div>
             </div>
           )}
           
           {achievements.mostAttendance && (
-            <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 backdrop-blur-sm rounded-2xl p-8 border border-green-400/30">
+            <div 
+              className="rounded-2xl p-8 border-l-4"
+              style={{
+                backgroundColor: '#ffffff',
+                borderColor: settings.colors.secondaryColor,
+                color: settings.colors.primaryColor
+              }}
+            >
               <div className="flex items-center gap-4 mb-4">
-                <CalendarCheck className="w-10 h-10 text-green-300" />
-                <h2 className="text-3xl font-bold text-green-300">Most Attendance</h2>
+                <CalendarCheck className="w-10 h-10" style={{ color: settings.colors.secondaryColor }} />
+                <h2 
+                  className="text-3xl font-bold"
+                  style={{ color: settings.colors.secondaryColor }}
+                >
+                  Most Attendance
+                </h2>
               </div>
-              <div className="text-4xl font-bold text-white mb-3">
+              <div 
+                className="text-4xl font-bold mb-3"
+                style={{ color: settings.colors.primaryColor }}
+              >
                 {achievements.mostAttendance.name}
               </div>
-              <div className="text-2xl text-white/80">
+              <div 
+                className="text-2xl"
+                style={{ color: settings.colors.primaryColor }}
+              >
                 {achievements.mostAttendance.attendanceCount} sessions attended
               </div>
             </div>
           )}
           
           {achievements.mostConsistent && !achievements.mostAttendance && (
-            <div className="bg-gradient-to-r from-blue-500/20 to-cyan-500/20 backdrop-blur-sm rounded-2xl p-8 border border-blue-400/30">
+            <div 
+              className="rounded-2xl p-8 border-l-4"
+              style={{
+                backgroundColor: settings.colors.accentColor,
+                borderColor: settings.colors.secondaryColor,
+                color: settings.colors.primaryColor
+              }}
+            >
               <div className="flex items-center gap-4 mb-4">
-                <Award className="w-10 h-10 text-blue-300" />
-                <h2 className="text-3xl font-bold text-blue-300">Most Consistent</h2>
+                <Award className="w-10 h-10" style={{ color: settings.colors.secondaryColor }} />
+                <h2 
+                  className="text-3xl font-bold"
+                  style={{ color: settings.colors.secondaryColor }}
+                >
+                  Most Consistent
+                </h2>
               </div>
-              <div className="text-4xl font-bold text-white mb-3">
+              <div 
+                className="text-4xl font-bold mb-3"
+                style={{ color: settings.colors.primaryColor }}
+              >
                 {achievements.mostConsistent.name}
               </div>
-              <div className="text-2xl text-white/80">
+              <div 
+                className="text-2xl"
+                style={{ color: settings.colors.primaryColor }}
+              >
                 Leading the way with dedication
               </div>
             </div>
@@ -765,12 +976,38 @@ function SlideSpecialAchievements({ achievements, settings }: { achievements: Sp
 }
 
 // Empty state component
-function EmptySlide({ message }: { message: string }) {
+function EmptySlide({ message, settings }: { message: string; settings?: PresentationSettings }) {
+  const defaultSettings: PresentationSettings = {
+    colors: {
+      primaryColor: '#004B87',
+      secondaryColor: '#5b9bd5',
+      accentColor: '#dceaf6'
+    },
+    autoAdvance: true,
+    advanceInterval: 8,
+    enabledSlides: [true, true, true, true, true, true],
+    customWinnerText: '',
+    customTitleText: ''
+  };
+
+  const finalSettings = settings || defaultSettings;
+
   return (
     <div className="w-full max-w-4xl mx-auto">
-      <div className="bg-white/5 backdrop-blur-sm rounded-3xl border border-white/10 p-16 text-center">
-        <div className="text-6xl mb-6 opacity-40">📊</div>
-        <div className="text-3xl font-medium text-white/60">{message}</div>
+      <div 
+        className="rounded-3xl border-2 p-16 text-center shadow-2xl"
+        style={{
+          backgroundColor: '#ffffff',
+          borderColor: finalSettings.colors.secondaryColor
+        }}
+      >
+        <div className="text-6xl mb-6">📊</div>
+        <div 
+          className="text-3xl font-medium"
+          style={{ color: finalSettings.colors.primaryColor }}
+        >
+          {message}
+        </div>
       </div>
     </div>
   );

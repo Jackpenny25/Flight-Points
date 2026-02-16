@@ -34,6 +34,11 @@ dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
+
+// Trust proxy - required when behind IIS or reverse proxy
+// This allows express-rate-limit to correctly identify users by IP
+app.set('trust proxy', true);
+
 const DATA_DIR = path.join(__dirname, '../data');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 // Ensure directories exist

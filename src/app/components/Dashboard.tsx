@@ -97,7 +97,8 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
     typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
   );
-  const ADMIN_PIN = '5394';
+  // Admin PIN - can be changed here or set via environment variable
+  const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN || '5394';
   const [pinDialogOpen, setPinDialogOpen] = useState<boolean>(false);
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
