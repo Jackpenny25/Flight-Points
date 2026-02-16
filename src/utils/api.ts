@@ -39,6 +39,9 @@ export const api = {
 
   // Rewards
   getRewards: () => fetchWithAuth('/data/rewards', { method: 'GET' }).then(r => r.json()),
+  createReward: (data: any) => fetchWithAuth('/data/rewards', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+  updateReward: (id: string, data: any) => fetchWithAuth(`/data/rewards/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => r.json()),
+  deleteReward: (id: string) => fetchWithAuth(`/data/rewards/${id}`, { method: 'DELETE' }).then(r => r.json()),
 
   // Other endpoints
   getLeaderboards: () => fetchWithAuth('/leaderboards', { method: 'GET' }).then(r => r.json()),

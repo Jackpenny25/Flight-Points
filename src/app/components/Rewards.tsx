@@ -55,7 +55,7 @@ export function Rewards({ userRole }: RewardsProps) {
     setLoading(true);
     try {
       const data = await api.getRewards();
-      setRewards(Array.isArray(data.rewards) ? data.rewards : []);
+      setRewards(Array.isArray(data) ? data : []);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to fetch rewards');
     } finally {
@@ -115,7 +115,7 @@ export function Rewards({ userRole }: RewardsProps) {
       if (result.error) throw new Error(result.error);
       toast.success('Reward created');
       resetCreateForm();
-      setRewards((prev) => [result.reward, ...prev]);
+      setRewards((prev) => [result, ...prev]);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to create reward');
     } finally {
@@ -152,7 +152,7 @@ export function Rewards({ userRole }: RewardsProps) {
       const result = await api.updateReward(editReward.id, data);
       if (result.error) throw new Error(result.error);
       toast.success('Reward updated');
-      setRewards((prev) => prev.map((r) => (r.id === editReward.id ? result.reward : r)));
+      setRewards((prev) => prev.map((r) => (r.id === editReward.id ? result : r)));
       setEditOpen(false);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to update reward');
@@ -206,7 +206,7 @@ export function Rewards({ userRole }: RewardsProps) {
       };
       const result = await api.updateReward(reward.id, data);
       if (result.error) throw new Error(result.error);
-      setRewards((prev) => prev.map((r) => (r.id === reward.id ? result.reward : r)));
+      setRewards((prev) => prev.map((r) => (r.id === reward.id ? result : r)));
       toast.success('Winner saved');
     } catch (error: any) {
       toast.error(error?.message || 'Failed to save winner');
