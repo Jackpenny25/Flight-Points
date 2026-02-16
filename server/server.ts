@@ -586,6 +586,17 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   }
 });
 
+// Tickets endpoint
+app.get('/api/tickets', async (req, res) => {
+  try {
+    // If you have a tickets table, query it. Otherwise return empty
+    const result = await query('SELECT * FROM tickets ORDER BY created_at DESC').catch(() => ({ rows: [] }));
+    res.json(result.rows || []);
+  } catch (error) {
+    res.json([]);
+  }
+});
+
 // Serve static files from the dist folder
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.static(path.join(__dirname, '../dist')));
