@@ -39,6 +39,8 @@ interface PresentationSettings {
     topFlights: boolean;
     recentActivity: boolean;
     specialAchievements: boolean;
+    flightPointsSummary: boolean;
+    completeLeaderboard: boolean;
   };
   customText: {
     squadronName: string;
@@ -61,6 +63,8 @@ const DEFAULT_SETTINGS: PresentationSettings = {
     topFlights: true,
     recentActivity: true,
     specialAchievements: true,
+    flightPointsSummary: true,
+    completeLeaderboard: true,
   },
   customText: {
     squadronName: '2427 (Biggin Hill) Squadron',
@@ -249,6 +253,10 @@ export function PresentationMode({
         return <SlideRecentActivity data={data} settings={settings} />;
       case 'specialAchievements':
         return <SlideSpecialAchievements achievements={achievements} settings={settings} />;
+      case 'flightPointsSummary':
+        return <SlideFlightPointsSummary data={data} settings={settings} />;
+      case 'completeLeaderboard':
+        return <SlideCompleteLeaderboard data={data} settings={settings} />;
       default:
         return null;
     }
@@ -969,6 +977,174 @@ function SlideSpecialAchievements({ achievements, settings }: { achievements: Sp
               </div>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Slide: Flight Points Summary (left: flight totals, right: winning cadet/flight)
+function SlideFlightPointsSummary({ data, settings }: { data: LeaderboardData; settings: PresentationSettings }) {
+  const flightTotals = data.flightLeaderboard || [];
+  const winningCadet = data.winningCadet;
+  const winningFlight = data.winningFlight;
+
+  return (
+    <div className="w-full max-w-7xl mx-auto">
+      <h1 
+        className="text-6xl font-bold text-center mb-12 underline"
+        style={{ color: settings.colors.primaryColor }}
+      >
+        Flight Points:
+      </h1>
+      
+      <div className="grid grid-cols-2 gap-12">
+        {/* Left: Flight Point Totals */}
+        <div>
+          <h2 
+            className="text-4xl font-bold mb-8"
+            style={{ color: settings.colors.primaryColor }}
+          >
+            Flight point totals:
+          </h2>
+          
+          <div className="border-2" style={{ borderColor: settings.colors.secondaryColor }}>
+            {/* Header */}
+            <div 
+              className="grid grid-cols-2 p-4 font-bold text-2xl"
+              style={{ backgroundColor: settings.colors.secondaryColor, color: '#ffffff' }}
+            >
+              <div>Flight</div>
+              <div className="text-right">Points</div>
+            </div>
+            
+            {/* Rows */}
+            {flightTotals.map((flight, index) => (
+              <div
+                key={flight.flight}
+                className="grid grid-cols-2 p-4 text-2xl border-t-2"
+                style={{
+                  backgroundColor: index % 2 === 0 ? settings.colors.accentColor : '#ffffff',
+                  borderColor: settings.colors.secondaryColor,
+                  color: settings.colors.primaryColor
+                }}
+              >
+                <div className="font-bold">{flight.flight} Flight</div>
+                <div className="text-right font-bold">{flight.points}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        {/* Right: Who has the most points */}
+        <div>
+          <h2 
+            className="text-4xl font-bold mb-8"
+            style={{ color: settings.colors.primaryColor }}
+          >
+            Who has the most points:
+          </h2>
+          
+          <div className="space-y-6">
+            {/* Winning Cadet */}
+            {winningCadet && (
+              <div className="border-2" style={{ borderColor: settings.colors.secondaryColor }}>
+                <div 
+                  className="grid grid-cols-2 p-4 font-bold text-xl"
+                  style={{ backgroundColor: settings.colors.secondaryColor, color: '#ffffff' }}
+                >
+                  <div>Winning cadet</div>
+                  <div className="text-right">Points</div>
+                </div>
+                <div
+                  className="grid grid-cols-2 p-4 text-2xl font-bold"
+                  style={{
+                    backgroundColor: '#ffffff',
+                    color: settings.colors.primaryColor
+                  }}
+                >
+                  <div>{winningCadet.name}</div>
+                  <div className="text-right">{winningCadet.points}</div>
+                </div>
+              </div>
+            )}
+            
+            {/* Winning Flight */}
+            {winningFlight && (
+              <div className="border-2" style={{ borderColor: settings.colors.secondaryColor }}>
+                <div 
+                  className="grid grid-cols-2 p-4 font-bold text-xl"
+                  style={{ backgroundColor: settings.colors.secondaryColor, color: '#ffffff' }}
+                >
+                  <div>Flight</div>
+                  <div className="text-right">Points</div>
+                </div>
+                <div
+                  className="grid grid-cols-2 p-4 text-2xl font-bold"
+                  style={{
+                    backgroundColor: '#ffffff',
+                    color: settings.colors.primaryColor
+                  }}
+                >
+                  <div>{winningFlight.flight} Flight</div>
+                  <div className="text-right">{winningFlight.points}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Slide: Complete Leaderboard (all cadets)
+function SlideCompleteLeaderboard({ data, settings }: { data: LeaderboardData; settings: PresentationSettings }) {
+  const leaderboard = data.cadetLeaderboard || [];
+
+  if (leaderboard.length === 0) {
+    return <EmptySlide message="No leaderboard data available" settings={settings} />;
+  }
+
+  return (
+    <div className="w-full max-w-7xl mx-auto">
+      <h1 
+        className="text-5xl font-bold text-center mb-8"
+        style={{ color: settings.colors.primaryColor }}
+      >
+        Complete Leaderboard
+      </h1>
+      
+      <div className="border-2" style={{ borderColor: settings.colors.secondaryColor }}>
+        {/* Header */}
+        <div 
+          className="grid grid-cols-5 gap-2 p-3 font-bold text-lg"
+          style={{ backgroundColor: settings.colors.secondaryColor, color: '#ffffff' }}
+        >
+          <div className="text-center">Rank</div>
+          <div className="col-span-2">Cadet Name</div>
+          <div className="text-center">Flight</div>
+          <div className="text-right">Points</div>
+        </div>
+        
+        {/* Rows - scrollable if needed */}
+        <div className="max-h-[60vh] overflow-y-auto">
+          {leaderboard.map((cadet, index) => (
+            <div
+              key={cadet.name}
+              className="grid grid-cols-5 gap-2 p-3 border-t text-lg"
+              style={{
+                backgroundColor: index % 2 === 0 ? settings.colors.accentColor : '#ffffff',
+                borderColor: settings.colors.secondaryColor,
+                color: settings.colors.primaryColor
+              }}
+            >
+              <div className="text-center font-bold">{index + 1}</div>
+              <div className="col-span-2 font-medium">{cadet.name}</div>
+              <div className="text-center font-medium">{formatFlight(cadet.flight)}</div>
+              <div className="text-right font-bold">{cadet.points}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

@@ -19,6 +19,8 @@ interface PresentationSettings {
     topFlights: boolean;
     recentActivity: boolean;
     specialAchievements: boolean;
+    flightPointsSummary: boolean;
+    completeLeaderboard: boolean;
   };
   customText: {
     squadronName: string;
@@ -41,6 +43,8 @@ const DEFAULT_SETTINGS: PresentationSettings = {
     topFlights: true,
     recentActivity: true,
     specialAchievements: true,
+    flightPointsSummary: true,
+    completeLeaderboard: true,
   },
   customText: {
     squadronName: '2427 (Biggin Hill) Squadron',
@@ -167,10 +171,34 @@ export function PresentationEditor() {
         <TabsContent value="slides" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Enabled Slides ({enabledSlidesCount}/6)</CardTitle>
+              <CardTitle>Enabled Slides ({enabledSlidesCount}/8)</CardTitle>
               <CardDescription>Choose which slides to include in the presentation</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="flightPointsSummary">Flight Points Summary</Label>
+                  <p className="text-sm text-muted-foreground">Shows flight totals and top cadet/flight side by side</p>
+                </div>
+                <Switch
+                  id="flightPointsSummary"
+                  checked={settings.enabledSlides.flightPointsSummary}
+                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'flightPointsSummary', checked)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="completeLeaderboard">Complete Leaderboard</Label>
+                  <p className="text-sm text-muted-foreground">Shows all cadets in a full ranking table</p>
+                </div>
+                <Switch
+                  id="completeLeaderboard"
+                  checked={settings.enabledSlides.completeLeaderboard}
+                  onCheckedChange={(checked) => updateNestedSetting('enabledSlides', 'completeLeaderboard', checked)}
+                />
+              </div>
+
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label htmlFor="winningCadet">Winning Cadet Slide</Label>
