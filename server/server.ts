@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { query } from './db';
 
 // --- Types ---
@@ -57,14 +57,24 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Rate limiting
-const limiter = rateLimit({
+// Rate limiters
+// General API rate limiter
+const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 100,
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip  // Use the proxied IP
+  keyGenerator: ipKeyGenerator // Properly handles IPv6 addresses with Cloudflare proxy
+});
+
+// Stricter limiter for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  message: { error: 'Too many login attempts, please try again later.' },
+  skipSuccessfulRequests: true,
+  keyGenerator: ipKeyGenerator // Properly handles IPv6 addresses
 });
 
 // Middleware
@@ -75,7 +85,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
-app.use('/api/', limiter);
+app.use('/api/', apiLimiter);
 
 // JWT secret
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
@@ -107,7 +117,7 @@ function requireRole(allowedRoles: string[]) {
 }
 
 // POST /api/auth/login
-app.post('/api/auth/login', async (req: Request, res: Response) => {
+app.post('/api/auth/login', authLimiter, async (req: Request, res: Response) => {
   const { email, password } = req.body as LoginRequestBody;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password required' });
