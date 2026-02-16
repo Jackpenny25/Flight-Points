@@ -24,6 +24,7 @@ import { TicketsAdmin } from './TicketsAdmin';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { Rewards } from './Rewards';
 import { PresentationMode } from './PresentationMode';
+import { PresentationEditor } from './PresentationEditor';
 
 interface DashboardProps {
   user: any;
@@ -308,15 +309,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                   <p className="text-xs text-gray-500">{displayRole}</p>
                 )}
               </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setShowPresentationMode(true)}
-                className="bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700 border-0"
-              >
-                <Presentation className="size-4 mr-2" />
-                Presentation Mode
-              </Button>
               <Button variant="outline" size="sm" onClick={onLogout}>
                 <LogOut className="size-4 mr-2" />
                 Logout
@@ -513,9 +505,15 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               </TabsContent>
 
               {adminUnlocked && (
-                <TabsContent value="signups">
-                  <AdminSignups accessToken={accessToken} />
-                </TabsContent>
+                <>
+                  <TabsContent value="signups">
+                    <AdminSignups accessToken={accessToken} />
+                  </TabsContent>
+                  
+                  <TabsContent value="presentation">
+                    <PresentationEditor />
+                  </TabsContent>
+                </>
               )}
             </>
           )}
