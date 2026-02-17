@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { api } from '../../utils/api';
 import { Copy, Check } from 'lucide-react';
@@ -22,12 +22,24 @@ export function Presentation() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const cadetsRes = await api.getCadets();
-        setCadets(cadetsRes.data || cadetsRes || []);
+        const response = await api.getCadets();
+        
+        // Handle different response structures
+        let cadetList = [];
+        if (Array.isArray(response)) {
+          cadetList = response;
+        } else if (response?.data && Array.isArray(response.data)) {
+          cadetList = response.data;
+        } else if (response?.cadets && Array.isArray(response.cadets)) {
+          cadetList = response.cadets;
+        }
+        
+        console.log('Loaded cadets:', cadetList);
+        setCadets(cadetList);
         setError(null);
       } catch (err) {
         console.error('Error fetching presentation data:', err);
-        setError('Failed to load data');
+        setError('Failed to load data. Check console for details.');
       } finally {
         setLoading(false);
       }
@@ -51,7 +63,7 @@ export function Presentation() {
     return acc;
   }, {} as Record<string, number>);
 
-  // Get winning flight
+  // Get winning flight (most points)
   const winningFlight = Object.entries(flightTotals).sort((a, b) => b[1] - a[1])[0];
 
   // Get cadet with most points
@@ -67,9 +79,9 @@ export function Presentation() {
 
   if (loading) {
     return (
-      <div className="w-full h-[calc(100vh-200px)] bg-white flex items-center justify-center">
+      <div className="w-full min-h-screen bg-white flex items-center justify-center p-6">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-700 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading presentation data...</p>
         </div>
       </div>
@@ -78,124 +90,135 @@ export function Presentation() {
 
   if (error) {
     return (
-      <div className="w-full h-[calc(100vh-200px)] bg-white flex items-center justify-center">
-        <div className="text-center text-red-600">
-          <p>{error}</p>
-          <Button onClick={() => window.location.reload()} className="mt-4">
-            Retry
-          </Button>
+      <div className="w-full min-h-screen bg-white flex items-center justify-center p-6">
+        <div className="text-center">
+          <p className="text-red-600 mb-2">{error}</p>
+          <p className="text-gray-600 text-sm mb-4">Cadets loaded: {cadets.length}</p>
+          <Button onClick={() => window.location.reload()}>Retry</Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full bg-white p-6 rounded-lg space-y-8">
-      {/* Section 1: Winning Flight and Cadet */}
-      <div className="space-y-6">
-        {/* Winning Flight Heading */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-blue-700">Flight with the most points:</h2>
+    <div className="w-full bg-white p-6 rounded-lg">
+      {/* Main Title */}
+      <div className="text-center mb-12">
+        <h1 className="text-5xl font-bold text-gray-800 underline">Flight points:</h1>
+      </div>
+
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-2 gap-8 mb-12">
+        {/* LEFT: Flight point totals */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-gray-800">Flight point totals:</h2>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => handleCopyHeading('Flight with the most points:')}
-              className="border-blue-500 text-blue-700 hover:bg-blue-50"
+              onClick={() => handleCopyHeading('Flight point totals:')}
+              className="border-gray-400 text-gray-700 hover:bg-gray-50"
               title="Copy heading"
             >
-              {copiedHeading === 'Flight with the most points:' ? (
+              {copiedHeading === 'Flight point totals:' ? (
                 <Check className="w-4 h-4" />
               ) : (
                 <Copy className="w-4 h-4" />
               )}
             </Button>
           </div>
-          {winningFlight && (
-            <Card className="bg-blue-50 border-2 border-blue-200">
-              <CardContent className="pt-6">
-                <p className="text-4xl font-bold text-blue-700">
-                  {winningFlight[0]}: {winningFlight[1]} points
-                </p>
-              </CardContent>
-            </Card>
-          )}
+
+          <div className="border-2 border-gray-400">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-blue-600">
+                  <th className="px-6 py-3 text-left font-bold text-white text-lg">Flight</th>
+                  <th className="px-6 py-3 text-left font-bold text-white text-lg">Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(flightTotals)
+                  .sort((a, b) => b[0].localeCompare(a[0]))
+                  .map(([flight, total], idx) => (
+                    <tr
+                      key={flight}
+                      className={idx % 2 === 0 ? 'bg-blue-100' : 'bg-white'}
+                    >
+                      <td className="px-6 py-4 text-gray-800 border-b border-gray-300">{flight}</td>
+                      <td className="px-6 py-4 text-gray-800 border-b border-gray-300 font-semibold">{total}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        {/* Cadet with Most Points Heading */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-blue-700">Cadet with the most points:</h2>
+        {/* RIGHT: Who has the most points */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-gray-800">Who has the most points:</h2>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => handleCopyHeading('Cadet with the most points:')}
-              className="border-blue-500 text-blue-700 hover:bg-blue-50"
+              onClick={() => handleCopyHeading('Who has the most points:')}
+              className="border-gray-400 text-gray-700 hover:bg-gray-50"
               title="Copy heading"
             >
-              {copiedHeading === 'Cadet with the most points:' ? (
+              {copiedHeading === 'Who has the most points:' ? (
                 <Check className="w-4 h-4" />
               ) : (
                 <Copy className="w-4 h-4" />
               )}
             </Button>
           </div>
-          {topCadet && (
-            <Card className="bg-blue-50 border-2 border-blue-200">
-              <CardContent className="pt-6">
-                <p className="text-2xl font-bold text-blue-700">
-                  {topCadet.name}: {topCadet.points} points
-                </p>
-              </CardContent>
-            </Card>
-          )}
+
+          {/* Winning Cadet Table */}
+          <div className="border-2 border-gray-400">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-blue-600">
+                  <th className="px-6 py-3 text-left font-bold text-white text-lg">Winning cadet</th>
+                  <th className="px-6 py-3 text-left font-bold text-white text-lg">Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="bg-blue-100">
+                  <td className="px-6 py-4 text-gray-800 border-b border-gray-300">{topCadet?.name || 'N/A'}</td>
+                  <td className="px-6 py-4 text-gray-800 border-b border-gray-300 font-semibold">{topCadet?.points || 0}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Winning Flight Table */}
+          <div className="border-2 border-gray-400">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-blue-600">
+                  <th className="px-6 py-3 text-left font-bold text-white text-lg">Flight</th>
+                  <th className="px-6 py-3 text-left font-bold text-white text-lg">Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="bg-blue-100">
+                  <td className="px-6 py-4 text-gray-800 border-b border-gray-300">{winningFlight?.[0] || 'N/A'}</td>
+                  <td className="px-6 py-4 text-gray-800 border-b border-gray-300 font-semibold">{winningFlight?.[1] || 0}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      {/* Section 2: Flight Breakdown */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-blue-700">Flight point totals:</h2>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleCopyHeading('Flight point totals:')}
-            className="border-blue-500 text-blue-700 hover:bg-blue-50"
-            title="Copy heading"
-          >
-            {copiedHeading === 'Flight point totals:' ? (
-              <Check className="w-4 h-4" />
-            ) : (
-              <Copy className="w-4 h-4" />
-            )}
-          </Button>
-        </div>
-        
-        <Card className="bg-blue-50 border-2 border-blue-200">
-          <CardContent className="pt-6">
-            <div className="grid grid-cols-3 gap-6">
-              {Object.entries(flightTotals)
-                .sort((a, b) => b[0].localeCompare(a[0]))
-                .map(([flight, total]) => (
-                  <div key={flight} className="text-center p-4 bg-white rounded border border-blue-200">
-                    <p className="text-sm text-gray-600 mb-2">{flight}</p>
-                    <p className="text-4xl font-bold text-blue-700">{total}</p>
-                  </div>
-                ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Section 3: All Cadets Leaderboard */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-blue-700">All cadets by total points:</h2>
+      {/* All Cadets Leaderboard */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-gray-800">All cadets by total points:</h2>
           <Button
             variant="outline"
             size="sm"
             onClick={() => handleCopyHeading('All cadets by total points:')}
-            className="border-blue-500 text-blue-700 hover:bg-blue-50"
+            className="border-gray-400 text-gray-700 hover:bg-gray-50"
             title="Copy heading"
           >
             {copiedHeading === 'All cadets by total points:' ? (
@@ -205,36 +228,42 @@ export function Presentation() {
             )}
           </Button>
         </div>
-        
-        <Card className="border-2 border-blue-200">
-          <CardContent className="p-0">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-blue-100 border-b-2 border-blue-200">
-                  <th className="px-4 py-3 text-left font-bold text-blue-700">Rank</th>
-                  <th className="px-4 py-3 text-left font-bold text-blue-700">Name</th>
-                  <th className="px-4 py-3 text-left font-bold text-blue-700">Flight</th>
-                  <th className="px-4 py-3 text-right font-bold text-blue-700">Points</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leaderboard.map((cadet, idx) => (
+
+        <div className="border-2 border-gray-400 overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-blue-600">
+                <th className="px-4 py-3 text-left font-bold text-white text-sm">Rank</th>
+                <th className="px-4 py-3 text-left font-bold text-white text-sm">Cadet Name</th>
+                <th className="px-4 py-3 text-left font-bold text-white text-sm">Flight</th>
+                <th className="px-4 py-3 text-right font-bold text-white text-sm">Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leaderboard.length > 0 ? (
+                leaderboard.map((cadet, idx) => (
                   <tr
                     key={cadet.id}
-                    className={idx % 2 === 0 ? 'bg-white' : 'bg-blue-50'}
+                    className={idx % 2 === 0 ? 'bg-blue-100' : 'bg-white'}
                   >
-                    <td className="px-4 py-2 font-bold text-blue-700">{idx + 1}</td>
-                    <td className="px-4 py-2 text-gray-800">{cadet.name}</td>
-                    <td className="px-4 py-2 text-gray-700">{cadet.flight}</td>
-                    <td className="px-4 py-2 text-right font-bold text-blue-700">{cadet.points}</td>
+                    <td className="px-4 py-2 text-gray-800 border-b border-gray-300 font-semibold">{idx + 1}</td>
+                    <td className="px-4 py-2 text-gray-800 border-b border-gray-300">{cadet.name}</td>
+                    <td className="px-4 py-2 text-gray-800 border-b border-gray-300">{cadet.flight}</td>
+                    <td className="px-4 py-2 text-gray-800 border-b border-gray-300 text-right font-semibold">{cadet.points}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-        
-        <p className="text-sm text-gray-500 text-center">
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                    No cadets with points to display
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-sm text-gray-600 text-center">
           Showing {leaderboard.length} cadets with points (0 points excluded)
         </p>
       </div>
