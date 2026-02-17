@@ -162,9 +162,53 @@ function hasSignupAdminRole(user?: UserJwtPayload) {
   return role === 'snco' || role === 'staff' || role === 'admin';
 }
 
+let signupSchemaInitPromise: Promise<void> | null = null;
+async function ensureSignupSchema() {
+  if (!signupSchemaInitPromise) {
+    signupSchemaInitPromise = (async () => {
+      await query(`
+        CREATE TABLE IF NOT EXISTS signup_codes (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          code TEXT NOT NULL UNIQUE,
+          duration_seconds INTEGER NOT NULL CHECK (duration_seconds > 0),
+          expires_at TIMESTAMP NOT NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          created_by TEXT,
+          revoked_at TIMESTAMP,
+          revoked_by TEXT
+        )
+      `);
+
+      await query(`
+        CREATE TABLE IF NOT EXISTS signup_requests (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          email TEXT NOT NULL,
+          name TEXT NOT NULL,
+          password TEXT NOT NULL,
+          flight TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await query('CREATE INDEX IF NOT EXISTS idx_signup_codes_active ON signup_codes (is_active)');
+      await query('CREATE INDEX IF NOT EXISTS idx_signup_codes_expires_at ON signup_codes (expires_at)');
+      await query('CREATE INDEX IF NOT EXISTS idx_signup_requests_email ON signup_requests (email)');
+      await query('CREATE INDEX IF NOT EXISTS idx_signup_requests_created_at ON signup_requests (created_at)');
+    })().catch((error) => {
+      signupSchemaInitPromise = null;
+      throw error;
+    });
+  }
+
+  return signupSchemaInitPromise;
+}
+
 // Public count endpoint used by dashboard widgets
 app.get('/api/auth/requests-count', async (req, res) => {
   try {
+    await ensureSignupSchema();
     const result = await query('SELECT COUNT(*)::int AS count FROM signup_requests');
     return res.json({ count: Number(result.rows[0]?.count || 0) });
   } catch (error) {
@@ -176,6 +220,7 @@ app.get('/api/auth/requests-count', async (req, res) => {
 // Legacy-compatible public count endpoint
 app.get('/api/data/signups-count', async (req, res) => {
   try {
+    await ensureSignupSchema();
     const result = await query('SELECT COUNT(*)::int AS count FROM signup_requests');
     return res.json({ count: Number(result.rows[0]?.count || 0) });
   } catch (error) {
@@ -187,6 +232,7 @@ app.get('/api/data/signups-count', async (req, res) => {
 // Public signup request route
 app.post('/api/auth/request-signup', async (req, res) => {
   try {
+    await ensureSignupSchema();
     const { email, password, name, joinCode, flight } = req.body || {};
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'Name, email and password are required' });
@@ -252,6 +298,7 @@ app.get('/api/admin/join-code', requireAuth, async (req: AuthRequest, res: Respo
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
+    await ensureSignupSchema();
     const result = await query(
       `SELECT code, expires_at, duration_seconds
        FROM signup_codes
@@ -277,6 +324,7 @@ app.post('/api/admin/join-code', requireAuth, async (req: AuthRequest, res: Resp
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
+    await ensureSignupSchema();
     const durationSeconds = Math.max(60, Number(req.body?.durationSeconds || 3600));
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
@@ -314,6 +362,7 @@ app.get('/api/auth/requests', requireAuth, async (req: AuthRequest, res: Respons
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
+    await ensureSignupSchema();
     const [requestsResult, usersResult] = await Promise.all([
       query('SELECT id, email, name, flight, status, created_at FROM signup_requests ORDER BY created_at DESC'),
       query('SELECT id, email, name, role FROM app_users'),
@@ -422,6 +471,7 @@ app.post('/api/auth/requests/:id/approve', requireAuth, async (req: AuthRequest,
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
+    await ensureSignupSchema();
     const requestId = req.params.id;
     const requestedRole = String(req.body?.role || 'cadet').toLowerCase();
 
@@ -469,6 +519,7 @@ app.delete('/api/auth/requests/:id', requireAuth, async (req: AuthRequest, res: 
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
+    await ensureSignupSchema();
     const result = await query('DELETE FROM signup_requests WHERE id = $1 RETURNING id', [req.params.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Request not found' });
