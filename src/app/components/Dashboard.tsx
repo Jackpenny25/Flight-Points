@@ -23,7 +23,7 @@ import { Tickets } from './Tickets';
 import { TicketsAdmin } from './TicketsAdmin';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { Rewards } from './Rewards';
-import { PresentationMode } from './PresentationMode';
+import { Presentation } from './Presentation';
 import { PresentationEditor } from './PresentationEditor';
 
 interface DashboardProps {
@@ -55,9 +55,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<string>('leaderboards');
   const [adminPendingCount, setAdminPendingCount] = useState<number>(0);
   const [ticketsCount, setTicketsCount] = useState<number>(0);
-  
-  // Presentation Mode state
-  const [showPresentationMode, setShowPresentationMode] = useState<boolean>(false);
   
   // Name change dialog state
   const [nameChangeDialogOpen, setNameChangeDialogOpen] = useState<boolean>(false);
@@ -511,8 +508,12 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                     <AdminSignups accessToken={accessToken} />
                   </TabsContent>
                   
-                  <TabsContent value="presentation">
+                  <TabsContent value="presentationeditor">
                     <PresentationEditor />
+                  </TabsContent>
+                  
+                  <TabsContent value="presentation" className="h-[calc(100vh-200px)]">
+                    <Presentation />
                   </TabsContent>
                 </>
               )}
@@ -621,10 +622,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Presentation Mode */}
-      {showPresentationMode && (
-        <PresentationMode onClose={() => setShowPresentationMode(false)} />
-      )}
     </div>
   );
 }
