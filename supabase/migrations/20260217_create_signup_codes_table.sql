@@ -18,10 +18,16 @@ create table if not exists public.signup_codes (
     check ((used_at is null and used_by is null) or (used_at is not null and used_by is not null))
 );
 
-create index if not exists signup_codes_expires_at_idx on public.signup_codes (expires_at);
-create index if not exists signup_codes_is_active_idx on public.signup_codes (is_active);
-create index if not exists signup_codes_created_at_idx on public.signup_codes (created_at);
+do $$
+begin
+  if to_regclass('public.signup_codes') is not null then
+    create index if not exists signup_codes_expires_at_idx on public.signup_codes (expires_at);
+    create index if not exists signup_codes_is_active_idx on public.signup_codes (is_active);
+    create index if not exists signup_codes_created_at_idx on public.signup_codes (created_at);
 
-create unique index if not exists signup_codes_one_active_code_idx
-  on public.signup_codes ((is_active))
-  where is_active = true;
+    create unique index if not exists signup_codes_one_active_code_idx
+      on public.signup_codes ((is_active))
+      where is_active = true;
+  end if;
+end
+$$;
