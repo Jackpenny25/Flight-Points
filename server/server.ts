@@ -155,6 +155,331 @@ app.post('/api/auth/logout', (req: Request, res: Response) => {
 app.get('/api/auth/me', requireAuth, async (req: AuthRequest, res: Response) => {
   res.json({ user: req.user });
 });
+
+function hasSignupAdminRole(user?: UserJwtPayload) {
+  if (!user) return false;
+  const role = (user.role || '').toLowerCase();
+  return role === 'snco' || role === 'staff' || role === 'admin';
+}
+
+// Public count endpoint used by dashboard widgets
+app.get('/api/auth/requests-count', async (req, res) => {
+  try {
+    const result = await query('SELECT COUNT(*)::int AS count FROM signup_requests');
+    return res.json({ count: Number(result.rows[0]?.count || 0) });
+  } catch (error) {
+    console.error('Error in GET /api/auth/requests-count:', error);
+    return res.status(500).json({ error: 'Failed to fetch signup request count' });
+  }
+});
+
+// Legacy-compatible public count endpoint
+app.get('/api/data/signups-count', async (req, res) => {
+  try {
+    const result = await query('SELECT COUNT(*)::int AS count FROM signup_requests');
+    return res.json({ count: Number(result.rows[0]?.count || 0) });
+  } catch (error) {
+    console.error('Error in GET /api/data/signups-count:', error);
+    return res.status(500).json({ error: 'Failed to fetch signup request count' });
+  }
+});
+
+// Public signup request route
+app.post('/api/auth/request-signup', async (req, res) => {
+  try {
+    const { email, password, name, joinCode, flight } = req.body || {};
+    if (!email || !password || !name) {
+      return res.status(400).json({ error: 'Name, email and password are required' });
+    }
+
+    let flightNorm: string | null = null;
+    if (flight != null && String(flight).trim() !== '') {
+      const candidate = String(flight).trim();
+      if (!['1', '2', '3', '4'].includes(candidate)) {
+        return res.status(400).json({ error: 'Invalid flight. Choose 1, 2, 3 or 4.' });
+      }
+      flightNorm = candidate;
+    }
+
+    const codeResult = await query(
+      `SELECT code, expires_at
+       FROM signup_codes
+       WHERE is_active = true
+       ORDER BY created_at DESC
+       LIMIT 1`
+    );
+    const activeCode = codeResult.rows[0];
+    if (!activeCode) {
+      return res.status(403).json({ error: 'Signup is currently closed. Ask a Flight Point Lead for the join code.' });
+    }
+    const expiresAt = new Date(activeCode.expires_at).getTime();
+    if (Date.now() > expiresAt) {
+      return res.status(403).json({ error: 'Join code expired.' });
+    }
+    if (!joinCode || String(joinCode).trim().toUpperCase() !== String(activeCode.code).trim().toUpperCase()) {
+      return res.status(403).json({ error: 'Invalid join code.' });
+    }
+
+    const throttleResult = await query(
+      `SELECT COUNT(*)::int AS count
+       FROM signup_requests
+       WHERE LOWER(email) = LOWER($1)
+         AND created_at >= NOW() - INTERVAL '1 hour'`,
+      [String(email)]
+    );
+    const recentCount = Number(throttleResult.rows[0]?.count || 0);
+    if (recentCount >= 5) {
+      return res.status(429).json({ error: 'Too many signup attempts. Try again later.' });
+    }
+
+    const insertResult = await query(
+      `INSERT INTO signup_requests (email, name, password, flight, status)
+       VALUES (LOWER($1), $2, $3, $4, 'pending')
+       RETURNING id, email, name, flight, status, created_at`,
+      [String(email), String(name).trim(), String(password), flightNorm]
+    );
+
+    return res.status(201).json({ request: insertResult.rows[0] });
+  } catch (error) {
+    console.error('Error in POST /api/auth/request-signup:', error);
+    return res.status(500).json({ error: 'Failed to create signup request' });
+  }
+});
+
+// Admin: get active join code
+app.get('/api/admin/join-code', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const result = await query(
+      `SELECT code, expires_at, duration_seconds
+       FROM signup_codes
+       WHERE is_active = true
+       ORDER BY created_at DESC
+       LIMIT 1`
+    );
+    const row = result.rows[0];
+    return res.json({
+      joinCode: row?.code || null,
+      expiresAt: row?.expires_at || null,
+      durationSeconds: row?.duration_seconds || null,
+    });
+  } catch (error) {
+    console.error('Error in GET /api/admin/join-code:', error);
+    return res.status(500).json({ error: 'Failed to fetch join code' });
+  }
+});
+
+// Admin: rotate join code
+app.post('/api/admin/join-code', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const durationSeconds = Math.max(60, Number(req.body?.durationSeconds || 3600));
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    const expiresAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
+    const actor = req.user?.name || req.user?.email || 'system';
+
+    await query(
+      `UPDATE signup_codes
+       SET is_active = false,
+           revoked_at = NOW(),
+           revoked_by = $1
+       WHERE is_active = true`,
+      [actor]
+    );
+
+    await query(
+      `INSERT INTO signup_codes (code, duration_seconds, expires_at, is_active, created_by)
+       VALUES ($1, $2, $3, true, $4)`,
+      [code, durationSeconds, expiresAt, actor]
+    );
+
+    return res.json({ joinCode: code, expiresAt, durationSeconds });
+  } catch (error) {
+    console.error('Error in POST /api/admin/join-code:', error);
+    return res.status(500).json({ error: 'Failed to create join code' });
+  }
+});
+
+// Admin: list pending signup requests
+app.get('/api/auth/requests', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const [requestsResult, usersResult] = await Promise.all([
+      query('SELECT id, email, name, flight, status, created_at FROM signup_requests ORDER BY created_at DESC'),
+      query('SELECT id, email, name, role FROM app_users'),
+    ]);
+
+    const usersByEmail = new Map<string, any>();
+    for (const user of usersResult.rows) {
+      usersByEmail.set(String(user.email || '').toLowerCase(), user);
+    }
+
+    const requests = requestsResult.rows.map((r) => {
+      const matched = usersByEmail.get(String(r.email || '').toLowerCase());
+      return {
+        id: r.id,
+        email: r.email,
+        name: r.name,
+        flight: r.flight,
+        status: r.status,
+        createdAt: r.created_at,
+        existingAccounts: matched
+          ? [{
+              id: matched.id,
+              email: matched.email,
+              user_metadata: {
+                name: matched.name,
+                role: matched.role,
+              },
+              created_at: null,
+            }]
+          : [],
+      };
+    });
+
+    return res.json({ requests });
+  } catch (error) {
+    console.error('Error in GET /api/auth/requests:', error);
+    return res.status(500).json({ error: 'Failed to fetch requests' });
+  }
+});
+
+// Admin: list accounts for role management
+app.get('/api/auth/users', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const result = await query('SELECT id, email, name, role FROM app_users ORDER BY email ASC');
+    const users = result.rows.map((u) => ({
+      id: u.id,
+      email: u.email,
+      user_metadata: {
+        name: u.name,
+        role: u.role,
+      },
+      created_at: null,
+    }));
+    return res.json({ users });
+  } catch (error) {
+    console.error('Error in GET /api/auth/users:', error);
+    return res.status(500).json({ error: 'Failed to list users' });
+  }
+});
+
+// Admin: update account role/name
+app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const { role, name } = req.body || {};
+    const updates: string[] = [];
+    const params: any[] = [];
+
+    if (role !== undefined) {
+      params.push(String(role).toLowerCase());
+      updates.push(`role = $${params.length}`);
+    }
+    if (name !== undefined) {
+      params.push(String(name));
+      updates.push(`name = $${params.length}`);
+    }
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No update fields provided' });
+    }
+
+    params.push(req.params.id);
+    const result = await query(
+      `UPDATE app_users SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING id, email, name, role`,
+      params
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    return res.json({ user: result.rows[0] });
+  } catch (error) {
+    console.error('Error in PUT /api/auth/users/:id:', error);
+    return res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Admin: approve signup request into app_users
+app.post('/api/auth/requests/:id/approve', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const requestId = req.params.id;
+    const requestedRole = String(req.body?.role || 'cadet').toLowerCase();
+
+    const requestResult = await query(
+      'SELECT id, email, name, password, flight FROM signup_requests WHERE id = $1',
+      [requestId]
+    );
+    const rec = requestResult.rows[0];
+    if (!rec) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    const passwordHash = await bcrypt.hash(String(rec.password), 10);
+    const existingResult = await query('SELECT id FROM app_users WHERE LOWER(email) = LOWER($1) LIMIT 1', [rec.email]);
+
+    let userId: string;
+    if (existingResult.rows.length > 0) {
+      userId = existingResult.rows[0].id;
+      await query(
+        `UPDATE app_users
+         SET name = $1, role = $2, password_hash = $3
+         WHERE id = $4`,
+        [rec.name, requestedRole, passwordHash, userId]
+      );
+    } else {
+      userId = crypto.randomUUID();
+      await query(
+        `INSERT INTO app_users (id, email, name, role, password_hash)
+         VALUES ($1, LOWER($2), $3, $4, $5)`,
+        [userId, rec.email, rec.name, requestedRole, passwordHash]
+      );
+    }
+
+    await query('DELETE FROM signup_requests WHERE id = $1', [requestId]);
+    return res.json({ user: { id: userId, email: rec.email, name: rec.name, role: requestedRole } });
+  } catch (error) {
+    console.error('Error in POST /api/auth/requests/:id/approve:', error);
+    return res.status(500).json({ error: 'Failed to approve request' });
+  }
+});
+
+// Admin: reject/delete signup request
+app.delete('/api/auth/requests/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const result = await query('DELETE FROM signup_requests WHERE id = $1 RETURNING id', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error in DELETE /api/auth/requests/:id:', error);
+    return res.status(500).json({ error: 'Failed to delete request' });
+  }
+});
+
 type DataType = 'cadets' | 'points' | 'attendance' | 'attendanceBulks' | 'rewards';
 
 const typeConfig: Record<DataType, { table: string; columns: Record<string, string>; orderBy?: string; hasUpdatedAt?: boolean }> = {

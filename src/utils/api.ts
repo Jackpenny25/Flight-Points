@@ -3,6 +3,19 @@ import { getToken } from './auth';
 
 const API_URL = 'https://flightpoints.uk/api';
 
+async function parseJsonSafe(response: Response) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text || '{}');
+  } catch {
+    return {
+      error: `Non-JSON response (${response.status})`,
+      status: response.status,
+      raw: text?.slice(0, 300) || null,
+    };
+  }
+}
+
 function fetchWithAuth(url: string, options: RequestInit = {}) {
   const token = getToken();
   const headers = {
@@ -89,26 +102,27 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
-    }).then(r => r.json()),
+    }).then(parseJsonSafe),
 
   // Admin Signups
   getPendingSignups: () => fetchWithAuth('/auth/requests', { method: 'GET' })
-    .then(r => r.json())
+    .then(parseJsonSafe)
     .then((res) => ({ ...res, signups: res?.signups || res?.requests || [] })),
-  getJoinCode: () => fetchWithAuth('/admin/join-code', { method: 'GET' }).then(r => r.json()),
+  getJoinCode: () => fetchWithAuth('/admin/join-code', { method: 'GET' }).then(parseJsonSafe),
   createJoinCode: (data: { durationSeconds: number }) =>
-    fetchWithAuth('/admin/join-code', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
-  getUsers: () => fetchWithAuth('/auth/users', { method: 'GET' }).then(r => r.json()),
+    fetchWithAuth('/admin/join-code', { method: 'POST', body: JSON.stringify(data) }).then(parseJsonSafe),
+  getUsers: () => fetchWithAuth('/auth/users', { method: 'GET' }).then(parseJsonSafe),
   approveUser: (userId: string, data: Record<string, any> = {}) =>
-    fetchWithAuth(`/auth/requests/${encodeURIComponent(userId)}/approve`, { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+    fetchWithAuth(`/auth/requests/${encodeURIComponent(userId)}/approve`, { method: 'POST', body: JSON.stringify(data) }).then(parseJsonSafe),
   updateUserRole: (userId: string, role: string) =>
-    fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ role }) }).then(r => r.json()),
+    fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ role }) }).then(parseJsonSafe),
   getPendingSignupsCount: () =>
     fetchWithAuth('/auth/requests-count', { method: 'GET' })
       .then(async (r) => {
-        if (r.ok) return r.json();
+        const primary = await parseJsonSafe(r);
+        if (r.ok) return primary;
         const fallback = await fetchWithAuth('/data/signups-count', { method: 'GET' });
-        return fallback.json();
+        return parseJsonSafe(fallback);
       }),
 };
 
