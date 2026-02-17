@@ -90,6 +90,26 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then(r => r.json()),
+
+  // Admin Signups
+  getPendingSignups: () => fetchWithAuth('/auth/requests', { method: 'GET' })
+    .then(r => r.json())
+    .then((res) => ({ ...res, signups: res?.signups || res?.requests || [] })),
+  getJoinCode: () => fetchWithAuth('/admin/join-code', { method: 'GET' }).then(r => r.json()),
+  createJoinCode: (data: { durationSeconds: number }) =>
+    fetchWithAuth('/admin/join-code', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+  getUsers: () => fetchWithAuth('/auth/users', { method: 'GET' }).then(r => r.json()),
+  approveUser: (userId: string, data: Record<string, any> = {}) =>
+    fetchWithAuth(`/auth/requests/${encodeURIComponent(userId)}/approve`, { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+  updateUserRole: (userId: string, role: string) =>
+    fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ role }) }).then(r => r.json()),
+  getPendingSignupsCount: () =>
+    fetchWithAuth('/auth/requests-count', { method: 'GET' })
+      .then(async (r) => {
+        if (r.ok) return r.json();
+        const fallback = await fetchWithAuth('/data/signups-count', { method: 'GET' });
+        return fallback.json();
+      }),
 };
 
 export { fetchWithAuth };
