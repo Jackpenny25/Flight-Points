@@ -180,6 +180,23 @@ async function ensureSignupSchema() {
         )
       `);
 
+      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS duration_seconds INTEGER');
+      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP');
+      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE');
+      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()');
+      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS created_by TEXT');
+      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP');
+      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS revoked_by TEXT');
+
+      await query("UPDATE signup_codes SET is_active = TRUE WHERE is_active IS NULL");
+      await query("UPDATE signup_codes SET created_at = NOW() WHERE created_at IS NULL");
+      await query("UPDATE signup_codes SET duration_seconds = 3600 WHERE duration_seconds IS NULL");
+      await query("UPDATE signup_codes SET expires_at = NOW() + INTERVAL '1 hour' WHERE expires_at IS NULL");
+
+      await query('ALTER TABLE signup_codes ALTER COLUMN duration_seconds SET DEFAULT 3600');
+      await query('ALTER TABLE signup_codes ALTER COLUMN is_active SET DEFAULT TRUE');
+      await query('ALTER TABLE signup_codes ALTER COLUMN created_at SET DEFAULT NOW()');
+
       await query(`
         CREATE TABLE IF NOT EXISTS signup_requests (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -191,6 +208,16 @@ async function ensureSignupSchema() {
           created_at TIMESTAMP NOT NULL DEFAULT NOW()
         )
       `);
+
+      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS email TEXT');
+      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS name TEXT');
+      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS password TEXT');
+      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS flight TEXT');
+      await query("ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'");
+      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()');
+
+      await query("UPDATE signup_requests SET status = 'pending' WHERE status IS NULL");
+      await query("UPDATE signup_requests SET created_at = NOW() WHERE created_at IS NULL");
 
       await query('CREATE INDEX IF NOT EXISTS idx_signup_codes_active ON signup_codes (is_active)');
       await query('CREATE INDEX IF NOT EXISTS idx_signup_codes_expires_at ON signup_codes (expires_at)');
