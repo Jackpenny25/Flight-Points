@@ -126,7 +126,7 @@ export function AdminPinManager({ accessToken, userId, userRole }: AdminPinManag
       <Card>
         <CardHeader>
           <CardTitle>Admin PIN</CardTitle>
-          <CardDescription>Manage your Flight Point Lead PIN for sensitive actions.</CardDescription>
+          <CardDescription>Enter the 6-digit admin PIN to unlock actions.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {pinStatus?.is_default && (
