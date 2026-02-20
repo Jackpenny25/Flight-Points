@@ -3,7 +3,7 @@ import { Bell } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
-import { projectId } from '../../../utils/supabase/info';
+import { api } from '../../utils/api';
 
 interface Notification {
   id: string;
@@ -25,17 +25,8 @@ export function NotificationCenter({ accessToken }: Props) {
 
   const fetchNotifications = async () => {
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/notifications`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      console.log('Fetch notifications response:', res.status, res.statusText);
-      if (res.ok) {
-        const data = await res.json();
-        console.log('Notifications data:', data);
-        setNotifications(data.notifications || []);
-      } else {
-        console.error('Fetch failed:', res.status, await res.text());
-      }
+      const data = await api.getNotifications();
+      setNotifications(data.notifications || data || []);
     } catch (e) {
       console.error('Failed to fetch notifications:', e);
     }
@@ -64,10 +55,7 @@ export function NotificationCenter({ accessToken }: Props) {
 
   const markAsRead = async (id: string) => {
     try {
-      await fetch(`https://${projectId}.supabase.co/functions/v1/server/notifications/${id}/read`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      await api.markNotificationRead(id);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     } catch (e) {
       console.error('Failed to mark notification as read:', e);
@@ -76,10 +64,7 @@ export function NotificationCenter({ accessToken }: Props) {
 
   const markAllAsRead = async () => {
     try {
-      await fetch(`https://${projectId}.supabase.co/functions/v1/server/notifications/read-all`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      await api.markAllNotificationsRead();
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     } catch (e) {
       console.error('Failed to mark all as read:', e);

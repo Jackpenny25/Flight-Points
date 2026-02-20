@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { Users, Clock } from 'lucide-react';
-import { projectId } from '../../../utils/supabase/info';
+import { api } from '../../utils/api';
 
 interface ContributorSummary {
   name: string;
@@ -35,14 +35,7 @@ export function AdminPointGivers({ accessToken }: AdminPointGiversProps) {
 
   const fetchData = async () => {
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/admin/point-givers`,
-        { headers }
-      );
-      const data = await res.json();
+      const data = await api.getPointGivers();
       setContributors(data.contributors || []);
       setRecentPointsGlobal(data.recentPointsGlobal || []);
     } catch (e) {

@@ -1,6 +1,6 @@
 import React from 'react'
 import DownloadCsvButton from './DownloadCsvButton'
-import { ArrowUpRight, Award, Calendar, Users, FileText, Shield, FileSpreadsheet, Gift } from 'lucide-react'
+import { ArrowUpRight, Award, Calendar, Users, FileText, Shield, FileSpreadsheet, Gift, Presentation } from 'lucide-react'
 
 const items = [
   { key: 'leaderboards', label: 'Leaderboards', icon: ArrowUpRight },
@@ -58,6 +58,7 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
         { key: 'admin', label: 'NCOs', icon: Shield },
         { key: 'tickets', label: 'Tickets', icon: FileText },
         { key: 'reports', label: 'Reports', icon: FileText },
+        { key: 'presentation', label: 'Presentation', icon: Presentation },
         { key: 'download', label: 'Download CSVs', icon: FileSpreadsheet },
         ...(adminPendingCount && adminPendingCount > 0 
           ? [{ key: 'signups', label: 'Signups', icon: Users, badgeCount: adminPendingCount }]

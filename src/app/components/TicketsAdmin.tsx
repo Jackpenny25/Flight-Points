@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { MessageSquare } from 'lucide-react';
-import { projectId } from '../../../utils/supabase/info';
+import { api } from '../../utils/api';
 import { toast } from 'sonner';
 
 interface Props { accessToken: string; }
@@ -22,10 +22,7 @@ export function TicketsAdmin({ accessToken }: Props) {
   const fetchTickets = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/tickets`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const data = await res.json();
+      const data = await api.getTickets();
       setTickets((data.tickets || []).filter((t: any) => t).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch (e) {
       console.error('Fetch tickets error', e);
@@ -55,12 +52,7 @@ export function TicketsAdmin({ accessToken }: Props) {
       } else {
         body.reason = st.reason || 'Rejected';
       }
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/tickets/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error('Action failed');
+      await api.updateTicket(id, body);
       await fetchTickets();
     } catch (e) {
       console.error('Action error', e);
@@ -75,12 +67,7 @@ export function TicketsAdmin({ accessToken }: Props) {
   const addComment = async () => {
     if (!commentText.trim() || !selectedTicket) return;
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/tickets/${selectedTicket.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ action: 'comment', comment: commentText }),
-      });
-      if (!res.ok) throw new Error('Failed to add comment');
+      await api.updateTicket(selectedTicket.id, { action: 'comment', comment: commentText });
       toast.success('Comment added');
       setCommentText('');
       await fetchTickets();

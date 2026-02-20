@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { projectId } from '../../../utils/supabase/info';
-import supabase from '../../utils/supabase/client';
+import { api } from '../../utils/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { CheckCircle, XCircle, AlertTriangle, Shield } from 'lucide-react';
@@ -37,110 +36,32 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
 
   const performIntegrityChecks = async () => {
     setLoading(true);
-    const runChecks: IntegrityCheck[] = [];
-    const summaryCounts = { totalChecks: 0, passed: 0, warnings: 0, failed: 0 };
-
-    const add = (c: IntegrityCheck) => {
-      runChecks.push(c);
-      summaryCounts.totalChecks += 1;
-      if (c.status === 'pass') summaryCounts.passed += 1;
-      if (c.status === 'warning') summaryCounts.warnings += 1;
-      if (c.status === 'fail') summaryCounts.failed += 1;
-    };
-
-    const headers: Record<string, string> = {};
-    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-    // Client-side Supabase checks (avoid directly calling function URLs to prevent 404 noise)
-    // Cadets table
     try {
-      const { data: cadets, error: cadetError } = await supabase.from('cadets').select('id, email, first_name, last_name');
-      if (cadetError) {
-        add({ name: 'Cadets table', status: 'warning', message: `Error querying cadets: ${cadetError.message}` });
-      } else if (!cadets || cadets.length === 0) {
-        add({ name: 'Cadets table', status: 'warning', message: 'Cadets table is empty or inaccessible.' });
-      } else {
-        // duplicate id/email checks
-        const ids = new Set<string>();
-        const emails = new Map<string, number>();
-        cadets.forEach((c: any) => {
-          if (c && c.id) ids.add(String(c.id));
-          if (c && c.email) emails.set(String(c.email).toLowerCase(), (emails.get(String(c.email).toLowerCase()) || 0) + 1);
-        });
-        const duplicateEmails = Array.from(emails.entries()).filter(([, count]) => count > 1).map(([e]) => e).slice(0, 5);
-        if (duplicateEmails.length > 0) {
-          add({ name: 'Cadets table', status: 'warning', message: `Loaded ${cadets.length} cadets. Duplicate emails found: ${duplicateEmails.join(', ')}`, details: `${duplicateEmails.length} duplicate email(s) shown.` });
-        } else {
-          add({ name: 'Cadets table', status: 'pass', message: `Loaded ${cadets.length} cadets.` });
-        }
-      }
-    } catch (e: any) {
-      add({ name: 'Cadets table', status: 'warning', message: `Unexpected error checking cadets: ${String(e?.message || e)}` });
+      const data = await api.runIntegrityCheck();
+      
+      // Process server response to match UI expectations
+      const runChecks: IntegrityCheck[] = data.checks || [];
+      const summaryCounts = {
+        totalChecks: runChecks.length,
+        passed: runChecks.filter(c => c.status === 'pass').length,
+        warnings: runChecks.filter(c => c.status === 'warning').length,
+        failed: runChecks.filter(c => c.status === 'fail').length,
+      };
+      
+      setChecks(runChecks);
+      setSummary(summaryCounts);
+    } catch (error) {
+      console.error('Error performing integrity checks:', error);
+      toast.error('Failed to perform integrity checks');
+      setChecks([{
+        name: 'API Error',
+        status: 'fail',
+        message: 'Failed to connect to server for integrity checks'
+      }]);
+      setSummary({ totalChecks: 1, passed: 0, warnings: 0, failed: 1 });
+    } finally {
+      setLoading(false);
     }
-
-    // Attendance table
-    let cadetIdSet = new Set<string>();
-    try {
-      const { data: cadetsAll } = await supabase.from('cadets').select('id');
-      if (cadetsAll && Array.isArray(cadetsAll)) cadetIdSet = new Set(cadetsAll.map((c: any) => String(c.id)));
-    } catch (e) {
-      // ignore — we'll still run attendance checks best-effort
-    }
-
-    try {
-      const { data: attendance, error: attendError } = await supabase.from('attendance').select('id, cadet_id, date').limit(5000);
-      if (attendError) {
-        add({ name: 'Attendance table', status: 'warning', message: `Error querying attendance: ${attendError.message}` });
-      } else if (!attendance || attendance.length === 0) {
-        add({ name: 'Attendance table', status: 'warning', message: 'No attendance records found.' });
-      } else {
-        // find orphan attendance entries pointing to missing cadets
-        const orphaned = attendance.filter((a: any) => a && a.cadet_id && !cadetIdSet.has(String(a.cadet_id)));
-        if (orphaned.length > 0) {
-          add({ name: 'Attendance table', status: 'warning', message: `Loaded ${attendance.length} records. ${orphaned.length} orphaned attendance entries.` , details: `${orphaned.slice(0,5).map((o:any)=>o.id).join(', ')}`});
-        } else {
-          add({ name: 'Attendance table', status: 'pass', message: `Loaded ${attendance.length} attendance records.` });
-        }
-      }
-    } catch (e: any) {
-      add({ name: 'Attendance table', status: 'warning', message: `Unexpected error checking attendance: ${String(e?.message || e)}` });
-    }
-
-    // Points table
-    try {
-      const { data: points, error: pointsError } = await supabase.from('points').select('id, cadet_id, points').limit(5000);
-      if (pointsError) {
-        add({ name: 'Points table', status: 'warning', message: `Error querying points: ${pointsError.message}` });
-      } else if (!points || points.length === 0) {
-        add({ name: 'Points table', status: 'warning', message: 'No point records found.' });
-      } else {
-        const orphanPoints = points.filter((p: any) => p && p.cadet_id && !cadetIdSet.has(String(p.cadet_id)));
-        const negativePoints = points.filter((p: any) => typeof p.points === 'number' && p.points < 0);
-        if (orphanPoints.length > 0 || negativePoints.length > 0) {
-          const details = [`orphaned:${orphanPoints.length}`, `negative:${negativePoints.length}`].join(', ');
-          add({ name: 'Points table', status: 'warning', message: `Loaded ${points.length} point records. Issues found: ${details}`, details });
-        } else {
-          add({ name: 'Points table', status: 'pass', message: `Loaded ${points.length} point records.` });
-        }
-      }
-    } catch (e: any) {
-      add({ name: 'Points table', status: 'warning', message: `Unexpected error checking points: ${String(e?.message || e)}` });
-    }
-
-    // Note about server-side function checks
-    add({ name: 'Server integrity endpoint', status: 'warning', message: 'Server functions are not invoked from the client to avoid network 404 noise. Deploy and run server-side checks from the server environment.' });
-
-    // 5) Auth session availability
-    if (!accessToken) {
-      add({ name: 'Auth session', status: 'warning', message: 'No access token — some server checks are unavailable. Sign in to run full checks.' });
-    } else {
-      add({ name: 'Auth session', status: 'pass', message: 'Access token available.' });
-    }
-
-    // finalize
-    setChecks(runChecks);
-    setSummary(summaryCounts);
-    setLoading(false);
   };
 
   const getStatusIcon = (status: string) => {

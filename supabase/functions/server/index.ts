@@ -53,7 +53,7 @@ function getSupabaseClient() {
   );
 }
 
-const PIN_DIGITS_REGEX = /^\d{4,6}$/;
+const PIN_DIGITS_REGEX = /^\d{6}$/;
 const PIN_MAX_ATTEMPTS = 5;
 const PIN_LOCK_MINUTES = 15;
 
@@ -191,6 +191,19 @@ async function verifyPinValue(
   });
 
   return { success: true, isDefault: !!row.is_default, lockedUntil: null };
+}
+
+async function getActiveJoinCodeRecord(sb: any) {
+  const { data, error } = await sb
+    .from('signup_codes')
+    .select('id, code, expires_at, duration_seconds, is_active, created_at')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data || null;
 }
 
 // Auth Routes
@@ -1530,7 +1543,6 @@ app.delete("/make-server-73a3871f/attendance/bulk/:id", verifyAuth, async (c) =>
   }
 });
  
-
 // Data Integrity Checks
 app.get("/make-server-73a3871f/integrity-check", verifyAuth, async (c) => {
   try {
@@ -1745,9 +1757,13 @@ Deno.serve(async (req: Request) => {
     if (pathname.endsWith('/data/signups-count') && req.method === 'GET') {
       console.log('🟢 MATCHED /data/signups-count endpoint');
       try {
-        const items = await kv.getByPrefix('signup:');
-        console.log('✅ Returning count:', items.length);
-        return new Response(JSON.stringify({ count: (items || []).length }), {
+        const sb = getSupabaseAdmin();
+        const { count, error } = await sb
+          .from('signup_requests')
+          .select('id', { count: 'exact', head: true });
+        if (error) throw error;
+        console.log('✅ Returning count:', count || 0);
+        return new Response(JSON.stringify({ count: count || 0 }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
@@ -1828,6 +1844,7 @@ Deno.serve(async (req: Request) => {
     // Collect signup requests (no immediate account creation)
     if (pathname.includes('/auth/request-signup') && req.method === 'POST') {
       try {
+        const sb = getSupabaseAdmin();
         const body = await req.json();
         const { email, password, name, joinCode, flight } = body || {};
         if (!email || !password || !name) {
@@ -1851,15 +1868,15 @@ Deno.serve(async (req: Request) => {
           }
         }
         // Validate active join code
-        const jc = await kv.get('joincode:current');
-        if (!jc || !jc.code || !jc.expiresAt) {
+        const jc = await getActiveJoinCodeRecord(sb);
+        if (!jc || !jc.code || !jc.expires_at) {
           return new Response(JSON.stringify({ error: 'Signup is currently closed. Ask a Flight Point Lead for the join code.' }), {
             status: 403,
             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
           });
         }
         const now = Date.now();
-        const expires = new Date(jc.expiresAt).getTime();
+        const expires = new Date(jc.expires_at).getTime();
         if (now > expires) {
           return new Response(JSON.stringify({ error: 'Join code expired.' }), {
             status: 403,
@@ -1874,24 +1891,38 @@ Deno.serve(async (req: Request) => {
         }
   // hCaptcha verification temporarily disabled
         // Basic per-email throttle (max 5 requests per hour)
-        const throttleKey = `throttle:${(email || '').toLowerCase()}`;
-        const t = await kv.get(throttleKey);
-        const windowMs = 60 * 60 * 1000; // 1 hour
+        const windowMs = 60 * 60 * 1000;
         const limit = 5;
         const nowMs = Date.now();
-        if (t && t.resetAt && nowMs < new Date(t.resetAt).getTime() && (t.count || 0) >= limit) {
+        const windowStartIso = new Date(nowMs - windowMs).toISOString();
+        const { count: recentCount, error: throttleErr } = await sb
+          .from('signup_requests')
+          .select('id', { count: 'exact', head: true })
+          .eq('email', String(email).toLowerCase())
+          .gte('created_at', windowStartIso);
+        if (throttleErr) throw throttleErr;
+        if ((recentCount || 0) >= limit) {
           return new Response(JSON.stringify({ error: 'Too many signup attempts. Try again later.' }), {
             status: 429,
             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
           });
         }
-        const nextCount = t && nowMs < new Date(t.resetAt).getTime() ? (t.count || 0) + 1 : 1;
-        const nextReset = t && nowMs < new Date(t.resetAt).getTime() ? t.resetAt : new Date(nowMs + windowMs).toISOString();
-        await kv.set(throttleKey, { count: nextCount, resetAt: nextReset });
-        const id = crypto.randomUUID();
-        const rec = { id, email, name, password, flight: flightNorm, status: 'pending', createdAt: new Date().toISOString() };
-        await kv.set(`signup:${id}`, rec);
-        return new Response(JSON.stringify({ request: { id, email, name, flight: flightNorm, status: 'pending' } }), {
+
+        const insertPayload = {
+          email: String(email).toLowerCase(),
+          name: String(name).trim(),
+          password: String(password),
+          flight: flightNorm,
+          status: 'pending',
+        };
+        const { data: created, error: insertErr } = await sb
+          .from('signup_requests')
+          .insert(insertPayload)
+          .select('id, email, name, flight, status')
+          .single();
+        if (insertErr) throw insertErr;
+
+        return new Response(JSON.stringify({ request: created }), {
           status: 201,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
@@ -2364,8 +2395,8 @@ Deno.serve(async (req: Request) => {
         if (error || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         const role = (user.user_metadata?.role || '').toLowerCase();
         if (role !== 'snco' && role !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-        const jc = await kv.get('joincode:current');
-        return new Response(JSON.stringify({ joinCode: jc?.code || null, expiresAt: jc?.expiresAt || null, durationSeconds: jc?.durationSeconds || null }), {
+        const jc = await getActiveJoinCodeRecord(sb);
+        return new Response(JSON.stringify({ joinCode: jc?.code || null, expiresAt: jc?.expires_at || null, durationSeconds: jc?.duration_seconds || null }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
@@ -2391,7 +2422,24 @@ Deno.serve(async (req: Request) => {
         let code = '';
         for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
         const expiresAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
-        await kv.set('joincode:current', { code, expiresAt, durationSeconds, createdAt: new Date().toISOString(), createdBy: user.user_metadata?.name || user.email });
+        const actor = user.user_metadata?.name || user.email;
+        const { error: deactivateErr } = await sb
+          .from('signup_codes')
+          .update({ is_active: false, revoked_at: new Date().toISOString(), revoked_by: actor })
+          .eq('is_active', true);
+        if (deactivateErr) throw deactivateErr;
+
+        const { error: insertErr } = await sb
+          .from('signup_codes')
+          .insert({
+            code,
+            duration_seconds: durationSeconds,
+            expires_at: expiresAt,
+            is_active: true,
+            created_by: actor,
+          });
+        if (insertErr) throw insertErr;
+
         return new Response(JSON.stringify({ joinCode: code, expiresAt, durationSeconds }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Failed to create join code' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
@@ -2401,8 +2449,12 @@ Deno.serve(async (req: Request) => {
     // Count signup requests (public, no auth - check BEFORE /auth/requests)
     if (pathname.match(/\/auth\/requests-count$/) && req.method === 'GET') {
       try {
-        const items = await kv.getByPrefix('signup:');
-        return new Response(JSON.stringify({ count: (items || []).length }), {
+        const sb = getSupabaseAdmin();
+        const { count, error } = await sb
+          .from('signup_requests')
+          .select('id', { count: 'exact', head: true });
+        if (error) throw error;
+        return new Response(JSON.stringify({ count: count || 0 }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
@@ -2427,7 +2479,11 @@ Deno.serve(async (req: Request) => {
         if (error || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         const role = (user.user_metadata?.role || '').toLowerCase();
         if (role !== 'snco' && role !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-        const items = await kv.getByPrefix('signup:');
+        const { data: items, error: reqErr } = await supabase
+          .from('signup_requests')
+          .select('id, email, name, flight, status, created_at')
+          .order('created_at', { ascending: false });
+        if (reqErr) throw reqErr;
         // Also fetch existing Supabase users so the admin UI can surface any already-created accounts
         const { data: usersData, error: usersErr } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
         const users = (usersData && (usersData as any).users) || (usersData as any) || [];
@@ -2439,7 +2495,7 @@ Deno.serve(async (req: Request) => {
             name: r.name,
             flight: r.flight || null,
             status: r.status,
-            createdAt: r.createdAt,
+            createdAt: r.created_at,
             existingAccounts: matched ? [{ id: matched.id, email: matched.email, user_metadata: matched.user_metadata, created_at: matched.created_at }] : [],
           });
         });
@@ -2475,7 +2531,12 @@ Deno.serve(async (req: Request) => {
         const suggestedName = String(body?.suggestedName || '').trim() || null;
         const forceNameChange = body?.forceNameChange === true;
         
-        const rec = await kv.get(`signup:${id}`);
+        const { data: rec, error: reqErr } = await sb
+          .from('signup_requests')
+          .select('id, email, name, password, flight, status, created_at')
+          .eq('id', id)
+          .maybeSingle();
+        if (reqErr) throw reqErr;
         if (!rec) {
           return new Response(JSON.stringify({ error: 'Request not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         }
@@ -2525,7 +2586,8 @@ Deno.serve(async (req: Request) => {
               if (updateErr) {
                 return new Response(JSON.stringify({ error: updateErr.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
               }
-              await kv.del(`signup:${id}`);
+              const { error: delErr } = await sb.from('signup_requests').delete().eq('id', id);
+              if (delErr) throw delErr;
               return new Response(JSON.stringify({ user: (updatedData && (updatedData as any).user) || existing }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
             }
           } catch (ee) {
@@ -2567,7 +2629,12 @@ Deno.serve(async (req: Request) => {
         const role = (body?.role || 'cadet').toLowerCase();
         const cadetId = String(body?.cadetId || '').trim() || null;
 
-        const rec = await kv.get(`signup:${id}`);
+        const { data: rec, error: reqErr } = await sb
+          .from('signup_requests')
+          .select('id, email, name, password, flight, status, created_at')
+          .eq('id', id)
+          .maybeSingle();
+        if (reqErr) throw reqErr;
         if (!rec) return new Response(JSON.stringify({ error: 'Request not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
 
         let cadetMeta: { cadetId?: string; cadetName?: string; flight?: string; suggestedName?: string; requireNameChange?: boolean } = {};
@@ -2612,7 +2679,8 @@ Deno.serve(async (req: Request) => {
         const approverRole = (approver.user_metadata?.role || '').toLowerCase();
         if (approverRole !== 'snco' && approverRole !== 'staff') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         const id = pathname.split('/').pop()!;
-        await kv.del(`signup:${id}`);
+        const { error: delErr } = await sb.from('signup_requests').delete().eq('id', id);
+        if (delErr) throw delErr;
         return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Failed to delete request' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
@@ -2666,30 +2734,20 @@ Deno.serve(async (req: Request) => {
     // Clear all cadets (emergency reset)
     if (pathname.includes('/cadets/clear-all') && req.method === 'POST') {
       try {
-        // Use Supabase directly to get all cadet keys and delete them
+        // Use structured cadets table instead of direct kv_store access
         const supabase = createClient(
           Deno.env.get('SUPABASE_URL') ?? '',
           Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
         );
-        
         const { data, error } = await supabase
-          .from('kv_store_73a3871f')
-          .select('key')
-          .like('key', 'cadet:%');
-        
+          .from('cadets')
+          .delete()
+          .not('id', 'is', null)
+          .select('id');
         if (error) throw error;
+        const deleted = (data || []).length;
         
-        const keys = (data || []).map(d => d.key);
-        if (keys.length > 0) {
-          const { error: delError } = await supabase
-            .from('kv_store_73a3871f')
-            .delete()
-            .in('key', keys);
-          
-          if (delError) throw delError;
-        }
-        
-        return new Response(JSON.stringify({ success: true, deleted: keys.length }), {
+        return new Response(JSON.stringify({ success: true, deleted }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });

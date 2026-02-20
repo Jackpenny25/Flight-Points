@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { projectId } from '../../../utils/supabase/info';
+import { api } from '../../utils/api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -45,70 +45,19 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      await Promise.all([
-        fetchPoints(),
-        fetchAttendance(),
-        fetchCadets(),
+      const [pointsData, attendanceData, cadetsData] = await Promise.all([
+        api.getPoints(),
+        api.getAttendance(),
+        api.getCadets(),
       ]);
+      setPoints(pointsData.points || pointsData || []);
+      setAttendance(attendanceData.attendance || attendanceData || []);
+      setCadets(cadetsData.cadets || cadetsData || []);
+    } catch (error) {
+      toast.error('Error fetching reports data');
+      console.error('Error fetching reports data:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchPoints = async () => {
-    try {
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/points`,
-        { headers }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setPoints(data.points || []);
-      }
-    } catch (error) {
-      console.error('Error fetching points:', error);
-    }
-  };
-
-  const fetchAttendance = async () => {
-    try {
-      const headers2: Record<string, string> = {};
-      if (accessToken) headers2['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/attendance`,
-        { headers: headers2 }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setAttendance(data.attendance || []);
-      }
-    } catch (error) {
-      console.error('Error fetching attendance:', error);
-    }
-  };
-
-  const fetchCadets = async () => {
-    try {
-      const headers3: Record<string, string> = {};
-      if (accessToken) headers3['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/cadets`,
-        { headers: headers3 }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setCadets(data.cadets || []);
-      }
-    } catch (error) {
-      console.error('Error fetching cadets:', error);
     }
   };
 
@@ -116,25 +65,14 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
     if (!editingPoint) return;
 
     try {
-      const putHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) putHeaders['Authorization'] = `Bearer ${accessToken}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/points/${editingPoint.id}`,
-        {
-          method: 'PUT',
-          headers: putHeaders,
-          body: JSON.stringify({
-            points: parseFloat(editForm.points),
-            reason: editForm.reason,
-          }),
-        }
-      );
-
-      if (response.ok) {
+      const updated = await api.updatePoint(editingPoint.id, {
+        points: parseFloat(editForm.points),
+        reason: editForm.reason,
+      });
+      if (updated && !updated.error) {
         toast.success('Point updated successfully');
         setEditingPoint(null);
-        fetchPoints();
+        fetchAllData();
       } else {
         toast.error('Failed to update point');
       }

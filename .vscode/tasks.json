@@ -36,6 +36,12 @@
 			"type": "shell",
 			"command": "npx supabase functions deploy server",
 			"group": "build"
+		},
+		{
+			"label": "Rebuild Project",
+			"type": "shell",
+			"command": "npm run build",
+			"group": "build"
 		}
 	]
 }

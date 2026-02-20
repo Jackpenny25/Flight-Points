@@ -1,30 +1,4 @@
-import { projectId, publicAnonKey } from '../../../utils/supabase/info'
-import supabase from '../../utils/supabase/client'
-
-const tryFetchJson = async (paths: string[], bearerTokenOrUseAnon: string | boolean = false) => {
-  for (const p of paths) {
-    try {
-      const headers: Record<string, string> = {}
-      if (bearerTokenOrUseAnon) {
-        const token = typeof bearerTokenOrUseAnon === 'string' ? bearerTokenOrUseAnon : publicAnonKey
-        headers['Authorization'] = `Bearer ${token}`
-      }
-      const res = await fetch(p, { headers })
-      if (!res.ok) continue
-      const j = await res.json()
-      if (Array.isArray(j)) return j
-      if (j && typeof j === 'object') {
-        const arr = (j as any).cadets || (j as any).points || (j as any).attendance || (j as any).data || (j as any).items
-        if (Array.isArray(arr)) return arr
-        const values = Object.values(j).find(v => Array.isArray(v))
-        if (Array.isArray(values)) return values as any
-      }
-    } catch (e) {
-      // try next
-    }
-  }
-  return []
-}
+import { api } from '../../utils/api';
 
 function arrayToCsv(rows: Record<string, any>[]): string {
   if (!rows || rows.length === 0) return ''
@@ -59,37 +33,18 @@ function downloadBlob(filename: string, content: string, mime = 'text/csv;charse
 export async function exportAllCsvs(accessToken?: string | null) {
   // Implemented to be reused by UI components
   try {
-    const { data: { session } } = await supabase.auth.getSession()
-    const bearer = accessToken ?? session?.access_token ?? true
-    const functionBase = `https://${projectId}.supabase.co/functions/v1/server`
-    const cadets = await tryFetchJson([
-      `${functionBase}/cadets`,
-      '/data/cadets.json',
-      '/api/data/cadets',
-      '/api/data/cadets.json',
-      '/data/cadets'
-    ], bearer)
-    const attendance = await tryFetchJson([
-      `${functionBase}/attendance`,
-      '/data/attendance.json',
-      '/api/data/attendance',
-      '/api/data/attendance.json',
-      '/data/attendance'
-    ], bearer)
-    const points = await tryFetchJson([
-      `${functionBase}/points`,
-      '/api/data/points',
-      '/data/points.json',
-      '/api/points',
-      '/api/points.json'
-    ], bearer)
+    // Fetch data from API
+    const cadets = await api.getCadets();
+    const attendance = await api.getAttendance();
+    const points = await api.getPoints();
 
-    const cadetsCount = cadets?.length || 0
-    const attendanceCount = attendance?.length || 0
-    const pointsCount = points?.length || 0
+    const cadetsCount = cadets?.length || 0;
+    const attendanceCount = attendance?.length || 0;
+    const pointsCount = points?.length || 0;
+    
     if (cadetsCount === 0 && attendanceCount === 0 && pointsCount === 0) {
-      console.warn('exportAllCsvs: no data found', { cadetsCount, attendanceCount, pointsCount })
-      throw new Error(`No cadet, attendance, or points data found to export. Found counts — cadets: ${cadetsCount}, attendance: ${attendanceCount}, points: ${pointsCount}.`)
+      console.warn('exportAllCsvs: no data found', { cadetsCount, attendanceCount, pointsCount });
+      throw new Error(`No cadet, attendance, or points data found to export. Found counts — cadets: ${cadetsCount}, attendance: ${attendanceCount}, points: ${pointsCount}.`);
     }
 
     const pointRecords = (points || []).map((p: any) => ({

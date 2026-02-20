@@ -1,7 +1,7 @@
   // Role is no longer self-assigned during signup
 import { useState } from 'react';
-import supabase from '../../utils/supabase/client';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { login } from '../../utils/auth';
+import { api } from '../../utils/api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -34,45 +34,30 @@ export function Login({ onLogin }: LoginProps) {
       // Allow signing in with email OR username. If a username is provided, resolve it to an email using the server function.
       let loginEmail = String(email || '').trim();
       if (!loginEmail.includes('@')) {
-        const functionBase = `https://${projectId}.supabase.co/functions/v1/server`;
-        const resp = await fetch(`${functionBase}/auth/lookup-email`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ username: loginEmail }),
-        });
-        if (!resp.ok) {
-          const errJson = await resp.json().catch(() => ({}));
-          setError(errJson?.error || 'Username not found');
+        const lookup = await api.lookupEmail(loginEmail);
+        if (lookup.error) {
+          setError(lookup.error || 'Username not found');
           setLoading(false);
           return;
         }
-        const lookup = await resp.json();
         loginEmail = lookup.email;
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password,
-      });
-
-      if (error) {
-        let displayError = error.message;
-        if (error.message.includes('Invalid login credentials')) {
-          displayError = `Invalid login credentials. Or your signup request hasn't yet been accepted — please wait or ask Sgt Penny J or your flight point giver.`;
-        }
-        setError(displayError);
-        setLoading(false);
-        return;
-      }
-
-      if (data.session) {
-        onLogin(data.session.access_token, data.user);
+      const user = await login(loginEmail, password);
+      const token = localStorage.getItem('token');
+      
+      if (token && user) {
+        onLogin(token, user);
+      } else {
+        setError('Login failed - no token received');
       }
     } catch (err: any) {
       console.error('Sign in error:', err);
-      setError('Failed to sign in. Please try again.');
+      let displayError = err.message || 'Failed to sign in. Please try again.';
+      if (displayError.includes('Login failed')) {
+        displayError = `Invalid login credentials. Or your signup request hasn't yet been accepted — please wait or ask Sgt Penny J or your flight point giver.`;
+      }
+      setError(displayError);
     } finally {
       setLoading(false);
     }
@@ -85,18 +70,8 @@ export function Login({ onLogin }: LoginProps) {
     setLoading(true);
 
     try {
-      const functionBase = `https://${projectId}.supabase.co/functions/v1/server`;
-
-      const response = await fetch(`${functionBase}/auth/request-signup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
-        body: JSON.stringify({ email, password, name, joinCode, flight }),
-      });
-      const result = await response.json();
-      if (!response.ok) {
+      const result = await api.requestSignup({ email, password, name, joinCode, flight });
+      if (result.error) {
         setError(result.error || 'Failed to submit signup request');
         setLoading(false);
         return;
