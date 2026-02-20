@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Alert, AlertDescription } from './ui/alert';
-import { projectId } from '../../../utils/supabase/info';
+import { api } from '../../../utils/api';
 
 interface AdminPinManagerProps {
   accessToken: string;
@@ -31,10 +31,8 @@ export function AdminPinManager({ accessToken, userId, userRole }: AdminPinManag
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/pin-status`, { headers });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || res.statusText);
-      setPinStatus(data);
+      const res = await api.getPinStatus(userId);
+      setPinStatus(res);
     } catch (e: any) {
       setError(String(e?.message || e));
     }
@@ -43,7 +41,7 @@ export function AdminPinManager({ accessToken, userId, userRole }: AdminPinManag
   const fetchLeadUsers = async () => {
     if (!isLead) return;
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/auth/users`, { headers });
+      const res = await api.getLeadUsers();
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return;
       const list = (data.users || [])
@@ -81,18 +79,11 @@ export function AdminPinManager({ accessToken, userId, userRole }: AdminPinManag
 
     setSaving(true);
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/change-pin`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ user_id: userId, current_pin: currentPin, new_pin: newPin }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || data?.error || res.statusText);
-
+      const res = await api.changePin(userId, currentPin, newPin);
       setCurrentPin('');
       setNewPin('');
       setConfirmPin('');
-      setMessage(data?.message || 'PIN updated successfully.');
+      setMessage('PIN updated successfully.');
       await fetchStatus();
     } catch (e: any) {
       setError(String(e?.message || e));
@@ -104,11 +95,7 @@ export function AdminPinManager({ accessToken, userId, userRole }: AdminPinManag
   const resetPin = async (targetUserId: string, targetName: string) => {
     if (!confirm(`Reset PIN for ${targetName}?`)) return;
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/reset-pin`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ user_id: targetUserId }),
-      });
+      const res = await api.resetPin(targetUserId);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         alert(`Reset failed: ${data?.error || res.statusText}`);
@@ -126,7 +113,9 @@ export function AdminPinManager({ accessToken, userId, userRole }: AdminPinManag
       <Card>
         <CardHeader>
           <CardTitle>Admin PIN</CardTitle>
-          <CardDescription>Enter the 6-digit admin PIN to unlock actions.</CardDescription>
+          <CardDescription>
+            Enter the 6-digit admin PIN to unlock actions.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {pinStatus?.is_default && (

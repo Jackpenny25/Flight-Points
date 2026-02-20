@@ -6,8 +6,6 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { formatFlight } from './ui/utils';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
-import { AdminPinManager } from './AdminPinManager';
 import { toast } from 'sonner';
 
 // NOTE: AdminSignups component requires the following API methods to be implemented:
