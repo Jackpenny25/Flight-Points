@@ -163,11 +163,8 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
     typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
   );
-<<<<<<< HEAD
-=======
   // Admin PIN - must be set via environment variable
   const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN;
->>>>>>> bb04045197bb3a1127d9b2ebaea9a18d6aae61c0
   const [pinDialogOpen, setPinDialogOpen] = useState<boolean>(false);
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
@@ -642,26 +639,24 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               </TabsContent>
 
               {adminUnlocked && (
-<<<<<<< HEAD
                 <TabsContent value="signups">
                   <AdminSignups accessToken={accessToken} currentUserId={user?.id || ''} currentUserRole={userRole} />
                 </TabsContent>
-=======
-                <>
-                  <TabsContent value="signups">
-                    <AdminSignups accessToken={accessToken} />
-                  </TabsContent>
-                  
-                  <TabsContent value="presentationeditor">
-                    <PresentationEditor />
-                  </TabsContent>
-                  
-                  <TabsContent value="presentation" className="h-[calc(100vh-200px)]">
-                    <Presentation />
-                  </TabsContent>
-                </>
->>>>>>> bb04045197bb3a1127d9b2ebaea9a18d6aae61c0
               )}
+
+              <>
+                <TabsContent value="signups">
+                  <AdminSignups accessToken={accessToken} />
+                </TabsContent>
+                
+                <TabsContent value="presentationeditor">
+                  <PresentationEditor />
+                </TabsContent>
+                
+                <TabsContent value="presentation" className="h-[calc(100vh-200px)]">
+                  <Presentation />
+                </TabsContent>
+              </>
             </>
           )}
 
