@@ -30,7 +30,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '../.env.local') });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -672,6 +672,147 @@ function mapToClient(type: DataType, row: Record<string, any>) {
 function mapRowsToClient(type: DataType, rows: Record<string, any>[]) {
   return rows.map(row => mapToClient(type, row));
 }
+
+// ========== PIN MANAGEMENT ENDPOINTS ==========
+
+// GET /api/admin/pin-status - Get current user's PIN status
+app.get('/api/admin/pin-status', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'User ID not found' });
+    }
+
+    const result = await query(
+      `SELECT id, pin_is_default, pin_last_changed 
+       FROM app_users 
+       WHERE id = $1`,
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+    res.json({
+      is_default: user.pin_is_default === true,
+      last_changed: user.pin_last_changed,
+      has_pin: user.pin_is_default !== null,
+    });
+  } catch (error) {
+    console.error('Error in GET /api/admin/pin-status:', error);
+    res.status(500).json({ error: 'Failed to fetch PIN status' });
+  }
+});
+
+// POST /api/admin/verify-pin - Verify a PIN
+app.post('/api/admin/verify-pin', async (req: Request, res: Response) => {
+  try {
+    const { pin } = req.body || {};
+    if (!pin) {
+      return res.status(400).json({ error: 'PIN is required' });
+    }
+
+    // For now, accept a default PIN (e.g., '000000' or any 6-digit code)
+    // In production, validate against hashed PIN in database
+    const pinStr = String(pin).trim();
+    if (!/^\d{6}$/.test(pinStr)) {
+      return res.status(400).json({ error: 'PIN must be 6 digits' });
+    }
+
+    // Accept any 6-digit PIN for now (placeholder logic)
+    res.json({ valid: true });
+  } catch (error) {
+    console.error('Error in POST /api/admin/verify-pin:', error);
+    res.status(500).json({ error: 'Failed to verify PIN' });
+  }
+});
+
+// POST /api/admin/change-pin - Change user's PIN
+app.post('/api/admin/change-pin', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { userId, currentPin, newPin } = req.body || {};
+    const targetUserId = userId || req.user?.id;
+
+    if (!targetUserId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    if (!newPin) {
+      return res.status(400).json({ error: 'New PIN is required' });
+    }
+
+    const pinStr = String(newPin).trim();
+    if (!/^\d{6}$/.test(pinStr)) {
+      return res.status(400).json({ error: 'PIN must be exactly 6 digits' });
+    }
+
+    // Hash the new PIN (using same approach as password)
+    const pinHash = await bcrypt.hash(pinStr, 10);
+
+    const result = await query(
+      `UPDATE app_users
+       SET pin_hash = $1, pin_last_changed = NOW(), pin_is_default = FALSE
+       WHERE id = $2
+       RETURNING id, email, name`,
+      [pinHash, targetUserId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ success: true, message: 'PIN changed successfully' });
+  } catch (error) {
+    console.error('Error in POST /api/admin/change-pin:', error);
+    res.status(500).json({ error: 'Failed to change PIN' });
+  }
+});
+
+// POST /api/admin/reset-pin - Reset a user's PIN (admin only)
+app.post('/api/admin/reset-pin', requireAuth, requireRole(['admin', 'staff']), async (req: AuthRequest, res: Response) => {
+  try {
+    const { targetUserId } = req.body || {};
+    if (!targetUserId) {
+      return res.status(400).json({ error: 'Target user ID is required' });
+    }
+
+    // Generate a default PIN (e.g., user's first 6 digits of UUID or '000000')
+    const defaultPin = '000000';
+    const pinHash = await bcrypt.hash(defaultPin, 10);
+
+    const result = await query(
+      `UPDATE app_users
+       SET pin_hash = $1, pin_last_changed = NOW(), pin_is_default = TRUE
+       WHERE id = $2
+       RETURNING id, email, name`,
+      [pinHash, targetUserId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ success: true, message: 'PIN reset to default (000000)' });
+  } catch (error) {
+    console.error('Error in POST /api/admin/reset-pin:', error);
+    res.status(500).json({ error: 'Failed to reset PIN' });
+  }
+});
+
+// ========== TICKETS ENDPOINTS ==========
+
+// GET /api/tickets/count - Get count of tickets
+app.get('/api/tickets/count', async (req: Request, res: Response) => {
+  try {
+    const result = await query(`SELECT COUNT(*)::int AS count FROM tickets`).catch(() => ({ rows: [{ count: 0 }] }));
+    res.json({ count: Number(result.rows[0]?.count || 0) });
+  } catch (error) {
+    console.error('Error in GET /api/tickets/count:', error);
+    res.json({ count: 0 });
+  }
+});
+
 // Test route
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Server is working!' });

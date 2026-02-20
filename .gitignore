@@ -1,29 +1,13 @@
-node_modules
-.env.local
-
-.env.local
-
-\n.env
+node_modules/
+dist/
 .venv
 outputs/
 docs/assets/
-dist/
-node_modules/
-.env
-.env.local
 
-# migration confiuration files:
-.env.migration.template
-.env.migration.local
-
-.env.example
+# Environment variables - NEVER commit these
 .env
 .env.local
 .env.example
 .env.migration*
 .env.migration.template
 .env.migration.local
-.venv
-outputs/
-docs/assets/
-dist/
