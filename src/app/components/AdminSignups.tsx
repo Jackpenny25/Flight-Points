@@ -6,12 +6,15 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { formatFlight } from './ui/utils';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { AdminPinManager } from './AdminPinManager';
 
 interface AdminSignupsProps {
   accessToken: string;
+  currentUserId: string;
+  currentUserRole: string;
 }
 
-export default function AdminSignups({ accessToken }: AdminSignupsProps) {
+export default function AdminSignups({ accessToken, currentUserId, currentUserRole }: AdminSignupsProps) {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<Array<any>>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -95,6 +98,8 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
 
   return (
     <div className="space-y-6">
+      <AdminPinManager accessToken={accessToken} userId={currentUserId} userRole={currentUserRole} />
+
       <div className="flex justify-end">
         <Button
           variant="ghost"
@@ -226,7 +231,11 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                                 }
                                 // refresh lists
                                 fetchData();
-                                alert('User updated');
+                                if (data?.temporaryPin) {
+                                  alert(`User updated. Temporary PIN (show once): ${data.temporaryPin}`);
+                                } else {
+                                  alert('User updated');
+                                }
                               } catch (e:any) {
                                 console.error('Update user failed', e);
                                 alert('Update failed: ' + String(e));
@@ -352,6 +361,9 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                                         return;
                                       }
                                       fetchData();
+                                      if (data?.temporaryPin) {
+                                        alert(`Temporary PIN (show once): ${data.temporaryPin}`);
+                                      }
                                     } catch (e:any) {
                                       console.error('Link failed', e);
                                       alert('Link failed: ' + String(e));
@@ -422,6 +434,9 @@ export default function AdminSignups({ accessToken }: AdminSignupsProps) {
                               }
                               // success
                               fetchData();
+                              if (data?.temporaryPin) {
+                                alert(`Lead account approved. Temporary PIN (show once): ${data.temporaryPin}`);
+                              }
                             } catch (e:any) {
                               console.error('Approve request failed', e);
                               alert('Approve request failed: ' + String(e));

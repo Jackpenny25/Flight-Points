@@ -4,6 +4,7 @@ import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import * as kv from "./kv_store.tsx";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { hash, compare } from "npm:bcryptjs";
 
 const app = new Hono();
 
@@ -52,6 +53,146 @@ function getSupabaseClient() {
   );
 }
 
+const PIN_DIGITS_REGEX = /^\d{4,6}$/;
+const PIN_MAX_ATTEMPTS = 5;
+const PIN_LOCK_MINUTES = 15;
+
+function generateRandomPin(length = 6): string {
+  const digits = '0123456789';
+  let pin = '';
+  for (let i = 0; i < length; i++) {
+    pin += digits[Math.floor(Math.random() * digits.length)];
+  }
+  return pin;
+}
+
+function isLeadRole(role: string | null | undefined): boolean {
+  const normalized = String(role || '').toLowerCase();
+  return normalized === 'snco' || normalized === 'staff';
+}
+
+async function logPinAttempt(
+  supabase: any,
+  payload: { userId?: string | null; attemptedBy?: string | null; success: boolean; reason?: string | null; source?: string | null }
+) {
+  try {
+    await supabase.from('admin_pin_attempts').insert({
+      user_id: payload.userId || null,
+      attempted_by: payload.attemptedBy || null,
+      success: payload.success,
+      reason: payload.reason || null,
+      source: payload.source || null,
+    });
+  } catch (e) {
+    console.error('Failed to log PIN attempt:', e);
+  }
+}
+
+async function ensureLeadPinExists(supabase: any, userId: string): Promise<string | null> {
+  const { data: existing, error: existingErr } = await supabase
+    .from('admin_pins')
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (existingErr && existingErr.code !== 'PGRST116') {
+    throw existingErr;
+  }
+  if (existing?.id) return null;
+
+  const temporaryPin = generateRandomPin(6);
+  const pinHash = await hash(temporaryPin, 10);
+  const { error: insertErr } = await supabase.from('admin_pins').insert({
+    user_id: userId,
+    pin_hash: pinHash,
+    is_default: true,
+    failed_attempts: 0,
+    locked_until: null,
+    last_changed_at: null,
+  });
+  if (insertErr) throw insertErr;
+  return temporaryPin;
+}
+
+async function verifyPinValue(
+  supabase: any,
+  opts: { userId: string; pin: string; attemptedBy?: string | null; source?: string | null; incrementFailures?: boolean }
+): Promise<{ success: boolean; isDefault: boolean; message?: string; lockedUntil?: string | null }> {
+  const incrementFailures = opts.incrementFailures !== false;
+  const { data: row, error } = await supabase
+    .from('admin_pins')
+    .select('id, pin_hash, is_default, failed_attempts, locked_until')
+    .eq('user_id', opts.userId)
+    .maybeSingle();
+
+  if (error && error.code !== 'PGRST116') {
+    throw error;
+  }
+  if (!row) {
+    await logPinAttempt(supabase, {
+      userId: opts.userId,
+      attemptedBy: opts.attemptedBy || null,
+      success: false,
+      reason: 'pin_not_set',
+      source: opts.source || 'verify-pin',
+    });
+    return { success: false, isDefault: true, message: 'PIN is not set for this user.' };
+  }
+
+  const nowMs = Date.now();
+  const lockedUntilMs = row.locked_until ? new Date(row.locked_until).getTime() : null;
+  if (lockedUntilMs && nowMs < lockedUntilMs) {
+    await logPinAttempt(supabase, {
+      userId: opts.userId,
+      attemptedBy: opts.attemptedBy || null,
+      success: false,
+      reason: 'locked',
+      source: opts.source || 'verify-pin',
+    });
+    return { success: false, isDefault: !!row.is_default, message: 'PIN is temporarily locked.', lockedUntil: row.locked_until };
+  }
+
+  const matched = await compare(opts.pin, row.pin_hash);
+  if (!matched) {
+    if (incrementFailures) {
+      const nextAttempts = Number(row.failed_attempts || 0) + 1;
+      const shouldLock = nextAttempts >= PIN_MAX_ATTEMPTS;
+      const newLockedUntil = shouldLock ? new Date(nowMs + PIN_LOCK_MINUTES * 60 * 1000).toISOString() : null;
+      await supabase
+        .from('admin_pins')
+        .update({
+          failed_attempts: nextAttempts,
+          locked_until: newLockedUntil,
+        })
+        .eq('user_id', opts.userId);
+    }
+    await logPinAttempt(supabase, {
+      userId: opts.userId,
+      attemptedBy: opts.attemptedBy || null,
+      success: false,
+      reason: 'invalid_pin',
+      source: opts.source || 'verify-pin',
+    });
+    return { success: false, isDefault: !!row.is_default, message: 'Invalid PIN.' };
+  }
+
+  await supabase
+    .from('admin_pins')
+    .update({
+      failed_attempts: 0,
+      locked_until: null,
+    })
+    .eq('user_id', opts.userId);
+  await logPinAttempt(supabase, {
+    userId: opts.userId,
+    attemptedBy: opts.attemptedBy || null,
+    success: true,
+    reason: 'verified',
+    source: opts.source || 'verify-pin',
+  });
+
+  return { success: true, isDefault: !!row.is_default, lockedUntil: null };
+}
+
 // Auth Routes
 // Signup
 app.post("/make-server-73a3871f/auth/signup", async (c) => {
@@ -73,8 +214,13 @@ app.post("/make-server-73a3871f/auth/signup", async (c) => {
       console.log('Error during signup:', error);
       return c.json({ error: error.message }, 400);
     }
-    
-    return c.json({ user: data.user });
+
+    let temporaryPin: string | null = null;
+    if (data?.user?.id && isLeadRole(role || 'cadet')) {
+      temporaryPin = await ensureLeadPinExists(supabase, data.user.id);
+    }
+
+    return c.json({ user: data.user, temporaryPin });
   } catch (error) {
     console.log('Server error during signup:', error);
     return c.json({ error: 'Internal server error during signup' }, 500);
@@ -1661,7 +1807,12 @@ Deno.serve(async (req: Request) => {
             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
           });
         }
-        return new Response(JSON.stringify({ user: data.user }), {
+        let temporaryPin: string | null = null;
+        if (data?.user?.id && isLeadRole(role || 'cadet')) {
+          temporaryPin = await ensureLeadPinExists(supabase, data.user.id);
+        }
+
+        return new Response(JSON.stringify({ user: data.user, temporaryPin }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
@@ -1849,7 +2000,12 @@ Deno.serve(async (req: Request) => {
         const { data: updated, error: updateErr } = await sb.auth.admin.updateUserById(targetId as string, updatePayload as any);
         if (updateErr) return new Response(JSON.stringify({ error: updateErr.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
 
-        return new Response(JSON.stringify({ user: (updated && (updated as any).user) || null }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        let temporaryPin: string | null = null;
+        if (targetId && isLeadRole(newRole)) {
+          temporaryPin = await ensureLeadPinExists(sb, targetId as string);
+        }
+
+        return new Response(JSON.stringify({ user: (updated && (updated as any).user) || null, temporaryPin }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
       } catch (e) {
         console.error('Update user error:', e);
         return new Response(JSON.stringify({ error: 'Failed to update user' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
@@ -1925,7 +2081,11 @@ Deno.serve(async (req: Request) => {
         const newMeta = { ...(user.user_metadata || {}), role: requestedRole };
         const { data: updated, error: updateErr } = await sb.auth.admin.updateUserById(user.id, { user_metadata: newMeta } as any);
         if (updateErr) return new Response(JSON.stringify({ error: updateErr.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-        return new Response(JSON.stringify({ user: (updated && (updated as any).user) || null }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        let temporaryPin: string | null = null;
+        if (isLeadRole(requestedRole)) {
+          temporaryPin = await ensureLeadPinExists(sb, user.id);
+        }
+        return new Response(JSON.stringify({ user: (updated && (updated as any).user) || null, temporaryPin }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
       } catch (e) {
         console.error('Set role (admin) error:', e);
         return new Response(JSON.stringify({ error: 'Failed to set role' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
@@ -1959,6 +2119,238 @@ Deno.serve(async (req: Request) => {
       } catch (e) {
         console.error('Set temp role (admin) error:', e);
         return new Response(JSON.stringify({ error: 'Failed to set temporary role' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Admin PIN: verify PIN before sensitive actions
+    if ((pathname.includes('/admin/verify-pin') || pathname.includes('/api/admin/verify-pin')) && req.method === 'POST') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const sb = getSupabaseAdmin();
+        const { data: { user: actor }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !actor) return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const body = await req.json().catch(() => ({}));
+        const targetUserId = String(body?.user_id || actor.id).trim();
+        const pin = String(body?.pin || '').trim();
+        if (!targetUserId || !pin) {
+          return new Response(JSON.stringify({ success: false, error: 'user_id and pin are required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+        if (!PIN_DIGITS_REGEX.test(pin)) {
+          return new Response(JSON.stringify({ success: false, error: 'PIN must be 4 to 6 digits.' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        const actorRole = (actor.user_metadata?.role || '').toLowerCase();
+        if (targetUserId !== actor.id && !isLeadRole(actorRole)) {
+          return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        const result = await verifyPinValue(sb, {
+          userId: targetUserId,
+          pin,
+          attemptedBy: actor.id,
+          source: 'verify-pin',
+          incrementFailures: true,
+        });
+
+        if (!result.success) {
+          const statusCode = result.lockedUntil ? 423 : 401;
+          return new Response(JSON.stringify({ success: false, is_default: result.isDefault, message: result.message, locked_until: result.lockedUntil || null }), {
+            status: statusCode,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true, is_default: result.isDefault }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.error('Verify PIN error:', e);
+        return new Response(JSON.stringify({ success: false, error: 'Failed to verify PIN' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Admin PIN: change own PIN
+    if ((pathname.includes('/admin/change-pin') || pathname.includes('/api/admin/change-pin')) && req.method === 'POST') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ success: false, message: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const sb = getSupabaseAdmin();
+        const { data: { user: actor }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !actor) return new Response(JSON.stringify({ success: false, message: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const body = await req.json().catch(() => ({}));
+        const targetUserId = String(body?.user_id || actor.id).trim();
+        const currentPin = String(body?.current_pin || '').trim();
+        const newPin = String(body?.new_pin || '').trim();
+
+        if (!currentPin || !newPin) {
+          return new Response(JSON.stringify({ success: false, message: 'current_pin and new_pin are required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+        if (!PIN_DIGITS_REGEX.test(newPin)) {
+          return new Response(JSON.stringify({ success: false, message: 'New PIN must be 4 to 6 digits.' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        const actorRole = (actor.user_metadata?.role || '').toLowerCase();
+        if (targetUserId !== actor.id && !isLeadRole(actorRole)) {
+          return new Response(JSON.stringify({ success: false, message: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        const verifyResult = await verifyPinValue(sb, {
+          userId: targetUserId,
+          pin: currentPin,
+          attemptedBy: actor.id,
+          source: 'change-pin',
+          incrementFailures: true,
+        });
+        if (!verifyResult.success) {
+          const statusCode = verifyResult.lockedUntil ? 423 : 401;
+          return new Response(JSON.stringify({ success: false, message: verifyResult.message || 'Invalid PIN' }), {
+            status: statusCode,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+
+        const newHash = await hash(newPin, 10);
+        const { error: updateErr } = await sb
+          .from('admin_pins')
+          .update({
+            pin_hash: newHash,
+            is_default: false,
+            last_changed_at: new Date().toISOString(),
+            failed_attempts: 0,
+            locked_until: null,
+          })
+          .eq('user_id', targetUserId);
+
+        if (updateErr) {
+          console.error('Change PIN update error:', updateErr);
+          return new Response(JSON.stringify({ success: false, message: 'Failed to update PIN' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        await logPinAttempt(sb, {
+          userId: targetUserId,
+          attemptedBy: actor.id,
+          success: true,
+          reason: 'pin_changed',
+          source: 'change-pin',
+        });
+
+        return new Response(JSON.stringify({ success: true, message: 'PIN updated successfully.' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.error('Change PIN error:', e);
+        return new Response(JSON.stringify({ success: false, message: 'Failed to change PIN' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Admin PIN: reset another lead's PIN
+    if ((pathname.includes('/admin/reset-pin') || pathname.includes('/api/admin/reset-pin')) && req.method === 'POST') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const sb = getSupabaseAdmin();
+        const { data: { user: actor }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !actor) return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        const actorRole = (actor.user_metadata?.role || '').toLowerCase();
+        if (!isLeadRole(actorRole)) return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const body = await req.json().catch(() => ({}));
+        const targetUserId = String(body?.user_id || '').trim();
+        if (!targetUserId) {
+          return new Response(JSON.stringify({ success: false, error: 'user_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        const { data: targetData, error: targetErr } = await sb.auth.admin.getUserById(targetUserId);
+        if (targetErr || !targetData?.user) {
+          return new Response(JSON.stringify({ success: false, error: 'Target user not found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        const targetRole = (targetData.user.user_metadata?.role || '').toLowerCase();
+        if (!isLeadRole(targetRole)) {
+          return new Response(JSON.stringify({ success: false, error: 'Target user is not a Flight Point Lead/Staff account' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        const newPin = generateRandomPin(6);
+        const newHash = await hash(newPin, 10);
+
+        const { error: upsertErr } = await sb.from('admin_pins').upsert({
+          user_id: targetUserId,
+          pin_hash: newHash,
+          is_default: true,
+          last_changed_at: null,
+          failed_attempts: 0,
+          locked_until: null,
+        }, { onConflict: 'user_id' });
+        if (upsertErr) {
+          console.error('Reset PIN upsert error:', upsertErr);
+          return new Response(JSON.stringify({ success: false, error: 'Failed to reset PIN' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        await logPinAttempt(sb, {
+          userId: targetUserId,
+          attemptedBy: actor.id,
+          success: true,
+          reason: 'pin_reset',
+          source: 'reset-pin',
+        });
+
+        return new Response(JSON.stringify({ success: true, new_pin: newPin }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.error('Reset PIN error:', e);
+        return new Response(JSON.stringify({ success: false, error: 'Failed to reset PIN' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      }
+    }
+
+    // Admin PIN: status for current lead account
+    if ((pathname.includes('/admin/pin-status') || pathname.includes('/api/admin/pin-status')) && req.method === 'GET') {
+      try {
+        const accessToken = req.headers.get('Authorization')?.split(' ')[1];
+        if (!accessToken) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const sb = getSupabaseAdmin();
+        const { data: { user: actor }, error: authErr } = await sb.auth.getUser(accessToken);
+        if (authErr || !actor) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+
+        const queryUserId = url.searchParams.get('user_id');
+        const targetUserId = (queryUserId && queryUserId.trim()) || actor.id;
+        const actorRole = (actor.user_metadata?.role || '').toLowerCase();
+        if (targetUserId !== actor.id && !isLeadRole(actorRole)) {
+          return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        const { data: row, error: rowErr } = await sb
+          .from('admin_pins')
+          .select('is_default, last_changed_at, locked_until, failed_attempts')
+          .eq('user_id', targetUserId)
+          .maybeSingle();
+        if (rowErr && rowErr.code !== 'PGRST116') {
+          throw rowErr;
+        }
+
+        return new Response(JSON.stringify({
+          is_default: row ? !!row.is_default : true,
+          last_changed: row?.last_changed_at || null,
+          has_pin: !!row,
+          locked_until: row?.locked_until || null,
+          failed_attempts: Number(row?.failed_attempts || 0),
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.error('PIN status error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to fetch PIN status' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
       }
     }
 
@@ -2141,8 +2533,13 @@ Deno.serve(async (req: Request) => {
           }
           return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
         }
+        let temporaryPin: string | null = null;
+        if (data?.user?.id && isLeadRole(role)) {
+          temporaryPin = await ensureLeadPinExists(sb, data.user.id);
+        }
+
         await kv.del(`signup:${id}`);
-        return new Response(JSON.stringify({ user: data.user }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        return new Response(JSON.stringify({ user: data.user, temporaryPin }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
       } catch (e) {
         console.error('Approve error:', e);
         return new Response(JSON.stringify({ error: 'Failed to approve request' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
@@ -2188,8 +2585,13 @@ Deno.serve(async (req: Request) => {
         const { data: updated, error: updateErr } = await sb.auth.admin.updateUserById(userId, updatePayload as any);
         if (updateErr) return new Response(JSON.stringify({ error: updateErr.message }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
 
+        let temporaryPin: string | null = null;
+        if (userId && isLeadRole(role)) {
+          temporaryPin = await ensureLeadPinExists(sb, userId);
+        }
+
         await kv.del(`signup:${id}`);
-        return new Response(JSON.stringify({ user: (updated && (updated as any).user) || { id: userId } }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        return new Response(JSON.stringify({ user: (updated && (updated as any).user) || { id: userId }, temporaryPin }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
       } catch (e) {
         console.error('Link existing error:', e);
         return new Response(JSON.stringify({ error: 'Failed to link existing account' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });

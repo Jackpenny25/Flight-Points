@@ -58,6 +58,12 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [nameChangeDialogOpen, setNameChangeDialogOpen] = useState<boolean>(false);
   const [newName, setNewName] = useState<string>(suggestedName || userName);
   const [nameChangeError, setNameChangeError] = useState<string>('');
+  const [forcePinChangeOpen, setForcePinChangeOpen] = useState<boolean>(false);
+  const [forceCurrentPin, setForceCurrentPin] = useState<string>('');
+  const [forceNewPin, setForceNewPin] = useState<string>('');
+  const [forceConfirmPin, setForceConfirmPin] = useState<string>('');
+  const [forcePinError, setForcePinError] = useState<string>('');
+  const [forcePinSaving, setForcePinSaving] = useState<boolean>(false);
 
   useEffect(() => {
     // Show name change dialog if admin requires it or suggests it
@@ -65,6 +71,68 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       setNameChangeDialogOpen(true);
     }
   }, [suggestedName]);
+
+  useEffect(() => {
+    const checkDefaultPin = async () => {
+      if (!canManageCadets || !accessToken || !user?.id) return;
+      try {
+        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/pin-status`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.is_default === true) {
+          setForcePinChangeOpen(true);
+        }
+      } catch {
+        // ignore; non-blocking if status check fails
+      }
+    };
+    checkDefaultPin();
+  }, [canManageCadets, accessToken, user?.id]);
+
+  const submitForcedPinChange = async () => {
+    setForcePinError('');
+    if (!/^\d{4,6}$/.test(forceNewPin)) {
+      setForcePinError('New PIN must be 4 to 6 digits.');
+      return;
+    }
+    if (forceNewPin !== forceConfirmPin) {
+      setForcePinError('New PIN and confirm PIN do not match.');
+      return;
+    }
+    setForcePinSaving(true);
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/change-pin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          user_id: user?.id,
+          current_pin: forceCurrentPin,
+          new_pin: forceNewPin,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        setForcePinError(data?.message || data?.error || 'Failed to change PIN');
+        return;
+      }
+      setForcePinChangeOpen(false);
+      setForceCurrentPin('');
+      setForceNewPin('');
+      setForceConfirmPin('');
+      alert('PIN changed successfully.');
+    } catch (e: any) {
+      setForcePinError(String(e?.message || e));
+    } finally {
+      setForcePinSaving(false);
+    }
+  };
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -92,7 +160,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
     typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
   );
-  const ADMIN_PIN = '5394';
   const [pinDialogOpen, setPinDialogOpen] = useState<boolean>(false);
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
@@ -176,15 +243,35 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     setAdminUnlocked(false);
   };
 
-  const submitPin = () => {
-    if (pinInput === ADMIN_PIN) {
+  const submitPin = async () => {
+    try {
+      if (!accessToken || !user?.id) {
+        setPinError('You must be signed in to verify PIN');
+        return;
+      }
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/verify-pin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ user_id: user.id, pin: pinInput }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        setPinError(data?.message || data?.error || 'Incorrect PIN');
+        return;
+      }
       sessionStorage.setItem('adminPinVerified', 'true');
       setAdminUnlocked(true);
       setPinDialogOpen(false);
       setPinError('');
       setPinInput('');
-    } else {
-      setPinError('Incorrect PIN');
+      if (data?.is_default) {
+        alert('You are still using a default PIN. Please change it now in the Signups tab.');
+      }
+    } catch (e: any) {
+      setPinError(String(e?.message || e));
     }
   };
 
@@ -370,7 +457,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               value={pinInput}
               onChange={(e) => setPinInput(e.target.value)}
               placeholder="PIN"
-              maxLength={4}
+              maxLength={6}
               inputMode="numeric"
               autoFocus
               onKeyDown={(e) => {
@@ -385,6 +472,53 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPinDialogOpen(false)}>Cancel</Button>
             <Button onClick={submitPin}>Unlock</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={forcePinChangeOpen} onOpenChange={() => {}}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Default PIN</DialogTitle>
+            <DialogDescription>
+              Your account is still using a default admin PIN. You must change it now.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="Current PIN"
+              value={forceCurrentPin}
+              onChange={(e) => setForceCurrentPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            />
+            <Input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="New PIN (4-6 digits)"
+              value={forceNewPin}
+              onChange={(e) => setForceNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            />
+            <Input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="Confirm new PIN"
+              value={forceConfirmPin}
+              onChange={(e) => setForceConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitForcedPinChange();
+                }
+              }}
+            />
+            {forcePinError && <p className="text-sm text-red-600">{forcePinError}</p>}
+          </div>
+          <DialogFooter>
+            <Button onClick={submitForcedPinChange} disabled={forcePinSaving}>{forcePinSaving ? 'Saving...' : 'Change PIN'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -546,7 +680,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
 
               {adminUnlocked && (
                 <TabsContent value="signups">
-                  <AdminSignups accessToken={accessToken} />
+                  <AdminSignups accessToken={accessToken} currentUserId={user?.id || ''} currentUserRole={userRole} />
                 </TabsContent>
               )}
             </>

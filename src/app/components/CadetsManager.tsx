@@ -27,8 +27,7 @@ interface CadetsManagerProps {
 }
 
 export function CadetsManager({ accessToken }: CadetsManagerProps) {
-  const ADMIN_PIN = '5394';
-  const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
+  const [adminUnlocked] = useState<boolean>(
     typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
   );
 
@@ -54,6 +53,12 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   const [selectedCadetIds, setSelectedCadetIds] = useState<Set<string>>(new Set());
   const [bulkRemoveOpen, setBulkRemoveOpen] = useState(false);
   const [bulkRemoveConfirmText, setBulkRemoveConfirmText] = useState('');
+  const [pinVerifyOpen, setPinVerifyOpen] = useState(false);
+  const [pinVerifyValue, setPinVerifyValue] = useState('');
+  const [pinVerifyError, setPinVerifyError] = useState('');
+  const [pinVerifyLoading, setPinVerifyLoading] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editingCadet, setEditingCadet] = useState<Cadet | null>(null);
@@ -63,23 +68,62 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
 
   const ensureAdminPin = () => {
     if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
-    const pin = prompt('Enter 4-digit admin PIN');
-    if (pin === ADMIN_PIN) {
-      sessionStorage.setItem('adminPinVerified', 'true');
-      setAdminUnlocked(true);
-      toast.success('Admin PIN accepted');
-      return true;
-    }
-    toast.error('Incorrect PIN');
+    toast.error('Unlock admin mode first (click the squadron logo and enter your PIN).');
     return false;
   };
 
-  const handleLogoClick = () => {
-    // Clicking the 2427 logo prompts to unlock admin
-    ensureAdminPin();
+  const openPinVerifyForDelete = (cadetId: string, cadetName: string) => {
+    setPendingDelete({ id: cadetId, name: cadetName });
+    setPendingBulkDelete(false);
+    setPinVerifyError('');
+    setPinVerifyValue('');
+    setPinVerifyOpen(true);
   };
 
-  // Admin PIN is triggered via the header logo; keep prompt native so Enter submits naturally
+  const openPinVerifyForBulkDelete = () => {
+    setPendingDelete(null);
+    setPendingBulkDelete(true);
+    setPinVerifyError('');
+    setPinVerifyValue('');
+    setPinVerifyOpen(true);
+  };
+
+  const verifyPinAndContinue = async () => {
+    if (!pinVerifyValue) {
+      setPinVerifyError('PIN is required.');
+      return;
+    }
+    setPinVerifyLoading(true);
+    setPinVerifyError('');
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/verify-pin`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ pin: pinVerifyValue }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        setPinVerifyError(data?.message || data?.error || 'PIN verification failed.');
+        return;
+      }
+
+      setPinVerifyOpen(false);
+      if (pendingDelete) {
+        await executeDeleteCadet(pendingDelete.id, pendingDelete.name);
+      } else if (pendingBulkDelete) {
+        await executeBulkRemove();
+      }
+      setPendingDelete(null);
+      setPendingBulkDelete(false);
+      setPinVerifyValue('');
+    } catch (e: any) {
+      setPinVerifyError(String(e?.message || e));
+    } finally {
+      setPinVerifyLoading(false);
+    }
+  };
 
   function formatDisplayName(name: string) {
     if (!name) return '';
@@ -379,6 +423,15 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
 
     setBulkRemoveOpen(false);
     setBulkRemoveConfirmText('');
+    openPinVerifyForBulkDelete();
+  };
+
+  const executeBulkRemove = async () => {
+    const ids = Array.from(selectedCadetIds);
+    if (ids.length === 0) {
+      toast.error('No cadets selected');
+      return;
+    }
 
     try {
       const delHeaders: Record<string, string> = {};
@@ -529,6 +582,11 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
       return;
     }
 
+    openPinVerifyForDelete(cadetId, cadetName);
+  };
+
+  const executeDeleteCadet = async (cadetId: string, cadetName: string) => {
+
     try {
       // Delete from server first
       const delHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -678,6 +736,38 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             <DialogFooter>
               <Button variant="outline" onClick={() => { setBulkRemoveOpen(false); setBulkRemoveConfirmText(''); }}>Cancel</Button>
               <Button variant="destructive" disabled={bulkRemoveConfirmText !== 'DELETE'} onClick={() => confirmBulkRemove()}>Confirm Remove</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={pinVerifyOpen} onOpenChange={setPinVerifyOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Verify Admin PIN</DialogTitle>
+              <DialogDescription>
+                Enter your admin PIN to continue this sensitive operation.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-2 space-y-2">
+              <Input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="PIN"
+                value={pinVerifyValue}
+                onChange={(e) => setPinVerifyValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    verifyPinAndContinue();
+                  }
+                }}
+              />
+              {pinVerifyError && <div className="text-sm text-red-700">{pinVerifyError}</div>}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPinVerifyOpen(false)} disabled={pinVerifyLoading}>Cancel</Button>
+              <Button onClick={verifyPinAndContinue} disabled={pinVerifyLoading}>{pinVerifyLoading ? 'Verifying...' : 'Verify & Continue'}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
