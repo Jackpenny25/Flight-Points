@@ -124,6 +124,22 @@ export const api = {
         const fallback = await fetchWithAuth('/data/signups-count', { method: 'GET' });
         return parseJsonSafe(fallback);
       }),
+  
+  // Cleanup retention
+  cleanupRetention: () => fetchWithAuth('/admin/cleanup-retention', { method: 'POST' }).then(r => r.json()),
+  
+  // Verify PIN
+  verifyPin: (pin: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ pin }) }).then(r => r.json()),
+  
+  // Added missing methods for getPinStatus, changeUserRole, getTicketsCount, and updateUserName
+  getPinStatus: () => fetchWithAuth('/admin/pin-status', { method: 'GET' }).then(r => r.json()),
+  changeUserRole: (userId: string, role: string) => fetchWithAuth(`/admin/change-role/${userId}`, { method: 'POST', body: JSON.stringify({ role }) }).then(r => r.json()),
+  getTicketsCount: () => fetchWithAuth('/tickets/count', { method: 'GET' }).then(r => r.json()),
+  updateUserName: (userId: string, newName: string) => fetchWithAuth(`/users/${userId}/name`, { method: 'PUT', body: JSON.stringify({ name: newName }) }).then(r => r.json()),
+  
+  // Added missing methods for changePin and resetPin
+  changePin: (userId: string, currentPin: string, newPin: string) => fetchWithAuth(`/admin/change-pin`, { method: 'POST', body: JSON.stringify({ userId, currentPin, newPin }) }).then(r => r.json()),
+  resetPin: (targetUserId: string) => fetchWithAuth(`/admin/reset-pin`, { method: 'POST', body: JSON.stringify({ targetUserId }) }).then(r => r.json()),
 };
 
 export { fetchWithAuth };

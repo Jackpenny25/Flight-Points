@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Alert, AlertDescription } from './ui/alert';
-import { api } from '../../../utils/api';
+import { api } from '../../utils/api';
 
 interface AdminPinManagerProps {
   accessToken: string;
@@ -31,7 +31,7 @@ export function AdminPinManager({ accessToken, userId, userRole }: AdminPinManag
 
   const fetchStatus = async () => {
     try {
-      const res = await api.getPinStatus(userId);
+      const res = await api.getPinStatus();
       setPinStatus(res);
     } catch (e: any) {
       setError(String(e?.message || e));
@@ -41,7 +41,7 @@ export function AdminPinManager({ accessToken, userId, userRole }: AdminPinManag
   const fetchLeadUsers = async () => {
     if (!isLead) return;
     try {
-      const res = await api.getLeadUsers();
+      const res = await api.getUsers();
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return;
       const list = (data.users || [])

@@ -11,18 +11,18 @@ jobs:
     steps:
       - name: Run retention cleanup
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          API_BASE_URL: ""
+          RETENTION_BEARER_TOKEN: ""
         run: |
           set -e
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in Secrets"
+          if [ -z "$API_BASE_URL" ] || [ -z "$RETENTION_BEARER_TOKEN" ]; then
+            echo "API_BASE_URL and RETENTION_BEARER_TOKEN must be set in Secrets"
             exit 1
           fi
-          URL="$SUPABASE_URL/functions/v1/server/make-server-73a3871f/retention/cleanup"
+          URL="$API_BASE_URL/api/admin/retention/cleanup"
           echo "Calling $URL"
           curl -s -X POST "$URL" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $RETENTION_BEARER_TOKEN" \
             -o cleanup-result.json || true
           cat cleanup-result.json

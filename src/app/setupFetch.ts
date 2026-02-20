@@ -1,1 +1,1 @@
-// This file is now obsolete. Supabase fetch wrapper removed.
+// This file is now obsolete. Legacy fetch wrapper removed.

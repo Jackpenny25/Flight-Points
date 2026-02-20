@@ -20,18 +20,20 @@
       {
         "name": "next"
       }
-    ]
+    ],
+    "baseUrl": "./",
+    "paths": {
+      "utils/*": ["src/utils/*"]
+    }
   },
   "include": [
     "next-env.d.ts",
     ".next/types/**/*.ts",
     "**/*.ts",
-    "**/*.tsx",
-    "supabase/functions/server/**/*.d.ts"
+    "**/*.tsx"
   ],
   "exclude": [
     "node_modules",
-    "supabase/**",
     "vite.config.ts"
   ]
 }

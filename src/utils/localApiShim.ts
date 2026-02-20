@@ -1,4 +1,3 @@
-import { projectId } from '../../utils/supabase/info';
 import { readStore, writeStore, uuid, type Cadet, type Point, type Attendance, type AttendanceBulk, type Reward } from './localStore';
 
 function jsonResponse(obj: any, init: number = 200) {
@@ -12,7 +11,7 @@ function unauthorized(msg = 'Unauthorized') { return jsonResponse({ error: msg }
 export function enableLocalMode() {
   if (typeof window === 'undefined' || !(window as any).fetch) return;
   // Match the deployed function slug directly; all routes are nested under it
-  const base = `https://${projectId}.supabase.co/functions/v1/server`;
+  const base = '/api';
   const originalFetch = window.fetch.bind(window);
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {

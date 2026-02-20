@@ -23,7 +23,6 @@ import { Tickets } from './Tickets';
 import { TicketsAdmin } from './TicketsAdmin';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { Rewards } from './Rewards';
-import { Presentation } from './Presentation';
 import { PresentationEditor } from './PresentationEditor';
 import { PresentationMode } from './PresentationMode';
 
@@ -79,14 +78,8 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     const checkDefaultPin = async () => {
       if (!canManageCadets || !accessToken || !user?.id) return;
       try {
-        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/pin-status`, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          }
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data?.is_default === true) {
+        const res = await api.getPinStatus();
+        if (res?.is_default === true) {
           setForcePinChangeOpen(true);
         }
       } catch {
@@ -108,7 +101,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     }
     setForcePinSaving(true);
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/change-pin`, {
+      const res = await fetch(`/api/server/admin/change-pin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -187,11 +180,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     try {
       let res;
       // Replace with local API call
-      res = await api.changeUserRole?.(user.id, myRoleSelection, {
-        adminPin: useAdminPin ? adminPinInput : undefined,
-        temporary: temporaryRole,
-        durationSeconds: temporaryRole ? Math.max(60, Math.round(tempDurationMinutes * 60)) : undefined
-      });
+      res = await api.changeUserRole(user.id, myRoleSelection);
       if (!res || res.error) {
         alert('Failed to update role: ' + (res?.error || 'Unknown error'));
         return;
@@ -225,7 +214,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         setPinError('You must be signed in to verify PIN');
         return;
       }
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/verify-pin`, {
+      const res = await fetch(`/api/server/admin/verify-pin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -580,11 +569,11 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v)} className="space-y-6">
           <TabsContent value="leaderboards">
-            <Leaderboards accessToken={accessToken} />
+            <Leaderboards />
           </TabsContent>
 
           <TabsContent value="rewards">
-            <Rewards accessToken={accessToken} userRole={userRole} />
+            <Rewards userRole={userRole} />
           </TabsContent>
 
           {/* Show My Points tab for cadets with cadetName */}
@@ -604,11 +593,11 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           {canGivePoints && (
             <>
               <TabsContent value="points">
-                <PointsManager accessToken={accessToken} userRole={userRole} />
+                <PointsManager userRole={userRole} />
               </TabsContent>
 
               <TabsContent value="attendance">
-                <AttendanceManager accessToken={accessToken} userRole={userRole} />
+                <AttendanceManager userRole={userRole} />
               </TabsContent>
             </>
           )}
@@ -640,15 +629,11 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
 
               {adminUnlocked && (
                 <TabsContent value="signups">
-                  <AdminSignups accessToken={accessToken} currentUserId={user?.id || ''} currentUserRole={userRole} />
+                  <AdminSignups accessToken={accessToken} currentUserId={user.id} currentUserRole={userRole} />
                 </TabsContent>
               )}
 
               <>
-                <TabsContent value="signups">
-                  <AdminSignups accessToken={accessToken} />
-                </TabsContent>
-                
                 <TabsContent value="presentationeditor">
                   <PresentationEditor />
                 </TabsContent>

@@ -118,13 +118,13 @@ export function PrivacyPolicyModal() {
               <h3 className="font-semibold text-base mb-2">7. Where Your Data Is Stored</h3>
               
               <p className="text-gray-700 mb-2">
-                <strong>Primary Storage - Supabase (Cloud Database):</strong>
+                <strong>Primary Storage - PostgreSQL Database (Managed Server):</strong>
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2 mb-3">
-                <li><strong>Database: </strong> All cadet, points, attendance, ticket, and notification data is stored in Supabase KV Store (key-value database)</li>
-                <li><strong>File Storage:</strong> Uploaded evidence files (images/documents) are stored in Supabase Storage buckets with public access URLs</li>
-                <li><strong>Authentication:</strong> User accounts and login sessions managed by Supabase Auth</li>
-                <li>Supabase provides GDPR-aligned cloud hosting with appropriate security safeguards</li>
+                <li><strong>Database: </strong> All cadet, points, attendance, ticket, and notification data is stored in a PostgreSQL database on our managed server</li>
+                <li><strong>File Storage:</strong> Uploaded evidence files (images/documents) are stored via server-managed file storage with controlled access</li>
+                <li><strong>Authentication:</strong> User accounts and login sessions are managed by our server-side authentication system</li>
+                <li>Our hosting and infrastructure include appropriate security safeguards aligned with GDPR principles</li>
               </ul>
 
               <p className="text-gray-700 mb-2">
@@ -147,11 +147,11 @@ export function PrivacyPolicyModal() {
               </ul>
 
               <p className="text-gray-700 mt-3">
-                <strong>Important:</strong> Data is <strong>not</strong> stored on squadron computers, physical servers, or any local infrastructure. All data resides in the cloud (Supabase) or temporarily in your web browser.
+                <strong>Important:</strong> Data is <strong>not</strong> stored on squadron computers. Data is stored in our managed server infrastructure and temporarily in your web browser where applicable.
               </p>
               
               <p className="text-gray-700 mt-2">
-                All data transfers between your device and Supabase are encrypted in transit using SSL/TLS security protocols.
+                All data transfers between your device and our services are encrypted in transit using SSL/TLS security protocols.
               </p>
             </section>
 
@@ -162,7 +162,7 @@ export function PrivacyPolicyModal() {
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Encryption:</strong> All data transmitted between your device and our servers uses industry-standard SSL/TLS encryption</li>
                 <li><strong>Access Control:</strong> Role-based permissions limit who can view, edit, or delete data (Cadet, Point Giver, Flight Point Lead, Staff roles)</li>
-                <li><strong>Authentication:</strong> Secure login system with email/password authentication managed by Supabase (staff and NCOs only)</li>
+                <li><strong>Authentication:</strong> Secure login system with email/password authentication managed by our server (staff and NCOs only)</li>
                 <li><strong>Admin Verification:</strong> Additional 4-digit PIN verification required for sensitive administrative functions</li>
                 <li><strong>File Sanitization:</strong> Uploaded file names are automatically sanitized to prevent security vulnerabilities</li>
                 <li><strong>Automatic Expiry:</strong> Join codes and temporary access tokens expire automatically after configured durations</li>
@@ -178,7 +178,7 @@ export function PrivacyPolicyModal() {
               <h3 className="font-semibold text-base mb-2">9. Data Retention</h3>
               <p className="text-gray-700 mb-2">We retain your personal data as follows:</p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
-                <li><strong>General Data:</strong> Data is retained for a maximum of 4 years, after which it is deleted from Supabase</li>
+                <li><strong>General Data:</strong> Data is retained for a maximum of 4 years, after which it is deleted from the production database</li>
                 <li><strong>Periodic Resets:</strong> The database may be reset at the end of academic years or as operationally required, removing older data</li>
                 <li><strong>Uploaded Evidence Files:</strong> Stored for the duration of the ticket lifecycle; deleted when tickets are resolved or during periodic resets</li>
                 <li><strong>User Accounts:</strong> Staff and Flight Point Lead accounts remain active until manually deleted by administrators</li>
@@ -215,7 +215,7 @@ export function PrivacyPolicyModal() {
                 <li>Any external organizations</li>
               </ul>
               <p className="text-gray-700 mt-2">
-                The only third-party services that process data are our technical infrastructure providers (Supabase for hosting, GitGub Pages for application hosting) who act as data processors under our instructions and appropriate contracts.
+                The only third-party services that process data are our technical infrastructure providers (including hosting providers and GitHub Pages for application hosting) who act as data processors under our instructions and appropriate contracts.
               </p>
             </section>
 
@@ -245,7 +245,7 @@ export function PrivacyPolicyModal() {
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Session Storage:</strong> Maintains your login session and temporary admin PIN verification status</li>
                 <li><strong>Local Storage:</strong> Caches squadron data for offline access, stores file metadata indexes, and UI preferences</li>
-                <li><strong>Authentication Cookies:</strong> Supabase may set necessary authentication cookies for login sessions</li>
+                <li><strong>Authentication Cookies:</strong> Our authentication system may set necessary cookies or tokens for login sessions</li>
               </ul>
               <p className="text-gray-700 mt-2">
                 <strong>We do NOT use: </strong> Analytics cookies, advertising cookies, social media tracking pixels, or third-party tracking scripts for marketing purposes.
@@ -257,7 +257,7 @@ export function PrivacyPolicyModal() {
               <h3 className="font-semibold text-base mb-2">13. Third-Party Services</h3>
               <p className="text-gray-700 mb-2">We use the following third-party services to operate this system:</p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
-                <li><strong>Supabase (supabase.com):</strong> Cloud database, authentication, and file storage - GDPR-compliant infrastructure</li>
+                <li><strong>Managed Hosting Providers:</strong> Infrastructure services used for application/database hosting and operations</li>
                 <li><strong>GitHub Pages:</strong> Application hosting and deployment platform</li>
               </ul>
               <p className="text-gray-700 mt-2">

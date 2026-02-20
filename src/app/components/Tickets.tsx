@@ -50,7 +50,7 @@ export function Tickets({ accessToken }: TicketsProps) {
     if (!description.trim()) return;
     setSubmitting(true);
     try {
-      // Optional: upload file to Supabase Storage
+      // Optional: upload file to server-managed storage
       let uploadedUrl: string | null = null;
       if (file) {
         // Upload via server to bypass Storage RLS

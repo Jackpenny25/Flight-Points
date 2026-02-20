@@ -1,9 +1,7 @@
 name: Generate Cadet PPTX
 
-#on:
-#  schedule:
-#    - cron: '0 18 * * 2,5' # Tue & Fri 18:00 UTC (adjust as needed)
-#  workflow_dispatch:
+on:
+  workflow_dispatch: {}
 
 jobs:
   generate:
@@ -20,24 +18,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Generate CSVs
-        env:
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      - name: Generate presentation from local data
         run: |
           mkdir -p outputs
-          python scripts/generate_csv_supabase.py --output-dir outputs
+          python scripts/generate_presentation.py --data-dir data --output outputs/cadets_presentation.pptx
 
-      - name: Upload CSV artifacts
+      - name: Upload presentation artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cadets-csvs
-          path: outputs/*.csv
+          name: cadets-presentation
+          path: outputs/*.pptx
 
-      - name: Upload CSVs to Google Drive
-        if: always()
-        env:
-          GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
-          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
-        run: |
-          python scripts/upload_to_gdrive.py

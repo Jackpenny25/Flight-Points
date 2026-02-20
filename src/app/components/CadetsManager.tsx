@@ -96,28 +96,20 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     setPinVerifyLoading(true);
     setPinVerifyError('');
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/server/admin/verify-pin`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ pin: pinVerifyValue }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.success) {
-        setPinVerifyError(data?.message || data?.error || 'PIN verification failed.');
-        return;
+      const res = await api.verifyPin(pinVerifyValue);
+      if (res && (res.success || res.id || res.deleted)) {
+        setPinVerifyOpen(false);
+        if (pendingDelete) {
+          await executeDeleteCadet(pendingDelete.id, pendingDelete.name);
+        } else if (pendingBulkDelete) {
+          await executeBulkRemove();
+        }
+        setPendingDelete(null);
+        setPendingBulkDelete(false);
+        setPinVerifyValue('');
+      } else {
+        setPinVerifyError(res?.error || 'PIN verification failed.');
       }
-
-      setPinVerifyOpen(false);
-      if (pendingDelete) {
-        await executeDeleteCadet(pendingDelete.id, pendingDelete.name);
-      } else if (pendingBulkDelete) {
-        await executeBulkRemove();
-      }
-      setPendingDelete(null);
-      setPendingBulkDelete(false);
-      setPinVerifyValue('');
     } catch (e: any) {
       setPinVerifyError(String(e?.message || e));
     } finally {

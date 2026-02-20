@@ -1,5 +1,5 @@
 -- Migration: migrate kv_store entries into structured tables
--- Run this in the Supabase SQL editor for project 'diutyuulfulleqfmjlxp'
+-- Run this in your PostgreSQL SQL client against the target database
 -- Steps: run the INSERT blocks in order: cadets, attendance, points
 -- These statements use ON CONFLICT DO NOTHING (id primary key) to avoid duplicates.
 

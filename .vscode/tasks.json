@@ -2,39 +2,15 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Deploy Supabase Edge Function",
+			"label": "Run API Server",
 			"type": "shell",
-			"command": "npx supabase functions deploy server",
+			"command": "npm run server",
 			"group": "build"
 		},
 		{
-			"label": "Deploy Supabase Edge Function",
+			"label": "Run Frontend Dev",
 			"type": "shell",
-			"command": "npx supabase functions deploy server",
-			"group": "build"
-		},
-		{
-			"label": "Deploy Supabase Edge Function",
-			"type": "shell",
-			"command": "npx supabase functions deploy server",
-			"group": "build"
-		},
-		{
-			"label": "Deploy Supabase Edge Function",
-			"type": "shell",
-			"command": "npx supabase functions deploy server",
-			"group": "build"
-		},
-		{
-			"label": "Deploy Supabase Edge Function",
-			"type": "shell",
-			"command": "npx supabase functions deploy server",
-			"group": "build"
-		},
-		{
-			"label": "Deploy Supabase Edge Function",
-			"type": "shell",
-			"command": "npx supabase functions deploy server",
+			"command": "npm run dev",
 			"group": "build"
 		},
 		{

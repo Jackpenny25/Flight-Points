@@ -26,22 +26,9 @@ Scheduling options
 - GitHub Actions: create a workflow that checks out the repo, installs Python, installs requirements, runs the script, and uploads the PPTX as an artifact or pushes to a storage location.
 - Server cron: run the script on a server/VM twice weekly.
 
-Supabase (preferred) — using hosted data
-- The repository includes Supabase function routes (the function is named `server`). The script `scripts/generate_presentation_supabase.py` calls your deployed Supabase Function endpoints to fetch `cadets` and `leaderboards`.
-- For secure access to protected endpoints (leaderboards, attendance reports) set the following environment variable on the machine or CI runner where you run the script:
-	- `SUPABASE_SERVICE_ROLE_KEY` (service role key) — do NOT commit this to source control.
-- Optionally set `SUPABASE_PROJECT_ID` if you don't want the script to read it from `utils/supabase/info.tsx`.
-
-Example (Windows PowerShell):
-
-```powershell
-$env:SUPABASE_SERVICE_ROLE_KEY = "<your-service-role-key>"
-python scripts/generate_presentation_supabase.py --output outputs/cadets_presentation_supabase.pptx
-```
-
-Notes
-- If `SUPABASE_SERVICE_ROLE_KEY` is not provided the script will try public endpoints (may return fewer metrics).
-- For fully automated runs, save the service role key as a secret in GitHub Actions / your scheduler and run the script on schedule.
+Server/local data workflow
+- Use `scripts/generate_presentation.py` with JSON data files in `data/`.
+- For scheduled automation, run the same command in GitHub Actions, Windows Task Scheduler, or cron.
  
 Google Drive upload (GitHub Actions)
 - To upload generated CSVs to Google Drive from GitHub Actions the workflow expects two repository secrets:

@@ -7,15 +7,14 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { formatFlight } from './ui/utils';
 import { toast } from 'sonner';
+import { AdminPinManager } from './AdminPinManager';
 
-// NOTE: AdminSignups component requires the following API methods to be implemented:
-// - api.getPendingSignups()
-// - api.getJoinCode()
-// - api.getUsers()
-// - api.approveUser(userId, data)
-// - api.updateUserRole(userId, role)
-// - api.createJoinCode({ durationSeconds })
-// These methods are not yet available in the local API and need to be added.
+// Define AdminSignupsProps
+interface AdminSignupsProps {
+  accessToken: string;
+  currentUserId: string;
+  currentUserRole: string;
+}
 
 interface PendingSignup {
   id: string;
@@ -131,14 +130,12 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
           onClick={async () => {
             if (!confirm('Run data retention cleanup now? This will permanently delete records older than 4 years.')) return;
             try {
-              const url = `https://${projectId}.supabase.co/functions/v1/server/retention/cleanup`;
-              const res = await fetch(url, { method: 'POST', headers: makeHeaders() });
-              const data = await res.json();
+              const res = await api.cleanupRetention();
               if (!res.ok) {
-                alert('Cleanup failed: ' + (data.error || res.statusText));
+                alert('Cleanup failed: ' + (res.statusText || 'Unknown error'));
                 return;
               }
-              alert('Cleanup completed. Deleted: ' + JSON.stringify(data.deleted));
+              alert('Cleanup completed. Deleted: ' + JSON.stringify(res.deleted));
               // refresh list after cleanup
               fetchData();
             } catch (e) {

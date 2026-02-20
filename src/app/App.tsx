@@ -14,7 +14,8 @@ export default function App() {
   useEffect(() => {
     // Clean up legacy localStorage keys on app load
     Object.keys(localStorage).forEach(key => {
-      if (key === 'localStore_73a3871f_v1' || key.toLowerCase().includes('supabase')) {
+      const legacyPrefixes = ['sb-', 'supa-'];
+      if (key === 'localStore_73a3871f_v1' || legacyPrefixes.some(prefix => key.toLowerCase().includes(prefix))) {
         localStorage.removeItem(key);
       }
     });
