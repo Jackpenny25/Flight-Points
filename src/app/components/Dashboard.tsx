@@ -231,8 +231,8 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
               <img
-                src={`${import.meta.env.BASE_URL}${adminUnlocked ? 'logo-black.jpg' : 'logo.png'}`}
-                alt="2427 Squadron"
+                src={`${import.meta.env.BASE_URL}${adminUnlocked ? 'logo-black.jpg' : ''}`}
+                alt="Flight Points Logo"
                 className={`h-12 w-12 object-contain ${canUseAdminPin ? 'cursor-pointer' : ''}`}
                 title={canUseAdminPin ? (adminUnlocked ? 'Click to lock admin' : 'Click to unlock admin') : 'Admin unlock available for Flight Point Leads only'}
                 onClick={() => {
@@ -240,26 +240,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                   return adminUnlocked ? lockAdmin() : openPinDialog();
                 }}
                 onError={(e) => {
-                  const step = e.currentTarget.getAttribute('data-failed') || '';
-                  if (adminUnlocked) {
-                    // Try JPG → JPEG → PNG → regular logo
-                    if (step === '') {
-                      e.currentTarget.setAttribute('data-failed', 'jpg');
-                      e.currentTarget.src = `${import.meta.env.BASE_URL}logo-black.jpeg`;
-                      return;
-                    }
-                    if (step === 'jpg') {
-                      e.currentTarget.setAttribute('data-failed', 'jpeg');
-                      e.currentTarget.src = `${import.meta.env.BASE_URL}logo-black.png`;
-                      return;
-                    }
-                    if (step === 'jpeg') {
-                      e.currentTarget.setAttribute('data-failed', 'png');
-                      e.currentTarget.src = `${import.meta.env.BASE_URL}logo.png`;
-                      return;
-                    }
-                  }
-                  // Hide if all fallbacks fail
                   e.currentTarget.style.display = 'none';
                 }}
               />

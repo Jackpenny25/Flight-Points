@@ -1,4 +1,4 @@
-  // Role is no longer self-assigned during signup
+// Role is no longer self-assigned during signup
 import { useState } from 'react';
 import { login } from '../../utils/auth';
 import { api } from '../../utils/api';
@@ -95,12 +95,9 @@ export function Login({ onLogin }: LoginProps) {
       <div className="w-full max-w-2xl px-4">
         <Card className="w-full max-w-lg md:max-w-xl mx-auto shadow-xl">
         <CardHeader className="text-center space-y-4">
-          <div className="flex justify-center">
-            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="2427 Biggin Hill Squadron" className="h-32 w-32 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-          </div>
           <div>
-            <CardTitle className="text-3xl font-bold text-primary">2427 (Biggin Hill) Squadron</CardTitle>
-            <CardDescription className="text-base">RAF Air Cadets - Flight Points Management</CardDescription>
+            <CardTitle className="text-3xl font-bold text-primary">Flight Points</CardTitle>
+            <CardDescription className="text-base">Flight Points Management</CardDescription>
           </div>
         </CardHeader>
         <CardContent>

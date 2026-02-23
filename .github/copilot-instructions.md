@@ -41,3 +41,9 @@ LATEST PROJECT NOTES (2026-02-23):
 - `cloudflared access tcp --hostname db.flightpoints.uk --url localhost:6543` is expected to stay running and show `Start Websocket listener`; in DBeaver, connect to localhost:6543 while it runs.
 - Local PC test confirmed listener on localhost:6543 (TcpTestSucceeded=True) while cloudflared access tcp is running.
 - App database credentials are configured in the project root .env.local via DATABASE_URL (backend loads .env.local).
+
+LATEST PROJECT NOTES (2026-02-23 - migration audit):
+- Project stack is local/server-first: PostgreSQL on server, backend reads .env.local, and deployment is performed with Deploy.bat on the local/squadron server.
+- Removed legacy GitHub Pages deployment workflow from the repo to avoid accidental cloud deploys.
+- Removed GitHub Pages-specific metadata/comment references from package.json and vite.config.ts.
+- Privacy policy text should describe server/infrastructure providers generically (not GitHub Pages) and must not mention RAF or Biggin Hill.

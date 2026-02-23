@@ -62,7 +62,7 @@ export const FileSystemStorage = {
       const fileHandle = await window.showSaveFilePicker?.({
         suggestedName: file.name,
         types: [{
-          description: 'RAF Cadet Files',
+          description: 'Flight Points Files',
           accept: { [file.type]: [file.name.split('.').pop() || ''] },
         }],
       });
@@ -123,7 +123,7 @@ export const FileSystemStorage = {
       const fileHandles = await window.showOpenFilePicker?.({
         multiple: false,
         types: [{
-          description: 'RAF Cadet Files',
+          description: 'Flight Points Files',
           accept: { [metadata.type]: [metadata.name.split('.').pop() || ''] },
         }],
       });

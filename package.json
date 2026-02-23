@@ -103,6 +103,5 @@
     "overrides": {
       "vite": "6.3.5"
     }
-  },
-  "homepage": "https://jackpenny25.github.io/Flight-Points"
+  }
 }

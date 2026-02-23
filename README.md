@@ -1,4 +1,4 @@
-# RAF Cadet Squadron — Flight Points (Private)
+# Flight Points — Management System
 
 WARNING: This repository is private and intended for the repository owner only. Do NOT run, deploy, fork, clone, or share this project or its data unless you are explicitly authorised by the repository owner.
 

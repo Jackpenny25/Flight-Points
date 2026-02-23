@@ -17,7 +17,7 @@ export function PrivacyPolicyModal() {
       <DialogContent className="max-w-3xl max-h-[90vh] p-0 flex flex-col">
         <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle>Privacy Policy</DialogTitle>
-          <DialogDescription>2427 (Biggin Hill) Squadron - RAF Air Cadets</DialogDescription>
+          <DialogDescription>Flight Points System</DialogDescription>
         </DialogHeader>
         
         <div className="flex-1 overflow-y-auto px-6">
@@ -26,10 +26,10 @@ export function PrivacyPolicyModal() {
             <section>
               <h3 className="font-semibold text-base mb-2">1. Introduction</h3>
               <p className="text-gray-700">
-                2427 (Biggin Hill) Squadron is committed to protecting your personal data and respecting your privacy. This Privacy Policy explains how we collect, use, and protect personal information in accordance with the UK GDPR and the Data Protection Act 2018 and other applicable privacy laws.
+                Flight Points is committed to protecting your personal data and respecting your privacy. This Privacy Policy explains how we collect, use, and protect personal information in accordance with the UK GDPR and the Data Protection Act 2018 and other applicable privacy laws.
               </p>
               <p className="text-gray-700 mt-2">
-                <strong>Last Updated:</strong> January 2026
+                <strong>Last Updated:</strong> February 2026
               </p>
             </section>
 
@@ -37,13 +37,13 @@ export function PrivacyPolicyModal() {
             <section>
               <h3 className="font-semibold text-base mb-2">2. Who We Are</h3>
               <p className="text-gray-700">
-                2427 (Biggin Hill) Squadron RAF Air Cadets is the data controller for personal information collected through this Flight Points system. 
+                Flight Points is the data controller for personal information collected through this system. 
               </p>
               <p className="text-gray-700 mt-2">
-                <strong>Squadron Data Protection Contact:</strong> Sgt Jack Penny
+                <strong>Data Protection Contact:</strong> Admin
               </p>
               <p className="text-gray-700 mt-1">
-                <em>Email address to be provided following approval from Commanding Officer. </em>
+                <em>Email address to be provided following approval from the administrator.</em>
               </p>
             </section>
 
@@ -76,11 +76,11 @@ export function PrivacyPolicyModal() {
               <h3 className="font-semibold text-base mb-2">4. Legal Basis for Processing</h3>
               <p className="text-gray-700 mb-2">We rely on the following legal bases to process personal data:</p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
-                <li><strong>Legitimate interests: </strong> Managing squadron activities, tracking attendance, and awarding flight points for the effective operation of 2427 Squadron</li>
-                <li><strong>Legal obligation:</strong> Compliance with RAF Air Cadets and MOD regulatory requirements where applicable</li>
+                <li><strong>Legitimate interests: </strong> Managing activities, tracking attendance, and awarding flight points for the effective operation of this system</li>
+                <li><strong>Legal obligation:</strong> Compliance with applicable UK data protection and safeguarding requirements where relevant</li>
               </ul>
               <p className="text-gray-700 mt-2">
-                <em>Note:  Parental consent requirements for cadets under 16 are under review and will be updated following consultation with the Commanding Officer.</em>
+                <em>Note: Parental consent requirements for users under 16 are reviewed as part of local policy and legal compliance updates.</em>
               </p>
             </section>
 
@@ -103,10 +103,10 @@ export function PrivacyPolicyModal() {
               <p className="text-gray-700 mb-2">We use your personal data for the following purposes:</p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li>Managing cadet accounts and flight assignments</li>
-                <li>Tracking attendance at squadron activities and awarding attendance points</li>
+                <li>Tracking attendance at organisation activities and awarding attendance points</li>
                 <li>Recording and managing flight points and achievements</li>
                 <li>Processing achievement tickets submitted by cadets</li>
-                <li>Producing leaderboards and performance reports (visible only to authorized squadron members)</li>
+                <li>Producing leaderboards and performance reports (visible only to authorised system users)</li>
                 <li>Sending notifications about points awarded, attendance, and ticket status updates</li>
                 <li>Exporting data to CSV spreadsheets for displaying leaderboards (Flight Point Leads only)</li>
                 <li>Ensuring data integrity and system security through integrity checks</li>
@@ -124,6 +124,7 @@ export function PrivacyPolicyModal() {
                 <li><strong>Database: </strong> All cadet, points, attendance, ticket, and notification data is stored in a PostgreSQL database on our managed server</li>
                 <li><strong>File Storage:</strong> Uploaded evidence files (images/documents) are stored via server-managed file storage with controlled access</li>
                 <li><strong>Authentication:</strong> User accounts and login sessions are managed by our server-side authentication system</li>
+                <li><strong>Deployment:</strong> Application updates are deployed through a local server deployment process (Deploy.bat) managed by administrators</li>
                 <li>Our hosting and infrastructure include appropriate security safeguards aligned with GDPR principles</li>
               </ul>
 
@@ -147,7 +148,7 @@ export function PrivacyPolicyModal() {
               </ul>
 
               <p className="text-gray-700 mt-3">
-                <strong>Important:</strong> Data is <strong>not</strong> stored on squadron computers. Data is stored in our managed server infrastructure and temporarily in your web browser where applicable.
+                <strong>Important:</strong> Data is <strong>not</strong> stored in source control repositories. Data is stored in managed server infrastructure and temporarily in your web browser where applicable.
               </p>
               
               <p className="text-gray-700 mt-2">
@@ -163,7 +164,7 @@ export function PrivacyPolicyModal() {
                 <li><strong>Encryption:</strong> All data transmitted between your device and our servers uses industry-standard SSL/TLS encryption</li>
                 <li><strong>Access Control:</strong> Role-based permissions limit who can view, edit, or delete data (Cadet, Point Giver, Flight Point Lead, Staff roles)</li>
                 <li><strong>Authentication:</strong> Secure login system with email/password authentication managed by our server (staff and NCOs only)</li>
-                <li><strong>Admin Verification:</strong> Additional 4-digit PIN verification required for sensitive administrative functions</li>
+                <li><strong>Admin Verification:</strong> Additional 6-digit PIN verification required for sensitive administrative functions</li>
                 <li><strong>File Sanitization:</strong> Uploaded file names are automatically sanitized to prevent security vulnerabilities</li>
                 <li><strong>Automatic Expiry:</strong> Join codes and temporary access tokens expire automatically after configured durations</li>
                 <li><strong>Data Integrity Checks:</strong> Automated validation ensures points reference valid cadets and data consistency</li>
@@ -188,7 +189,7 @@ export function PrivacyPolicyModal() {
                 <li><strong>CSV Exports:</strong> Once downloaded to a user's device, we have no control over retention - users should delete files when no longer needed</li>
               </ul>
               <p className="text-gray-700 mt-2">
-                Data may be retained longer if required by RAF Air Cadets regulations or legal obligations.  Cadets or parents/guardians may request early deletion of data by contacting the Squadron Data Protection Contact. 
+                Data may be retained longer if required by applicable law or legal obligations. Cadets or parents/guardians may request early deletion of data by contacting the Data Protection Contact.
               </p>
             </section>
 
@@ -196,7 +197,7 @@ export function PrivacyPolicyModal() {
             <section>
               <h3 className="font-semibold text-base mb-2">10. Who We Share Your Data With</h3>
               <p className="text-gray-700 mb-2">
-                Your personal data is shared <strong>only within 2427 (Biggin Hill) Squadron</strong> as follows:
+                Your personal data is shared <strong>only with authorised users of this system</strong> as follows:
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Cadets:</strong> Can view leaderboards (all cadets' points and flights), their own points history, and submit tickets</li>
@@ -208,14 +209,13 @@ export function PrivacyPolicyModal() {
                 <strong>We do NOT share your data with:</strong>
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
-                <li>Other RAF Air Cadet squadrons</li>
-                <li>Wing or regional headquarters</li>
-                <li>RAF Air Cadets central administration</li>
+                <li>Other external organisations by default</li>
+                <li>Third-party analytics networks for marketing</li>
                 <li>Third-party marketing or analytics companies</li>
-                <li>Any external organizations</li>
+                <li>Any external organisations unless required by law</li>
               </ul>
               <p className="text-gray-700 mt-2">
-                The only third-party services that process data are our technical infrastructure providers (including hosting providers and GitHub Pages for application hosting) who act as data processors under our instructions and appropriate contracts.
+                Third-party services that process data are limited to technical infrastructure providers (such as server/network providers used to run this service) acting under our instructions and applicable data protection controls.
               </p>
             </section>
 
@@ -232,7 +232,7 @@ export function PrivacyPolicyModal() {
                 <li><strong>Right to Object:</strong> Object to processing based on legitimate interests</li>
               </ul>
               <p className="text-gray-700 mt-2">
-                To exercise any of these rights, please contact the Squadron Data Protection Contact (details in Section 2). We will respond within one month. 
+                To exercise any of these rights, please contact the Data Protection Contact (details in Section 2). We will respond within one month.
               </p>
             </section>
 
@@ -244,7 +244,7 @@ export function PrivacyPolicyModal() {
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Session Storage:</strong> Maintains your login session and temporary admin PIN verification status</li>
-                <li><strong>Local Storage:</strong> Caches squadron data for offline access, stores file metadata indexes, and UI preferences</li>
+                <li><strong>Local Storage:</strong> Caches application data for offline access, stores file metadata indexes, and UI preferences</li>
                 <li><strong>Authentication Cookies:</strong> Our authentication system may set necessary cookies or tokens for login sessions</li>
               </ul>
               <p className="text-gray-700 mt-2">
@@ -257,8 +257,8 @@ export function PrivacyPolicyModal() {
               <h3 className="font-semibold text-base mb-2">13. Third-Party Services</h3>
               <p className="text-gray-700 mb-2">We use the following third-party services to operate this system:</p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
-                <li><strong>Managed Hosting Providers:</strong> Infrastructure services used for application/database hosting and operations</li>
-                <li><strong>GitHub Pages:</strong> Application hosting and deployment platform</li>
+                <li><strong>Server/Infrastructure Providers:</strong> Services used for application hosting, database hosting, backups, and operations</li>
+                <li><strong>Network Access Providers (if enabled):</strong> Services used to securely route traffic to internal systems</li>
               </ul>
               <p className="text-gray-700 mt-2">
                 Each service has its own privacy policy and security practices. We select vendors that comply with UK GDPR and data protection regulations.  Data processing agreements are in place where required.
@@ -269,7 +269,7 @@ export function PrivacyPolicyModal() {
             <section>
               <h3 className="font-semibold text-base mb-2">14. Changes to This Policy</h3>
               <p className="text-gray-700">
-                We may update this Privacy Policy from time to time to reflect changes in our practices or legal requirements. Changes will be posted on this page with an updated "Last Updated" date.  Significant changes will be communicated to users via the notification system or at squadron parades.
+                We may update this Privacy Policy from time to time to reflect changes in our practices or legal requirements. Changes will be posted on this page with an updated "Last Updated" date. Significant changes will be communicated to users via the notification system or other appropriate channels.
               </p>
             </section>
 
@@ -280,11 +280,11 @@ export function PrivacyPolicyModal() {
                 For privacy concerns, questions about this policy, or to exercise your data protection rights, contact: 
               </p>
               <p className="text-gray-700 ml-2">
-                <strong>Squadron Data Protection Contact:</strong> Sgt Jack Penny<br />
-                <em>(Email address to be provided following CO approval)</em>
+                <strong>Data Protection Contact:</strong> Admin<br />
+                <em>(Email address to be provided following approval)</em>
               </p>
               <p className="text-gray-700 mt-2">
-                Alternatively, speak to any staff member or Flight Point Lead at squadron parades.
+                Alternatively, speak to any authorized administrator.
               </p>
             </section>
 

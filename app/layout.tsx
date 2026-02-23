@@ -2,8 +2,8 @@ import './globals.css';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'RAF Cadet Squadron Dashboard',
-  description: 'Local-only RAF Cadet management dashboard',
+  title: 'Flight Points Dashboard',
+  description: 'Local-only Flight Points management dashboard',
   icons: {
     icon: '/favicon.ico',
   },

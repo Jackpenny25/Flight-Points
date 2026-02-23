@@ -80,8 +80,8 @@ const DEFAULT_SETTINGS: PresentationSettings = {
     completeLeaderboard: true,
   },
   customText: {
-    squadronName: '2427 (Biggin Hill) Squadron',
-    headerSubtitle: 'RAF Air Cadets',
+    squadronName: 'Flight Points',
+    headerSubtitle: 'Manage Points Effectively',
   },
   colors: {
     primaryColor: '#004B87',

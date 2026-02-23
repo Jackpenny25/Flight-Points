@@ -68,8 +68,8 @@ const DEFAULT_SETTINGS: PresentationSettings = {
     completeLeaderboard: true,
   },
   customText: {
-    squadronName: '2427 (Biggin Hill) Squadron',
-    headerSubtitle: 'RAF Air Cadets',
+    squadronName: 'Flight Points',
+    headerSubtitle: 'Manage Points Effectively',
   },
   colors: {
     primaryColor: '#004B87',
@@ -646,7 +646,7 @@ export function PresentationEditor() {
                   id="squadronName"
                   value={settings.customText.squadronName}
                   onChange={(e) => updateNestedSetting('customText', 'squadronName', e.target.value)}
-                  placeholder="e.g., 2427 (Biggin Hill) Squadron"
+                  placeholder="e.g., Flight Points"
                 />
               </div>
 
@@ -656,7 +656,7 @@ export function PresentationEditor() {
                   id="headerSubtitle"
                   value={settings.customText.headerSubtitle}
                   onChange={(e) => updateNestedSetting('customText', 'headerSubtitle', e.target.value)}
-                  placeholder="e.g., RAF Air Cadets"
+                  placeholder="e.g., Flight Points Management"
                 />
               </div>
             </CardContent>

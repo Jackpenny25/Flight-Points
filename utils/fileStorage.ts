@@ -40,7 +40,7 @@ export const FileStorage = {
       const options = {
         suggestedName: file.name,
         types: [{
-          description: 'RAF Cadet Files',
+          description: 'Flight Points Files',
           accept: { [file.type]: [`.${file.name.split('.').pop() || ''}`] },
         }],
       };
@@ -114,7 +114,7 @@ export const FileStorage = {
       const options = {
         multiple: false,
         types: [{
-          description: 'RAF Cadet Files',
+          description: 'Flight Points Files',
           accept: { [metadata.type]: [`.${metadata.name.split('.').pop() || ''}`] },
         }],
       };

@@ -5,8 +5,8 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   // Use a relative base so built assets use relative URLs.
-  // Keeps GitHub Pages deployments working and avoids absolute `/Flight-Points/`
-  // paths which cause 404s when previewing or serving from a different root.
+  // Keeps local/server deployments portable and avoids absolute paths
+  // which can cause 404s when serving from a different root.
   // If you prefer an explicit base for deployment, set the VITE_BASE env var
   // and it will be picked up during the build (e.g. VITE_BASE="/Flight-Points/").
   base: process.env.VITE_BASE ?? './',
