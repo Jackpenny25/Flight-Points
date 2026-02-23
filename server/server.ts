@@ -30,7 +30,8 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.join(__dirname, '../.env.local') });
+const projectRoot = path.resolve(__dirname, '..');
+dotenv.config({ path: path.join(projectRoot, '.env.local') });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;

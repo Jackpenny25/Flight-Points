@@ -4,7 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, '../.env.local') });
+const projectRoot = path.resolve(__dirname, '..');
+dotenv.config({ path: path.join(projectRoot, '.env.local') });
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -12,7 +13,8 @@ if (!connectionString) {
   console.warn('DATABASE_URL is not set. Database queries will fail until it is configured.');
 }
 
-const shouldUseSsl = process.env.PGSSLMODE === 'require' || process.env.NODE_ENV === 'production';
+const pgSslMode = String(process.env.PGSSLMODE || '').toLowerCase();
+const shouldUseSsl = pgSslMode === 'require' || pgSslMode === 'verify-ca' || pgSslMode === 'verify-full';
 
 export const pool = new Pool({
   connectionString,
