@@ -15,6 +15,7 @@ import { AttendanceManager } from './AttendanceManager';
 import { DataIntegrity } from './DataIntegrity';
 import { ReportsExport } from './ReportsExport';
 import { api } from '../../utils/api';
+import { logout } from '../../utils/auth';
 import { exportAllCsvs } from './downloadCsvUtil';
 import AdminSignups from './AdminSignups';
 import { MyPoints } from './MyPoints';
@@ -61,12 +62,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [nameChangeDialogOpen, setNameChangeDialogOpen] = useState<boolean>(false);
   const [newName, setNewName] = useState<string>(suggestedName || userName);
   const [nameChangeError, setNameChangeError] = useState<string>('');
-  const [forcePinChangeOpen, setForcePinChangeOpen] = useState<boolean>(false);
-  const [forceCurrentPin, setForceCurrentPin] = useState<string>('');
-  const [forceNewPin, setForceNewPin] = useState<string>('');
-  const [forceConfirmPin, setForceConfirmPin] = useState<string>('');
-  const [forcePinError, setForcePinError] = useState<string>('');
-  const [forcePinSaving, setForcePinSaving] = useState<boolean>(false);
 
   useEffect(() => {
     // Show name change dialog if admin requires it or suggests it
@@ -75,61 +70,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     }
   }, [suggestedName]);
 
-  useEffect(() => {
-    const checkDefaultPin = async () => {
-      if (!canManageCadets || !accessToken || !user?.id) return;
-      try {
-        const res = await api.getPinStatus();
-        if (res?.is_default === true) {
-          setForcePinChangeOpen(true);
-        }
-      } catch {
-        // ignore; non-blocking if status check fails
-      }
-    };
-    checkDefaultPin();
-  }, [canManageCadets, accessToken, user?.id]);
-
-  const submitForcedPinChange = async () => {
-    setForcePinError('');
-    if (!/^\d{4,6}$/.test(forceNewPin)) {
-      setForcePinError('New PIN must be 4 to 6 digits.');
-      return;
-    }
-    if (forceNewPin !== forceConfirmPin) {
-      setForcePinError('New PIN and confirm PIN do not match.');
-      return;
-    }
-    setForcePinSaving(true);
-    try {
-      const res = await fetch(`/api/server/admin/change-pin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          user_id: user?.id,
-          current_pin: forceCurrentPin,
-          new_pin: forceNewPin,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.success) {
-        setForcePinError(data?.message || data?.error || 'Failed to change PIN');
-        return;
-      }
-      setForcePinChangeOpen(false);
-      setForceCurrentPin('');
-      setForceNewPin('');
-      setForceConfirmPin('');
-      alert('PIN changed successfully.');
-    } catch (e: any) {
-      setForcePinError(String(e?.message || e));
-    } finally {
-      setForcePinSaving(false);
-    }
-  };
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -219,7 +159,15 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       }
       const data = await api.verifyPin(pinInput);
       if (!data?.success) {
-        setPinError(data?.message || data?.error || 'Incorrect PIN');
+        const err = String(data?.message || data?.error || 'Incorrect PIN');
+        if (err.toLowerCase().includes('expired token') || err.toLowerCase().includes('invalid or expired token')) {
+          logout();
+          setPinDialogOpen(false);
+          alert('Your session expired. Please sign in again.');
+          onLogout();
+          return;
+        }
+        setPinError(err);
         return;
       }
       sessionStorage.setItem('adminPinVerified', 'true');
@@ -227,9 +175,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       setPinDialogOpen(false);
       setPinError('');
       setPinInput('');
-      if (data?.is_default) {
-        alert('You are still using a default PIN. Please change it now in the Signups tab.');
-      }
     } catch (e: any) {
       setPinError(String(e?.message || e));
     }
@@ -419,53 +364,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPinDialogOpen(false)}>Cancel</Button>
             <Button onClick={submitPin}>Unlock</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={forcePinChangeOpen} onOpenChange={() => {}}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Change Default PIN</DialogTitle>
-            <DialogDescription>
-              Your account is still using a default admin PIN. You must change it now.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Input
-              type="password"
-              inputMode="numeric"
-              maxLength={6}
-              placeholder="Current PIN"
-              value={forceCurrentPin}
-              onChange={(e) => setForceCurrentPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            />
-            <Input
-              type="password"
-              inputMode="numeric"
-              maxLength={6}
-              placeholder="New PIN (4-6 digits)"
-              value={forceNewPin}
-              onChange={(e) => setForceNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            />
-            <Input
-              type="password"
-              inputMode="numeric"
-              maxLength={6}
-              placeholder="Confirm new PIN"
-              value={forceConfirmPin}
-              onChange={(e) => setForceConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  submitForcedPinChange();
-                }
-              }}
-            />
-            {forcePinError && <p className="text-sm text-red-600">{forcePinError}</p>}
-          </div>
-          <DialogFooter>
-            <Button onClick={submitForcedPinChange} disabled={forcePinSaving}>{forcePinSaving ? 'Saving...' : 'Change PIN'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

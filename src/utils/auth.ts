@@ -3,6 +3,25 @@ import { useState } from 'react';
 
 const API_URL = 'https://flightpoints.uk/api';
 
+function decodeJwtPayload(token: string): any | null {
+  try {
+    const payloadBase64 = token.split('.')[1];
+    if (!payloadBase64) return null;
+    const normalized = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+export function isTokenExpired(token: string, clockSkewSeconds = 30): boolean {
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload.exp !== 'number') return false;
+  const now = Math.floor(Date.now() / 1000);
+  return payload.exp <= (now + clockSkewSeconds);
+}
+
 export interface User {
   id: string;
   email: string;
@@ -59,7 +78,13 @@ export function logout() {
 }
 
 export function getToken(): string | null {
-  return localStorage.getItem('token');
+  const token = localStorage.getItem('token');
+  if (!token) return null;
+  if (isTokenExpired(token)) {
+    logout();
+    return null;
+  }
+  return token;
 }
 
 export function isAuthenticated(): boolean {
