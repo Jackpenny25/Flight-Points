@@ -30,3 +30,14 @@ LATEST PROJECT NOTES (2026-02-23):
 - Admin PIN is env-based and must be exactly 6 digits in .env.local.
 - Admin PIN verification is server-side and restricted to lead roles.
 - Use Deploy.bat to pull latest code and restart the Flight-Points service on the server.
+- DBeaver timeout check: db.flightpoints.uk currently resolves to Cloudflare IPs and direct TCP to 5432/5433 from local PC fails.
+- If using Cloudflare Tunnel for Postgres, connect DBeaver to localhost via cloudflared access tcp; direct host:port to db.flightpoints.uk may timeout.
+- Cloudflared ingress rule order matters: the catch-all fallback (service: http_status:404) must be the final rule, otherwise later hostnames (like db.flightpoints.uk) will never match.
+- In PowerShell, run local executables from current folder with .\cloudflared.exe (not cloudflared) unless the folder is added to PATH.
+- Any cloudflared ingress rule missing hostname/path is a catch-all; only one catch-all should exist and it must be the last rule.
+- For cloudflared 2026.x, pass --config before subcommands: `cloudflared tunnel --config <file> ingress validate` and `cloudflared tunnel --config <file> run <tunnel-id>`.
+- To use `cloudflared access tcp` from a local PC, cloudflared must be installed on that local PC (or run via full path to cloudflared.exe if not in PATH).
+- On some Windows installs via winget, cloudflared may be at C:\Program Files (x86)\cloudflared\cloudflared.exe; use full path or open a new PowerShell session to refresh PATH.
+- `cloudflared access tcp --hostname db.flightpoints.uk --url localhost:6543` is expected to stay running and show `Start Websocket listener`; in DBeaver, connect to localhost:6543 while it runs.
+- Local PC test confirmed listener on localhost:6543 (TcpTestSucceeded=True) while cloudflared access tcp is running.
+- App database credentials are configured in the project root .env.local via DATABASE_URL (backend loads .env.local).
