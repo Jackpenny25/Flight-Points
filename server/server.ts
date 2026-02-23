@@ -31,7 +31,7 @@ import jwt from 'jsonwebtoken';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
-dotenv.config({ path: path.join(projectRoot, '.env.local') });
+dotenv.config({ path: path.join(projectRoot, '.env.local'), override: true });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -161,6 +161,12 @@ function hasSignupAdminRole(user?: UserJwtPayload) {
   if (!user) return false;
   const role = (user.role || '').toLowerCase();
   return role === 'snco' || role === 'staff' || role === 'admin';
+}
+
+function hasAdminPinRole(user?: UserJwtPayload) {
+  if (!user) return false;
+  const role = String(user.role || '').toLowerCase().trim();
+  return role === 'snco' || role === 'flight point lead' || role === 'flight_point_lead';
 }
 
 let signupSchemaInitPromise: Promise<void> | null = null;
@@ -676,6 +682,11 @@ function mapRowsToClient(type: DataType, rows: Record<string, any>[]) {
 
 // ========== PIN MANAGEMENT ENDPOINTS ==========
 
+function getConfiguredAdminPin() {
+  const configuredPin = String(process.env.ADMIN_PIN || process.env.VITE_ADMIN_PIN || '').trim();
+  return configuredPin;
+}
+
 // GET /api/admin/pin-status - Get current user's PIN status
 app.get('/api/admin/pin-status', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
@@ -683,22 +694,15 @@ app.get('/api/admin/pin-status', requireAuth, async (req: AuthRequest, res: Resp
       return res.status(401).json({ error: 'User ID not found' });
     }
 
-    const result = await query(
-      `SELECT id, pin_is_default, pin_last_changed 
-       FROM app_users 
-       WHERE id = $1`,
-      [req.user.id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+    if (!hasAdminPinRole(req.user)) {
+      return res.status(403).json({ error: 'Only Flight Point Leads can use admin PIN actions' });
     }
 
-    const user = result.rows[0];
+    const configuredPin = getConfiguredAdminPin();
     res.json({
-      is_default: user.pin_is_default === true,
-      last_changed: user.pin_last_changed,
-      has_pin: user.pin_is_default !== null,
+      is_default: false,
+      last_changed: null,
+      has_pin: /^\d{6}$/.test(configuredPin),
     });
   } catch (error) {
     console.error('Error in GET /api/admin/pin-status:', error);
@@ -707,22 +711,32 @@ app.get('/api/admin/pin-status', requireAuth, async (req: AuthRequest, res: Resp
 });
 
 // POST /api/admin/verify-pin - Verify a PIN
-app.post('/api/admin/verify-pin', async (req: Request, res: Response) => {
+app.post('/api/admin/verify-pin', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
+    if (!hasAdminPinRole(req.user)) {
+      return res.status(403).json({ error: 'Only Flight Point Leads can verify admin PIN' });
+    }
+
     const { pin } = req.body || {};
     if (!pin) {
       return res.status(400).json({ error: 'PIN is required' });
     }
 
-    // For now, accept a default PIN (e.g., '000000' or any 6-digit code)
-    // In production, validate against hashed PIN in database
+    const configuredPin = getConfiguredAdminPin();
+    if (!/^\d{6}$/.test(configuredPin)) {
+      return res.status(500).json({ error: 'Admin PIN is not configured correctly. Set a 6-digit ADMIN_PIN or VITE_ADMIN_PIN in .env.local.' });
+    }
+
     const pinStr = String(pin).trim();
     if (!/^\d{6}$/.test(pinStr)) {
       return res.status(400).json({ error: 'PIN must be 6 digits' });
     }
 
-    // Accept any 6-digit PIN for now (placeholder logic)
-    res.json({ valid: true });
+    if (pinStr !== configuredPin) {
+      return res.status(401).json({ error: 'Incorrect PIN' });
+    }
+
+    res.json({ success: true });
   } catch (error) {
     console.error('Error in POST /api/admin/verify-pin:', error);
     res.status(500).json({ error: 'Failed to verify PIN' });
@@ -732,38 +746,13 @@ app.post('/api/admin/verify-pin', async (req: Request, res: Response) => {
 // POST /api/admin/change-pin - Change user's PIN
 app.post('/api/admin/change-pin', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { userId, currentPin, newPin } = req.body || {};
-    const targetUserId = userId || req.user?.id;
-
-    if (!targetUserId) {
-      return res.status(400).json({ error: 'User ID is required' });
+    if (!hasAdminPinRole(req.user)) {
+      return res.status(403).json({ error: 'Only Flight Point Leads can change admin PIN' });
     }
 
-    if (!newPin) {
-      return res.status(400).json({ error: 'New PIN is required' });
-    }
-
-    const pinStr = String(newPin).trim();
-    if (!/^\d{6}$/.test(pinStr)) {
-      return res.status(400).json({ error: 'PIN must be exactly 6 digits' });
-    }
-
-    // Hash the new PIN (using same approach as password)
-    const pinHash = await bcrypt.hash(pinStr, 10);
-
-    const result = await query(
-      `UPDATE app_users
-       SET pin_hash = $1, pin_last_changed = NOW(), pin_is_default = FALSE
-       WHERE id = $2
-       RETURNING id, email, name`,
-      [pinHash, targetUserId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    res.json({ success: true, message: 'PIN changed successfully' });
+    res.status(400).json({
+      error: 'Admin PIN is managed in .env.local. Update ADMIN_PIN (or VITE_ADMIN_PIN) to a new 6-digit value and restart the server.',
+    });
   } catch (error) {
     console.error('Error in POST /api/admin/change-pin:', error);
     res.status(500).json({ error: 'Failed to change PIN' });
@@ -773,28 +762,9 @@ app.post('/api/admin/change-pin', requireAuth, async (req: AuthRequest, res: Res
 // POST /api/admin/reset-pin - Reset a user's PIN (admin only)
 app.post('/api/admin/reset-pin', requireAuth, requireRole(['admin', 'staff']), async (req: AuthRequest, res: Response) => {
   try {
-    const { targetUserId } = req.body || {};
-    if (!targetUserId) {
-      return res.status(400).json({ error: 'Target user ID is required' });
-    }
-
-    // Generate a default PIN (e.g., user's first 6 digits of UUID or '000000')
-    const defaultPin = '000000';
-    const pinHash = await bcrypt.hash(defaultPin, 10);
-
-    const result = await query(
-      `UPDATE app_users
-       SET pin_hash = $1, pin_last_changed = NOW(), pin_is_default = TRUE
-       WHERE id = $2
-       RETURNING id, email, name`,
-      [pinHash, targetUserId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    res.json({ success: true, message: 'PIN reset to default (000000)' });
+    res.status(400).json({
+      error: 'Admin PIN is managed in .env.local. Set ADMIN_PIN (or VITE_ADMIN_PIN) to a 6-digit value and restart the server.',
+    });
   } catch (error) {
     console.error('Error in POST /api/admin/reset-pin:', error);
     res.status(500).json({ error: 'Failed to reset PIN' });

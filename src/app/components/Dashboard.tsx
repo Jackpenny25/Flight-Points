@@ -34,6 +34,7 @@ interface DashboardProps {
 
 export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const userRole = user?.user_metadata?.role || 'cadet';
+  const canUseAdminPin = ['snco', 'flight point lead', 'flight_point_lead'].includes(String(userRole).toLowerCase());
   const userName = user?.user_metadata?.name || user?.email || 'User';
   // Map internal role values to user-facing labels
   const displayRole = userRole === 'snco'
@@ -156,8 +157,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
     typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
   );
-  // Admin PIN - must be set via environment variable
-  const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN;
   const [pinDialogOpen, setPinDialogOpen] = useState<boolean>(false);
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
@@ -196,6 +195,10 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   }
 
   const openPinDialog = () => {
+    if (!canUseAdminPin) {
+      alert('Only Flight Point Leads can unlock admin PIN actions.');
+      return;
+    }
     if (adminUnlocked) return;
     setPinError('');
     setPinInput('');
@@ -214,16 +217,8 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         setPinError('You must be signed in to verify PIN');
         return;
       }
-      const res = await fetch(`/api/server/admin/verify-pin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ user_id: user.id, pin: pinInput }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.success) {
+      const data = await api.verifyPin(pinInput);
+      if (!data?.success) {
         setPinError(data?.message || data?.error || 'Incorrect PIN');
         return;
       }
@@ -293,9 +288,12 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               <img
                 src={`${import.meta.env.BASE_URL}${adminUnlocked ? 'logo-black.jpg' : 'logo.png'}`}
                 alt="2427 Squadron"
-                className="h-12 w-12 object-contain cursor-pointer"
-                title={adminUnlocked ? 'Click to lock admin' : 'Click to unlock admin'}
-                onClick={() => (adminUnlocked ? lockAdmin() : openPinDialog())}
+                className={`h-12 w-12 object-contain ${canUseAdminPin ? 'cursor-pointer' : ''}`}
+                title={canUseAdminPin ? (adminUnlocked ? 'Click to lock admin' : 'Click to unlock admin') : 'Admin unlock available for Flight Point Leads only'}
+                onClick={() => {
+                  if (!canUseAdminPin) return;
+                  return adminUnlocked ? lockAdmin() : openPinDialog();
+                }}
                 onError={(e) => {
                   const step = e.currentTarget.getAttribute('data-failed') || '';
                   if (adminUnlocked) {
@@ -399,12 +397,12 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Admin Unlock</DialogTitle>
-            <DialogDescription>Enter the 4-digit admin PIN to unlock actions.</DialogDescription>
+            <DialogDescription>Enter the 6-digit admin PIN to unlock actions.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <Input
               value={pinInput}
-              onChange={(e) => setPinInput(e.target.value)}
+              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
               placeholder="PIN"
               maxLength={6}
               inputMode="numeric"

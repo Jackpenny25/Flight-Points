@@ -1,6 +1,8 @@
 
 I DONT USE SUPABASE ANYMORE. I USE A POSTGRES DATABASE INSTEAD ON A SERVER. I HAVE ACCESS TO THE DATABASE AND CAN MAKE CHANGES TO IT IF NEEDED. WHICH IS A POSTGRES DATABASE WHERE I MAINLY USE DBEAVER TO MANAGE IT.
 
+Please frequently update your knowledge of the project based on the information I give you. And add it to the botom of this file. This will help you understand the project better and make it easier for you to assist me with it.
+
 If you can do as much as possible without human input, do so. But when in doubt, ask the human for clarification.
 
 make it clear when you are unsure about something or need more info.
@@ -21,3 +23,10 @@ I use Deploy.bat to download the latest code from the repo to the server. Which 
 
 
 I DONT USE SUPABASE ANYMORE. I USE A POSTGRES DATABASE INSTEAD ON A SERVER. I HAVE ACCESS TO THE DATABASE AND CAN MAKE CHANGES TO IT IF NEEDED. WHICH IS A POSTGRES DATABASE WHERE I MAINLY USE DBEAVER TO MANAGE IT.
+
+LATEST PROJECT NOTES (2026-02-23):
+- Backend should load environment values from .env.local (not .env.example).
+- PostgreSQL SSL mode for local server should be non-SSL (PGSSLMODE=disable) unless explicitly needed.
+- Admin PIN is env-based and must be exactly 6 digits in .env.local.
+- Admin PIN verification is server-side and restricted to lead roles.
+- Use Deploy.bat to pull latest code and restart the Flight-Points service on the server.

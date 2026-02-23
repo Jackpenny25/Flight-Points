@@ -26,7 +26,6 @@ interface CadetsManagerProps {
 }
 
 export function CadetsManager({ accessToken }: CadetsManagerProps) {
-  const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN;
   const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
     typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
   );
@@ -97,7 +96,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     setPinVerifyError('');
     try {
       const res = await api.verifyPin(pinVerifyValue);
-      if (res && (res.success || res.id || res.deleted)) {
+      if (res?.success) {
         setPinVerifyOpen(false);
         if (pendingDelete) {
           await executeDeleteCadet(pendingDelete.id, pendingDelete.name);
