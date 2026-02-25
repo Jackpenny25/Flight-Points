@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../../utils/api';
-import { getToken } from '../../utils/auth';
+import { getToken, getUser } from '../../utils/auth';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -213,7 +213,8 @@ export function PointsManager({ userRole }: PointsManagerProps) {
         const match = matchCadetByPartialName(name);
         return match ? match.cadet.name : name;
       });
-      const user = getToken();
+      const currentUser = getUser();
+      const userName = currentUser?.name || 'unknown';
       const promises = resolvedNames.map(async (name) => {
         const data = {
           cadetName: name,
@@ -222,7 +223,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
           reason,
           type: pointType,
           date: new Date().toISOString(),
-          givenBy: user || 'unknown',
+          givenBy: userName,
         };
         const result = await api.createPoint(data);
         if (result.error) throw new Error(result.error);

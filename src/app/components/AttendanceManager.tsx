@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
-import { getToken } from '../../utils/auth';
+import { getToken, getUser } from '../../utils/auth';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -96,12 +96,14 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
     setBulkErrors([]);
 
     try {
+      const currentUser = getUser();
+      const userName = currentUser?.name || 'unknown';
       const entries = targets.map(c => ({
         cadetName: c.name,
         flight: c.flight,
         date: new Date(selectedDate).toISOString(),
         status: attendanceStatuses[c.id] || 'absent',
-        submittedBy: getToken() || 'unknown',
+        submittedBy: userName,
       }));
 
       // Submit as a single bulk request to avoid many parallel calls

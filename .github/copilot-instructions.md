@@ -47,3 +47,7 @@ LATEST PROJECT NOTES (2026-02-23 - migration audit):
 - Removed legacy GitHub Pages deployment workflow from the repo to avoid accidental cloud deploys.
 - Removed GitHub Pages-specific metadata/comment references from package.json and vite.config.ts.
 - Privacy policy text should describe server/infrastructure providers generically (not GitHub Pages) and must not mention RAF or Biggin Hill.
+
+LATEST PROJECT NOTES (2026-02-23 - local cloudflared setup):
+- If `cloudflared` shows `CommandNotFoundException` right after a successful winget install, the current PowerShell session likely has stale PATH.
+- Fix by either opening a new PowerShell window or running with full path and call operator: `& "C:\Program Files (x86)\cloudflared\cloudflared.exe" access tcp --hostname db.flightpoints.uk --url localhost:6543`.
