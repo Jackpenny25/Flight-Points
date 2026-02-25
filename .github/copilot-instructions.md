@@ -1,33 +1,27 @@
 
-I DONT USE SUPABASE ANYMORE. I USE A POSTGRES DATABASE INSTEAD ON A SERVER. I HAVE ACCESS TO THE DATABASE AND CAN MAKE CHANGES TO IT IF NEEDED. WHICH IS A POSTGRES DATABASE WHERE I MAINLY USE DBEAVER TO MANAGE IT.
 
-Please frequently update your knowledge of the project based on the information I give you. And add it to the botom of this file. This will help you understand the project better and make it easier for you to assist me with it.
+## Flight-Points Copilot Instructions
 
-If you can do as much as possible without human input, do so. But when in doubt, ask the human for clarification.
+## Core Working Rules
+- Do not use Supabase. This project uses a PostgreSQL database on a server.
+- The user has database access and can make DB changes in DBeaver.
+- Keep this file frequently updated with new project notes and decisions as changes happen.
+- Prefer doing as much as possible without human input; ask for clarification when needed.
+- Be explicit when uncertain or when more info is required.
+- Clearly state when the user needs to do a manual step.
+- Explain things in simple terms and say exactly what to do and where.
+- Use the VS Code built-in terminal (normally PowerShell) for commands.
+- You have permission to make repo file changes without asking first.
 
-make it clear when you are unsure about something or need more info.
+## Deployment and Environment Context
+- The website runs on a local server the user can access over wireless.
+- Typical workflow: edit code on local machine, then use `Deploy.bat` to pull latest code to server and restart services.
+- Backend should load environment values from `.env.local` (not `.env.example`).
+- App DB credentials are expected in project root `.env.local` via `DATABASE_URL`.
+- PostgreSQL local server SSL mode should be non-SSL unless explicitly required (`PGSSLMODE=disable`).
 
-make it clear when you want me to do something.
-
-For termnial commands i use the built in vs studio code terminal. Which is normally powershell
-
-Im not very good with coding so please explain things in simple terms.
-
-When possible explain what and where im supposed to do something
-
-I give you full permission to make changes to files in this repo. You do not need to ask me for permission first.
-
-The webstie is now run locally on a server where I have wireless connection too. I normally use my computer where I am connected to the server to make changes to the code. There is a database that is connected to the server that the website uses. I have access to the database and can make changes to it if needed. which is a Postgres Database where i mainly use Dbeaver to manage it. 
-
-I use Deploy.bat to download the latest code from the repo to the server. Which also restarts the server and updates the website. I can also use Deploy.bat to update the code on the server after making changes to the code on my computer.
-
-
-I DONT USE SUPABASE ANYMORE. I USE A POSTGRES DATABASE INSTEAD ON A SERVER. I HAVE ACCESS TO THE DATABASE AND CAN MAKE CHANGES TO IT IF NEEDED. WHICH IS A POSTGRES DATABASE WHERE I MAINLY USE DBEAVER TO MANAGE IT.
-
-LATEST PROJECT NOTES (2026-02-23):
-- Backend should load environment values from .env.local (not .env.example).
-- PostgreSQL SSL mode for local server should be non-SSL (PGSSLMODE=disable) unless explicitly needed.
-- Admin PIN is env-based and must be exactly 6 digits in .env.local.
+## Auth and Admin Notes
+- Admin PIN is env-based and must be exactly 6 digits in `.env.local`.
 - Admin PIN verification is server-side and restricted to lead roles.
 - Use Deploy.bat to pull latest code and restart the Flight-Points service on the server.
 - DBeaver timeout check: db.flightpoints.uk currently resolves to Cloudflare IPs and direct TCP to 5432/5433 from local PC fails.
@@ -47,7 +41,3 @@ LATEST PROJECT NOTES (2026-02-23 - migration audit):
 - Removed legacy GitHub Pages deployment workflow from the repo to avoid accidental cloud deploys.
 - Removed GitHub Pages-specific metadata/comment references from package.json and vite.config.ts.
 - Privacy policy text should describe server/infrastructure providers generically (not GitHub Pages) and must not mention RAF or Biggin Hill.
-
-LATEST PROJECT NOTES (2026-02-23 - local cloudflared setup):
-- If `cloudflared` shows `CommandNotFoundException` right after a successful winget install, the current PowerShell session likely has stale PATH.
-- Fix by either opening a new PowerShell window or running with full path and call operator: `& "C:\Program Files (x86)\cloudflared\cloudflared.exe" access tcp --hostname db.flightpoints.uk --url localhost:6543`.
