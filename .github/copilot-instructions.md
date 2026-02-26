@@ -2,6 +2,8 @@
 
 ## Flight-Points Copilot Instructions
 
+Please frequently update when you learn new things about the project or make decisions. This file is intended to be a single source of truth for how to work on the project, and it should be updated as the project evolves. The more detailed and up-to-date this file is, the better you can assist with code changes and other tasks.
+
 ## Core Working Rules
 - Do not use Supabase. This project uses a PostgreSQL database on a server.
 - The user has database access and can make DB changes in DBeaver.

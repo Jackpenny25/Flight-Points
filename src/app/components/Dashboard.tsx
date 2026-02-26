@@ -231,7 +231,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
               <img
-                src={`${import.meta.env.BASE_URL}${adminUnlocked ? 'logo-black.jpg' : ''}`}
+                src={`${import.meta.env.BASE_URL}${adminUnlocked ? 'logo-black.jpg' : 'logo.jpg'}`}
                 alt="Flight Points Logo"
                 className={`h-12 w-12 object-contain ${canUseAdminPin ? 'cursor-pointer' : ''}`}
                 title={canUseAdminPin ? (adminUnlocked ? 'Click to lock admin' : 'Click to unlock admin') : 'Admin unlock available for Flight Point Leads only'}
@@ -244,7 +244,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 }}
               />
               <div>
-                <h1 className="text-xl font-bold text-primary">2427 (Biggin Hill) Squadron</h1>
+                <h1 className="text-xl font-bold text-primary">Flight Points</h1>
               </div>
               {/* Admin text indicator removed; logo color indicates unlock state */}
             </div>
