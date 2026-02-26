@@ -61,3 +61,18 @@ LATEST PROJECT NOTES (2026-02-26 - role and cadets updates):
 - Edit dialog also shows rank field when flight is 'hq'.
 - HQ members are not drag-droppable between flights (they stay in the HQ section).
 - Account names should match the cadets entry name for points/attendance linking (rank is stored separately, not prefixed into the name column).
+
+LATEST PROJECT NOTES (2026-02-26 - admin account creation):
+- Self-signup flow has been REMOVED. Cadets can no longer create their own accounts via the login page.
+- The login page now shows only a sign-in form (username + password). No signup tab.
+- Accounts are created by admins (snco role) in the "Accounts" tab (formerly "Signups").
+- The Accounts tab has two sections:
+  1. "Create Account" — admin selects a cadet from the cadets table dropdown (grouped by flight), picks a role, and clicks Create. The system generates a username (lowercase name with dots, e.g. john.smith) and a secure memorable password (Word-Word-Number format, e.g. Eagle-Bravo-47). Credentials are shown once with copy buttons.
+  2. "Existing Accounts" — searchable table of all accounts showing name, username, role. Each row has: role selector with Save button, "New Password" button (generates a fresh password and displays it), and Delete button.
+- Usernames are stored as `{username}@flightpoints.local` in the `email` column of `app_users`. Login supports entering just the username part.
+- `app_users` table has new columns: `created_by TEXT` and `cadet_id UUID REFERENCES cadets(id) ON DELETE SET NULL`.
+- Migration file: `migrations/20260226_admin_account_creation.sql` — must be run in DBeaver.
+- Password word list and generation logic are in server/server.ts (PASSWORD_WORDS array, generatePassword(), generateUsername() functions).
+- Server endpoints: POST /api/admin/create-account, POST /api/admin/reset-account-password, DELETE /api/auth/users/:id, POST /api/auth/lookup-email.
+- Old signup system removed: no more join codes, signup_requests, signup_codes, pending approvals, or request-signup endpoint.
+- TopNav tab renamed from "Signups" to "Accounts".

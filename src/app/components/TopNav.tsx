@@ -61,8 +61,8 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
         { key: 'reports', label: 'Reports', icon: FileText },
         { key: 'presentation', label: 'Presentation', icon: Presentation },
         ...(adminPendingCount && adminPendingCount > 0 
-          ? [{ key: 'signups', label: 'Signups', icon: Users, badgeCount: adminPendingCount }]
-          : [{ key: 'signups', label: 'Signups', icon: Users }]
+          ? [{ key: 'signups', label: 'Accounts', icon: Users, badgeCount: adminPendingCount }]
+          : [{ key: 'signups', label: 'Accounts', icon: Users }]
         )
       ] 
     : visibleItems

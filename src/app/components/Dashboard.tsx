@@ -178,23 +178,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     }
   };
 
-  // Poll pending signup requests count for Flight Point Leads/Staff to show a badge on the NCO's tab
-  useEffect(() => {
-    if (!canManageCadets) return;
-    let timer: any;
-    const fetchCount = async () => {
-      try {
-        const res = await api.getPendingSignupsCount?.();
-        if (typeof res?.count === 'number') setAdminPendingCount(res.count);
-      } catch (e) {
-        console.error('Failed to fetch pending signups count:', e);
-      }
-    };
-    fetchCount();
-    timer = setInterval(fetchCount, 20000);
-    return () => clearInterval(timer);
-  }, [canManageCadets, accessToken]);
-
   // Poll open tickets count for Flight Point Leads/Staff to show a badge on the Tickets tab
   useEffect(() => {
     if (!canManageCadets) return;

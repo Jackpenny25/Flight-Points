@@ -169,289 +169,111 @@ function hasAdminPinRole(user?: UserJwtPayload) {
   return role === 'snco' || role === 'flight point lead' || role === 'flight_point_lead';
 }
 
-let signupSchemaInitPromise: Promise<void> | null = null;
-async function ensureSignupSchema() {
-  if (!signupSchemaInitPromise) {
-    signupSchemaInitPromise = (async () => {
-      await query(`
-        CREATE TABLE IF NOT EXISTS signup_codes (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          code TEXT NOT NULL UNIQUE,
-          duration_seconds INTEGER NOT NULL CHECK (duration_seconds > 0),
-          expires_at TIMESTAMP NOT NULL,
-          is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-          created_by TEXT,
-          revoked_at TIMESTAMP,
-          revoked_by TEXT
-        )
-      `);
+// ========== ADMIN ACCOUNT CREATION HELPERS ==========
 
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS duration_seconds INTEGER');
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP');
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE');
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()');
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS created_by TEXT');
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP');
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS revoked_by TEXT');
+const PASSWORD_WORDS = [
+  'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel',
+  'India', 'Juliet', 'Kilo', 'Lima', 'Mike', 'November', 'Oscar', 'Papa',
+  'Quebec', 'Romeo', 'Sierra', 'Tango', 'Uniform', 'Victor', 'Whiskey',
+  'Xray', 'Yankee', 'Zulu', 'Eagle', 'Falcon', 'Hawk', 'Storm', 'Thunder',
+  'Phoenix', 'Viper', 'Cobra', 'Tiger', 'Mustang', 'Raptor', 'Shadow',
+  'Arrow', 'Blaze', 'Comet', 'Dagger', 'Flare', 'Granite', 'Horizon',
+  'Iron', 'Javelin', 'Knight', 'Lance', 'Meteor', 'Noble', 'Onyx',
+  'Patriot', 'Quartz', 'Rocket', 'Sabre', 'Titan', 'Unity', 'Valor',
+  'Warrior', 'Zenith', 'Bolt', 'Crest', 'Dawn', 'Ember', 'Frost',
+  'Gale', 'Haven', 'Ivory', 'Jade', 'Kindle', 'Lunar', 'Marvel',
+  'Nimbus', 'Orbit', 'Pulse', 'Ridge', 'Spark', 'Trail', 'Ultra',
+  'Venture', 'Willow', 'Apex', 'Bridge', 'Canyon', 'Drift', 'Fleet',
+  'Guard', 'Herald', 'Impact', 'Jetstream', 'Keystone', 'Legend', 'Mirage',
+  'Nexus', 'Outpost', 'Pinnacle', 'Quest', 'Ranger', 'Sentinel', 'Trident',
+];
 
-      await query("UPDATE signup_codes SET is_active = TRUE WHERE is_active IS NULL");
-      await query("UPDATE signup_codes SET created_at = NOW() WHERE created_at IS NULL");
-      await query("UPDATE signup_codes SET duration_seconds = 3600 WHERE duration_seconds IS NULL");
-      await query("UPDATE signup_codes SET expires_at = NOW() + INTERVAL '1 hour' WHERE expires_at IS NULL");
+function generatePassword(): string {
+  const w1 = PASSWORD_WORDS[Math.floor(Math.random() * PASSWORD_WORDS.length)];
+  let w2 = PASSWORD_WORDS[Math.floor(Math.random() * PASSWORD_WORDS.length)];
+  // Avoid same word twice
+  while (w2 === w1) {
+    w2 = PASSWORD_WORDS[Math.floor(Math.random() * PASSWORD_WORDS.length)];
+  }
+  const num = Math.floor(Math.random() * 90) + 10; // 10-99
+  return `${w1}-${w2}-${num}`;
+}
 
-      await query('ALTER TABLE signup_codes ALTER COLUMN duration_seconds SET DEFAULT 3600');
-      await query('ALTER TABLE signup_codes ALTER COLUMN is_active SET DEFAULT TRUE');
-      await query('ALTER TABLE signup_codes ALTER COLUMN created_at SET DEFAULT NOW()');
+function generateUsername(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s.-]/g, '') // strip special chars
+    .replace(/\s+/g, '.')          // spaces to dots
+    .replace(/\.{2,}/g, '.')       // collapse dots
+    .replace(/^\.+|\.+$/g, '')     // trim dots
+    .slice(0, 30);                 // max 30 chars
+}
 
-      await query(`
-        CREATE TABLE IF NOT EXISTS signup_requests (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          email TEXT NOT NULL,
-          name TEXT NOT NULL,
-          password TEXT NOT NULL,
-          flight TEXT,
-          status TEXT NOT NULL DEFAULT 'pending',
-          created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-      `);
-
-      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS email TEXT');
-      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS name TEXT');
-      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS password TEXT');
-      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS flight TEXT');
-      await query("ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'");
-      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()');
-
-      await query("UPDATE signup_requests SET status = 'pending' WHERE status IS NULL");
-      await query("UPDATE signup_requests SET created_at = NOW() WHERE created_at IS NULL");
-
-      await query('CREATE INDEX IF NOT EXISTS idx_signup_codes_active ON signup_codes (is_active)');
-      await query('CREATE INDEX IF NOT EXISTS idx_signup_codes_expires_at ON signup_codes (expires_at)');
-      await query('CREATE INDEX IF NOT EXISTS idx_signup_requests_email ON signup_requests (email)');
-      await query('CREATE INDEX IF NOT EXISTS idx_signup_requests_created_at ON signup_requests (created_at)');
+// Ensure admin account columns exist
+let adminSchemaInitPromise: Promise<void> | null = null;
+async function ensureAdminAccountSchema() {
+  if (!adminSchemaInitPromise) {
+    adminSchemaInitPromise = (async () => {
+      await query('ALTER TABLE app_users ADD COLUMN IF NOT EXISTS created_by TEXT');
+      await query('ALTER TABLE app_users ADD COLUMN IF NOT EXISTS cadet_id UUID REFERENCES cadets(id) ON DELETE SET NULL');
+      await query('CREATE INDEX IF NOT EXISTS idx_app_users_cadet_id ON app_users (cadet_id)');
     })().catch((error) => {
-      signupSchemaInitPromise = null;
+      adminSchemaInitPromise = null;
       throw error;
     });
   }
-
-  return signupSchemaInitPromise;
+  return adminSchemaInitPromise;
 }
 
-// Public count endpoint used by dashboard widgets
-app.get('/api/auth/requests-count', async (req, res) => {
+// POST /api/auth/lookup-email — resolve username to email for login
+app.post('/api/auth/lookup-email', async (req: Request, res: Response) => {
   try {
-    await ensureSignupSchema();
-    const result = await query('SELECT COUNT(*)::int AS count FROM signup_requests');
-    return res.json({ count: Number(result.rows[0]?.count || 0) });
-  } catch (error) {
-    console.error('Error in GET /api/auth/requests-count:', error);
-    return res.status(500).json({ error: 'Failed to fetch signup request count' });
-  }
-});
-
-// Legacy-compatible public count endpoint
-app.get('/api/data/signups-count', async (req, res) => {
-  try {
-    await ensureSignupSchema();
-    const result = await query('SELECT COUNT(*)::int AS count FROM signup_requests');
-    return res.json({ count: Number(result.rows[0]?.count || 0) });
-  } catch (error) {
-    console.error('Error in GET /api/data/signups-count:', error);
-    return res.status(500).json({ error: 'Failed to fetch signup request count' });
-  }
-});
-
-// Public signup request route
-app.post('/api/auth/request-signup', async (req, res) => {
-  try {
-    await ensureSignupSchema();
-    const { email, password, name, joinCode, flight } = req.body || {};
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: 'Name, email and password are required' });
+    const { username } = req.body || {};
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
     }
+    const usernameStr = String(username).trim().toLowerCase();
 
-    let flightNorm: string | null = null;
-    if (flight != null && String(flight).trim() !== '') {
-      const candidate = String(flight).trim();
-      if (!['1', '2', '3', '4'].includes(candidate)) {
-        return res.status(400).json({ error: 'Invalid flight. Choose 1, 2, 3 or 4.' });
-      }
-      flightNorm = candidate;
-    }
-
-    const codeResult = await query(
-      `SELECT code, expires_at
-       FROM signup_codes
-       WHERE is_active = true
-       ORDER BY created_at DESC
-       LIMIT 1`
-    );
-    const activeCode = codeResult.rows[0];
-    if (!activeCode) {
-      return res.status(403).json({ error: 'Signup is currently closed. Ask a Flight Point Lead for the join code.' });
-    }
-    const expiresAt = new Date(activeCode.expires_at).getTime();
-    if (Date.now() > expiresAt) {
-      return res.status(403).json({ error: 'Join code expired.' });
-    }
-    if (!joinCode || String(joinCode).trim().toUpperCase() !== String(activeCode.code).trim().toUpperCase()) {
-      return res.status(403).json({ error: 'Invalid join code.' });
-    }
-
-    const throttleResult = await query(
-      `SELECT COUNT(*)::int AS count
-       FROM signup_requests
-       WHERE LOWER(email) = LOWER($1)
-         AND created_at >= NOW() - INTERVAL '1 hour'`,
-      [String(email)]
-    );
-    const recentCount = Number(throttleResult.rows[0]?.count || 0);
-    if (recentCount >= 5) {
-      return res.status(429).json({ error: 'Too many signup attempts. Try again later.' });
-    }
-
-    const insertResult = await query(
-      `INSERT INTO signup_requests (email, name, password, flight, status)
-       VALUES (LOWER($1), $2, $3, $4, 'pending')
-       RETURNING id, email, name, flight, status, created_at`,
-      [String(email), String(name).trim(), String(password), flightNorm]
-    );
-
-    return res.status(201).json({ request: insertResult.rows[0] });
-  } catch (error) {
-    console.error('Error in POST /api/auth/request-signup:', error);
-    return res.status(500).json({ error: 'Failed to create signup request' });
-  }
-});
-
-// Admin: get active join code
-app.get('/api/admin/join-code', requireAuth, async (req: AuthRequest, res: Response) => {
-  if (!hasSignupAdminRole(req.user)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  try {
-    await ensureSignupSchema();
+    // Try matching by email prefix (username@flightpoints.local) or exact email or name
     const result = await query(
-      `SELECT code, expires_at, duration_seconds
-       FROM signup_codes
-       WHERE is_active = true
-       ORDER BY created_at DESC
-       LIMIT 1`
-    );
-    const row = result.rows[0];
-    return res.json({
-      joinCode: row?.code || null,
-      expiresAt: row?.expires_at || null,
-      durationSeconds: row?.duration_seconds || null,
-    });
-  } catch (error) {
-    console.error('Error in GET /api/admin/join-code:', error);
-    return res.status(500).json({ error: 'Failed to fetch join code' });
-  }
-});
-
-// Admin: rotate join code
-app.post('/api/admin/join-code', requireAuth, async (req: AuthRequest, res: Response) => {
-  if (!hasSignupAdminRole(req.user)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  try {
-    await ensureSignupSchema();
-    const durationSeconds = Math.max(60, Number(req.body?.durationSeconds || 3600));
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-      code += alphabet[Math.floor(Math.random() * alphabet.length)];
-    }
-    const expiresAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
-    const actor = req.user?.name || req.user?.email || 'system';
-
-    await query(
-      `UPDATE signup_codes
-       SET is_active = false,
-           revoked_at = NOW(),
-           revoked_by = $1
-       WHERE is_active = true`,
-      [actor]
+      `SELECT email FROM app_users
+       WHERE LOWER(SPLIT_PART(email, '@', 1)) = $1
+          OR LOWER(email) = $1
+          OR LOWER(name) = $1
+       LIMIT 1`,
+      [usernameStr]
     );
 
-    await query(
-      `INSERT INTO signup_codes (code, duration_seconds, expires_at, is_active, created_by)
-       VALUES ($1, $2, $3, true, $4)`,
-      [code, durationSeconds, expiresAt, actor]
-    );
-
-    return res.json({ joinCode: code, expiresAt, durationSeconds });
-  } catch (error) {
-    console.error('Error in POST /api/admin/join-code:', error);
-    return res.status(500).json({ error: 'Failed to create join code' });
-  }
-});
-
-// Admin: list pending signup requests
-app.get('/api/auth/requests', requireAuth, async (req: AuthRequest, res: Response) => {
-  if (!hasSignupAdminRole(req.user)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  try {
-    await ensureSignupSchema();
-    const [requestsResult, usersResult] = await Promise.all([
-      query('SELECT id, email, name, flight, status, created_at FROM signup_requests ORDER BY created_at DESC'),
-      query('SELECT id, email, name, role FROM app_users'),
-    ]);
-
-    const usersByEmail = new Map<string, any>();
-    for (const user of usersResult.rows) {
-      usersByEmail.set(String(user.email || '').toLowerCase(), user);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Username not found' });
     }
 
-    const requests = requestsResult.rows.map((r) => {
-      const matched = usersByEmail.get(String(r.email || '').toLowerCase());
-      return {
-        id: r.id,
-        email: r.email,
-        name: r.name,
-        flight: r.flight,
-        status: r.status,
-        createdAt: r.created_at,
-        existingAccounts: matched
-          ? [{
-              id: matched.id,
-              email: matched.email,
-              user_metadata: {
-                name: matched.name,
-                role: matched.role,
-              },
-              created_at: null,
-            }]
-          : [],
-      };
-    });
-
-    return res.json({ requests });
+    return res.json({ email: result.rows[0].email });
   } catch (error) {
-    console.error('Error in GET /api/auth/requests:', error);
-    return res.status(500).json({ error: 'Failed to fetch requests' });
+    console.error('Error in POST /api/auth/lookup-email:', error);
+    return res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Admin: list accounts for role management
+// Admin: list accounts for management
 app.get('/api/auth/users', requireAuth, async (req: AuthRequest, res: Response) => {
   if (!hasSignupAdminRole(req.user)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
-    const result = await query('SELECT id, email, name, role FROM app_users ORDER BY email ASC');
+    await ensureAdminAccountSchema();
+    const result = await query('SELECT id, email, name, role, cadet_id, created_by, created_at FROM app_users ORDER BY name ASC');
     const users = result.rows.map((u) => ({
       id: u.id,
       email: u.email,
-      user_metadata: {
-        name: u.name,
-        role: u.role,
-      },
-      created_at: null,
+      name: u.name,
+      role: u.role,
+      cadetId: u.cadet_id,
+      createdBy: u.created_by,
+      createdAt: u.created_at,
+      // Extract username (part before @)
+      username: u.email.includes('@') ? u.email.split('@')[0] : u.email,
     }));
     return res.json({ users });
   } catch (error) {
@@ -460,7 +282,7 @@ app.get('/api/auth/users', requireAuth, async (req: AuthRequest, res: Response) 
   }
 });
 
-// Admin: update account role/name
+// Admin: update account role
 app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   if (!hasSignupAdminRole(req.user)) {
     return res.status(403).json({ error: 'Forbidden' });
@@ -499,69 +321,138 @@ app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Respon
   }
 });
 
-// Admin: approve signup request into app_users
-app.post('/api/auth/requests/:id/approve', requireAuth, async (req: AuthRequest, res: Response) => {
+// Admin: delete account
+app.delete('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   if (!hasSignupAdminRole(req.user)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
-    await ensureSignupSchema();
-    const requestId = req.params.id;
-    const requestedRole = String(req.body?.role || 'cadet').toLowerCase();
-
-    const requestResult = await query(
-      'SELECT id, email, name, password, flight FROM signup_requests WHERE id = $1',
-      [requestId]
-    );
-    const rec = requestResult.rows[0];
-    if (!rec) {
-      return res.status(404).json({ error: 'Request not found' });
+    // Prevent deleting yourself
+    if (req.params.id === req.user?.id) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
     }
-
-    const passwordHash = await bcrypt.hash(String(rec.password), 10);
-    const existingResult = await query('SELECT id FROM app_users WHERE LOWER(email) = LOWER($1) LIMIT 1', [rec.email]);
-
-    let userId: string;
-    if (existingResult.rows.length > 0) {
-      userId = existingResult.rows[0].id;
-      await query(
-        `UPDATE app_users
-         SET name = $1, role = $2, password_hash = $3
-         WHERE id = $4`,
-        [rec.name, requestedRole, passwordHash, userId]
-      );
-    } else {
-      userId = crypto.randomUUID();
-      await query(
-        `INSERT INTO app_users (id, email, name, role, password_hash)
-         VALUES ($1, LOWER($2), $3, $4, $5)`,
-        [userId, rec.email, rec.name, requestedRole, passwordHash]
-      );
-    }
-
-    await query('DELETE FROM signup_requests WHERE id = $1', [requestId]);
-    return res.json({ user: { id: userId, email: rec.email, name: rec.name, role: requestedRole } });
-  } catch (error) {
-    console.error('Error in POST /api/auth/requests/:id/approve:', error);
-    return res.status(500).json({ error: 'Failed to approve request' });
-  }
-});
-
-// Admin: reject/delete signup request
-app.delete('/api/auth/requests/:id', requireAuth, async (req: AuthRequest, res: Response) => {
-  if (!hasSignupAdminRole(req.user)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  try {
-    await ensureSignupSchema();
-    const result = await query('DELETE FROM signup_requests WHERE id = $1 RETURNING id', [req.params.id]);
+    const result = await query('DELETE FROM app_users WHERE id = $1 RETURNING id', [req.params.id]);
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Request not found' });
+      return res.status(404).json({ error: 'User not found' });
     }
     return res.json({ success: true });
   } catch (error) {
-    console.error('Error in DELETE /api/auth/requests/:id:', error);
-    return res.status(500).json({ error: 'Failed to delete request' });
+    console.error('Error in DELETE /api/auth/users/:id:', error);
+    return res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+// Admin: create account for a cadet
+app.post('/api/admin/create-account', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    await ensureAdminAccountSchema();
+    const { cadetId, role: requestedRole } = req.body || {};
+    if (!cadetId) {
+      return res.status(400).json({ error: 'cadetId is required' });
+    }
+
+    // 1. Look up cadet
+    const cadetResult = await query('SELECT id, name, flight, rank FROM cadets WHERE id = $1', [cadetId]);
+    if (cadetResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Cadet not found' });
+    }
+    const cadet = cadetResult.rows[0];
+
+    // 2. Check if account already exists for this cadet
+    const existingResult = await query('SELECT id, email FROM app_users WHERE cadet_id = $1 LIMIT 1', [cadetId]);
+    if (existingResult.rows.length > 0) {
+      const existing = existingResult.rows[0];
+      const existingUsername = existing.email.includes('@') ? existing.email.split('@')[0] : existing.email;
+      return res.status(409).json({
+        error: 'This cadet already has an account',
+        username: existingUsername,
+      });
+    }
+
+    // 3. Generate username
+    let baseUsername = generateUsername(cadet.name);
+    if (!baseUsername) baseUsername = 'user';
+    let username = baseUsername;
+    let suffix = 2;
+
+    // Check for collisions
+    while (true) {
+      const collision = await query(
+        'SELECT id FROM app_users WHERE LOWER(email) = LOWER($1) LIMIT 1',
+        [`${username}@flightpoints.local`]
+      );
+      if (collision.rows.length === 0) break;
+      username = `${baseUsername}${suffix}`;
+      suffix++;
+      if (suffix > 100) {
+        return res.status(500).json({ error: 'Could not generate unique username' });
+      }
+    }
+
+    // 4. Generate password
+    const password = generatePassword();
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // 5. Determine role
+    const role = String(requestedRole || (cadet.flight === 'hq' ? 'staff' : 'cadet')).toLowerCase();
+
+    // 6. Insert into app_users
+    const userId = crypto.randomUUID();
+    const email = `${username}@flightpoints.local`;
+    const createdBy = req.user?.name || req.user?.email || 'admin';
+
+    await query(
+      `INSERT INTO app_users (id, email, name, role, password_hash, cadet_id, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, email, cadet.name, role, passwordHash, cadetId, createdBy]
+    );
+
+    return res.status(201).json({
+      account: {
+        id: userId,
+        username,
+        password,
+        name: cadet.name,
+        role,
+        flight: cadet.flight,
+      },
+    });
+  } catch (error) {
+    console.error('Error in POST /api/admin/create-account:', error);
+    return res.status(500).json({ error: 'Failed to create account' });
+  }
+});
+
+// Admin: reset account password
+app.post('/api/admin/reset-account-password', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const { userId } = req.body || {};
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const userResult = await query('SELECT id, email, name FROM app_users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+    const password = generatePassword();
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await query('UPDATE app_users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
+
+    const username = user.email.includes('@') ? user.email.split('@')[0] : user.email;
+    return res.json({ username, password, name: user.name });
+  } catch (error) {
+    console.error('Error in POST /api/admin/reset-account-password:', error);
+    return res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 
