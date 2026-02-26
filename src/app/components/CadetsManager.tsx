@@ -541,7 +541,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                       </div>
                     )}
                     <div className="space-y-2">
-                      <Label htmlFor="cadet-name">{flight === 'hq' ? 'Full Name' : 'Full Name'}</Label>
+                      <Label htmlFor="cadet-name">Full Name</Label>
                       <Input
                         id="cadet-name"
                         placeholder="John Smith"
@@ -557,7 +557,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                     </Button>
                     <Button type="submit" disabled={submitting}>
                       <UserPlus className="size-4 mr-2" />
-                      {submitting ? 'Adding...' : 'Add Cadet'}
+                      {submitting ? 'Adding...' : flight === 'hq' ? 'Add Staff Member' : 'Add Cadet'}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -682,12 +682,12 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
               <p className="text-sm">Click "Add Cadet" to get started</p>
             </div>
           ) : (
-            <div className="space-y-6">
-              {/* Numbered flights */}
-              {flights.length > 0 && (
-                <div className="flex gap-4">
-                  <div className="flex-1 overflow-x-auto">
-                    <DndProvider backend={HTML5Backend}>
+            <DndProvider backend={HTML5Backend}>
+              <div className="space-y-6">
+                {/* Numbered flights */}
+                {flights.length > 0 && (
+                  <div className="flex gap-4">
+                    <div className="flex-1 overflow-x-auto">
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-cols-min">
                         {flights.map((flight) => (
                           <div key={flight} className="min-w-[220px]">
@@ -695,23 +695,23 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                           </div>
                         ))}
                       </div>
-                    </DndProvider>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Staff / HQ Flight */}
-              {hqMembers.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-2">Staff / HQ Flight ({hqMembers.length})</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {hqMembers.map(m => (
-                      <CadetCard key={m.id} cadet={m} />
-                    ))}
+                {/* Staff / HQ Flight */}
+                {hqMembers.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-2">Staff / HQ Flight ({hqMembers.length})</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {hqMembers.map(m => (
+                        <CadetCard key={m.id} cadet={m} />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            </DndProvider>
           )}
         </CardContent>
       </Card>
