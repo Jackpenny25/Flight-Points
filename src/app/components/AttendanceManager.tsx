@@ -197,7 +197,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
     }
   };
 
-  const canDelete = userRole === 'staff' || userRole === 'snco';
+  const canDelete = userRole === 'snco';
 
   const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
   const visibleCadets = cadets.filter(c => flightFilter === 'all' || c.flight === flightFilter);
@@ -205,9 +205,9 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const selectedCount = selectedIds.size;
 
   return (
-    <div className={`space-y-6 ${(userRole === 'snco' || userRole === 'staff') ? 'grid gap-6 md:grid-cols-3' : ''}`}>
+    <div className={`space-y-6 ${userRole === 'snco' ? 'grid gap-6 md:grid-cols-3' : ''}`}>
 
-      <Card className={(userRole === 'snco' || userRole === 'staff') ? 'md:col-span-2' : 'max-w-4xl mx-auto'}>
+      <Card className={userRole === 'snco' ? 'md:col-span-2' : 'max-w-4xl mx-auto'}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UserCheck className="size-5" />
@@ -340,7 +340,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
         </CardContent>
       </Card>
 
-      {(userRole === 'snco' || userRole === 'staff') && (
+      {userRole === 'snco' && (
         <Card>
           <CardHeader>
             <CardTitle>Recent Attendance</CardTitle>

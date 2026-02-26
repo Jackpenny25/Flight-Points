@@ -160,7 +160,7 @@ app.get('/api/auth/me', requireAuth, async (req: AuthRequest, res: Response) => 
 function hasSignupAdminRole(user?: UserJwtPayload) {
   if (!user) return false;
   const role = (user.role || '').toLowerCase();
-  return role === 'snco' || role === 'staff' || role === 'admin';
+  return role === 'snco' || role === 'admin';
 }
 
 function hasAdminPinRole(user?: UserJwtPayload) {
@@ -573,6 +573,7 @@ const typeConfig: Record<DataType, { table: string; columns: Record<string, stri
     columns: {
       name: 'name',
       flight: 'flight',
+      rank: 'rank',
       createdAt: 'created_at',
       updatedAt: 'updated_at',
     },
@@ -760,7 +761,7 @@ app.post('/api/admin/change-pin', requireAuth, async (req: AuthRequest, res: Res
 });
 
 // POST /api/admin/reset-pin - Reset a user's PIN (admin only)
-app.post('/api/admin/reset-pin', requireAuth, requireRole(['admin', 'staff']), async (req: AuthRequest, res: Response) => {
+app.post('/api/admin/reset-pin', requireAuth, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
   try {
     res.status(400).json({
       error: 'Admin PIN is managed in .env.local. Set ADMIN_PIN (or VITE_ADMIN_PIN) to a 6-digit value and restart the server.',
@@ -825,7 +826,7 @@ app.get('/api/data/:type/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch item' });
   }
 });
-app.post('/api/data/:type', requireAuth, requireRole(['snco', 'staff', 'admin']), async (req, res) => {
+app.post('/api/data/:type', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
@@ -853,7 +854,7 @@ app.post('/api/data/:type', requireAuth, requireRole(['snco', 'staff', 'admin'])
     res.status(500).json({ error: 'Failed to create data' });
   }
 });
-app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'staff', 'admin']), async (req, res) => {
+app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
@@ -891,7 +892,7 @@ app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'staff', 'admin
     res.status(500).json({ error: 'Failed to update data' });
   }
 });
-app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'staff', 'admin']), async (req, res) => {
+app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {

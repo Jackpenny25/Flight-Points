@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from './ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileSpreadsheet, FileText, Gift, Presentation } from 'lucide-react';
+import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileText, Gift, Presentation } from 'lucide-react';
 import { PointsManager } from './PointsManager';
 import { Leaderboards } from './Leaderboards';
 import { AdminPointGivers } from './AdminPointGivers';
@@ -16,7 +16,6 @@ import { DataIntegrity } from './DataIntegrity';
 import { ReportsExport } from './ReportsExport';
 import { api } from '../../utils/api';
 import { logout } from '../../utils/auth';
-import { exportAllCsvs } from './downloadCsvUtil';
 import AdminSignups from './AdminSignups';
 import { MyPoints } from './MyPoints';
 import { NotificationCenter } from './NotificationCenter';
@@ -50,7 +49,8 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const requireNameChange = user?.user_metadata?.requireNameChange === true;
   
   const canGivePoints = userRole === 'pointgiver' || userRole === 'snco' || userRole === 'staff';
-  const canManageCadets = userRole === 'snco' || userRole === 'staff';
+  const canMarkAttendance = userRole === 'pointgiver' || userRole === 'snco';
+  const canManageCadets = userRole === 'snco';
 
   // tabCount not currently used; remove to avoid premature reference
 
@@ -101,8 +101,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
 
-  const [downloadDialogOpen, setDownloadDialogOpen] = useState<boolean>(false);
-  const [downloadLoading, setDownloadLoading] = useState<boolean>(false);
   const [showMyRoleEditor, setShowMyRoleEditor] = useState<boolean>(false);
   const [myRoleSelection, setMyRoleSelection] = useState<string>(userRole);
   const [myRoleSaving, setMyRoleSaving] = useState<boolean>(false);
@@ -196,15 +194,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     timer = setInterval(fetchCount, 20000);
     return () => clearInterval(timer);
   }, [canManageCadets, accessToken]);
-
-  // Open download confirmation dialog when navigation requests the download tab
-  useEffect(() => {
-    if (activeTab === 'download') {
-      setDownloadDialogOpen(true);
-      // reset tab selection back to leaderboards so UI doesn't stay on a phantom tab
-      setActiveTab('leaderboards');
-    }
-  }, [activeTab]);
 
   // Poll open tickets count for Flight Point Leads/Staff to show a badge on the Tickets tab
   useEffect(() => {
@@ -348,39 +337,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Download confirmation dialog (admin tab) */}
-      <Dialog open={downloadDialogOpen} onOpenChange={setDownloadDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Download CSVs</DialogTitle>
-            <DialogDescription>Export cadets, points and attendance as CSV files. Do you want to continue?</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm">This will download CSV files for points, attendance and cadet totals. Keep your browser's popup/downloads enabled.</p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDownloadDialogOpen(false)} disabled={downloadLoading}>Cancel</Button>
-            <Button onClick={async () => {
-              try {
-                setDownloadLoading(true)
-                const res = await exportAllCsvs(accessToken)
-                if (res && res.topCadet) {
-                  alert(`Exported CSVs. Top cadet: ${res.topCadet.name} (${res.topCadet.totalPoints} points)`)
-                } else {
-                  alert('Exported CSVs')
-                }
-              } catch (err: any) {
-                console.error(err)
-                alert(err?.message || 'Failed to download CSVs. See console for details.')
-              } finally {
-                setDownloadLoading(false)
-                setDownloadDialogOpen(false)
-              }
-            }} disabled={downloadLoading}>{downloadLoading ? 'Downloading...' : 'Download'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* taskbar below header */}
       {userRole !== 'cadet' && (
         <div className="mt-4">
@@ -389,6 +345,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
             onSelect={(t) => setActiveTab(t)} 
             showAdmin={canManageCadets && adminUnlocked}
             canGivePoints={canGivePoints}
+            canMarkAttendance={canMarkAttendance}
             canManageCadets={canManageCadets}
             adminPendingCount={adminUnlocked && canManageCadets ? adminPendingCount : 0}
             ticketsCount={canManageCadets ? ticketsCount : 0}
@@ -467,15 +424,15 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           )}
 
           {canGivePoints && (
-            <>
-              <TabsContent value="points">
-                <PointsManager userRole={userRole} />
-              </TabsContent>
+            <TabsContent value="points">
+              <PointsManager userRole={userRole} />
+            </TabsContent>
+          )}
 
-              <TabsContent value="attendance">
-                <AttendanceManager userRole={userRole} />
-              </TabsContent>
-            </>
+          {canMarkAttendance && (
+            <TabsContent value="attendance">
+              <AttendanceManager userRole={userRole} />
+            </TabsContent>
           )}
 
           {canManageCadets && (

@@ -26,7 +26,7 @@ type Reward = {
 };
 
 export function Rewards({ userRole }: RewardsProps) {
-  const canManageRewards = userRole === 'snco' || userRole === 'staff';
+  const canManageRewards = userRole === 'snco';
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
 

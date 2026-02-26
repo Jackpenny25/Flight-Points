@@ -9,6 +9,7 @@ export function cn(...inputs: ClassValue[]) {
 export function formatFlight(f?: string | null) {
   if (!f) return f || '';
   const trimmed = String(f).trim();
+  if (trimmed.toLowerCase() === 'hq') return 'Staff / HQ Flight';
   if (trimmed.toLowerCase().endsWith('flight')) return trimmed;
   return `${trimmed} Flight`;
 }

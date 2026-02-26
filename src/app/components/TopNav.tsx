@@ -1,6 +1,5 @@
 import React from 'react'
-import DownloadCsvButton from './DownloadCsvButton'
-import { ArrowUpRight, Award, Calendar, Users, FileText, Shield, FileSpreadsheet, Gift, Presentation } from 'lucide-react'
+import { ArrowUpRight, Award, Calendar, Users, FileText, Shield, Gift, Presentation } from 'lucide-react'
 
 const items = [
   { key: 'leaderboards', label: 'Leaderboards', icon: ArrowUpRight },
@@ -18,13 +17,14 @@ type Props = {
   onSelect?: (tab: string) => void
   showAdmin?: boolean
   canGivePoints?: boolean
+  canMarkAttendance?: boolean
   canManageCadets?: boolean
   adminPendingCount?: number
   ticketsCount?: number
   accessToken?: string | null
 }
 
-export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canManageCadets, adminPendingCount, ticketsCount, accessToken }: Props) {
+export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canMarkAttendance, canManageCadets, adminPendingCount, ticketsCount, accessToken }: Props) {
   const handleClick = (key: string) => {
     // prefer prop handler, but keep event dispatch for backward compatibility
     if (onSelect) onSelect(key)
@@ -37,8 +37,9 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
     if (item.key === 'leaderboards') return true
     // Rewards is always visible
     if (item.key === 'rewards') return true
-    // Points and Attendance require canGivePoints
-    if (item.key === 'points' || item.key === 'attendance') return canGivePoints
+    // Points visible if canGivePoints; Attendance only if canMarkAttendance
+    if (item.key === 'points') return canGivePoints
+    if (item.key === 'attendance') return canMarkAttendance
     // Tickets and Reports should be placed into the admin group when admin UI is shown
     if (item.key === 'tickets' || item.key === 'reports') return canManageCadets && !showAdmin
     // Cadets and Integrity require canManageCadets
@@ -51,7 +52,7 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
     return item
   })
 
-  // Add admin group if unlocked (include tickets, reports and download)
+  // Add admin group if unlocked (include tickets, reports and presentation)
   const allItems = showAdmin 
     ? [
         ...visibleItems, 
@@ -59,7 +60,6 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
         { key: 'tickets', label: 'Tickets', icon: FileText },
         { key: 'reports', label: 'Reports', icon: FileText },
         { key: 'presentation', label: 'Presentation', icon: Presentation },
-        { key: 'download', label: 'Download CSVs', icon: FileSpreadsheet },
         ...(adminPendingCount && adminPendingCount > 0 
           ? [{ key: 'signups', label: 'Signups', icon: Users, badgeCount: adminPendingCount }]
           : [{ key: 'signups', label: 'Signups', icon: Users }]

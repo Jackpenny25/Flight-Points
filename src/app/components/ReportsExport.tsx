@@ -152,7 +152,7 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
   const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
   const cadetNames = cadets.map(c => c.name).sort();
 
-  const canEdit = userRole === 'staff' || userRole === 'snco';
+  const canEdit = userRole === 'snco';
 
   return (
     <div className="space-y-6">

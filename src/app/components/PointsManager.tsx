@@ -60,7 +60,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
 
   const ensureAdminPin = () => {
     if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
-    if (userRole === 'staff' || userRole === 'snco') {
+    if (userRole === 'snco') {
       sessionStorage.setItem('adminPinVerified', 'true');
       setAdminUnlocked(true);
       return true;
@@ -327,7 +327,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     }
   };
 
-  const canAdmin = userRole === 'staff' || userRole === 'snco';
+  const canAdmin = userRole === 'snco';
   const canDelete = canAdmin;
   const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
 
@@ -348,7 +348,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
 
   return (
     <div className="space-y-6">
-      <div className={`grid gap-6 ${(userRole === 'snco' || userRole === 'staff') ? 'md:grid-cols-2' : 'max-w-2xl mx-auto'}`}>
+      <div className={`grid gap-6 ${userRole === 'snco' ? 'md:grid-cols-2' : 'max-w-2xl mx-auto'}`}>
       {/* Add Points Form */}
       <Card>
         <CardHeader>
@@ -463,7 +463,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       </Card>
 
       {/* Recent Points - Flight Point Leads/Staff only */}
-      {(userRole === 'snco' || userRole === 'staff') && (
+      {userRole === 'snco' && (
       <Card>
         <CardHeader>
           <CardTitle>Recent Points</CardTitle>

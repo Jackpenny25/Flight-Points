@@ -21,7 +21,7 @@ export function AdminPinManager({ accessToken, userId, userRole }: AdminPinManag
   const [error, setError] = useState<string | null>(null);
   const [leadUsers, setLeadUsers] = useState<Array<{ id: string; email: string; name: string; role: string }>>([]);
 
-  const isLead = userRole === 'snco' || userRole === 'staff';
+  const isLead = userRole === 'snco';
 
   const headers = useMemo(() => {
     const h: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -51,7 +51,7 @@ export function AdminPinManager({ accessToken, userId, userRole }: AdminPinManag
           name: u.user_metadata?.name || u.email || 'Unknown',
           role: String(u.user_metadata?.role || 'cadet').toLowerCase(),
         }))
-        .filter((u: any) => u.role === 'snco' || u.role === 'staff');
+        .filter((u: any) => u.role === 'snco');
       setLeadUsers(list);
     } catch {
       setLeadUsers([]);
@@ -163,18 +163,18 @@ export function AdminPinManager({ accessToken, userId, userRole }: AdminPinManag
         <Card>
           <CardHeader>
             <CardTitle>Reset Lead PINs</CardTitle>
-            <CardDescription>Reset SNCO/Staff PINs and share temporary PINs once.</CardDescription>
+            <CardDescription>Reset SNCO PINs and share temporary PINs once.</CardDescription>
           </CardHeader>
           <CardContent>
             {leadUsers.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No Flight Point Lead/Staff accounts found.</div>
+              <div className="text-sm text-muted-foreground">No Flight Point Lead accounts found.</div>
             ) : (
               <div className="space-y-2">
                 {leadUsers.map((u) => (
                   <div key={u.id} className="flex items-center justify-between rounded border p-2">
                     <div>
                       <div className="font-medium">{u.name}</div>
-                      <div className="text-xs text-muted-foreground">{u.email} • {u.role === 'snco' ? 'Flight Point Lead' : 'Staff'}</div>
+                      <div className="text-xs text-muted-foreground">{u.email} • Flight Point Lead</div>
                     </div>
                     <Button variant="outline" onClick={() => resetPin(u.id, u.name)}>Reset PIN</Button>
                   </div>

@@ -43,3 +43,21 @@ LATEST PROJECT NOTES (2026-02-23 - migration audit):
 - Removed legacy GitHub Pages deployment workflow from the repo to avoid accidental cloud deploys.
 - Removed GitHub Pages-specific metadata/comment references from package.json and vite.config.ts.
 - Privacy policy text should describe server/infrastructure providers generically (not GitHub Pages) and must not mention RAF or Biggin Hill.
+
+LATEST PROJECT NOTES (2026-02-26 - role and cadets updates):
+- Dashboard logo (logo.png) is always visible for logged-in users. Clicking it as a Flight Point Lead (snco) opens PIN dialog; after correct PIN, logo switches to logo-black.jpg and admin mode is active.
+- Download CSV tab has been removed from the UI (TopNav and Dashboard).
+- Role permissions:
+  - snco (Flight Point Lead): full access including admin mode, cadets, reports, attendance, points, presentations.
+  - pointgiver: can give points and mark attendance.
+  - staff: same as pointgiver — can give points BUT cannot mark attendance, cannot access admin features.
+  - cadet: leaderboards, rewards, tickets, my points.
+- TopNav now has a separate `canMarkAttendance` prop (distinct from `canGivePoints`) to control attendance tab visibility.
+- Cadets table has a `rank` column (VARCHAR, added via migration 20260226_add_rank_to_cadets.sql). Run this migration in DBeaver.
+- Staff/HQ Flight members are stored in the cadets table with `flight = 'hq'` and an optional `rank` field (e.g. "Fg Off", "Flt Lt").
+- In CadetsManager, HQ members display in a separate "Staff / HQ Flight" section beneath the numbered flights. Rank is shown in blue before their name.
+- `formatFlight('hq')` returns "Staff / HQ Flight".
+- When adding a cadet, selecting "Staff / HQ Flight" as the flight reveals a rank input field.
+- Edit dialog also shows rank field when flight is 'hq'.
+- HQ members are not drag-droppable between flights (they stay in the HQ section).
+- Account names should match the cadets entry name for points/attendance linking (rank is stored separately, not prefixed into the name column).
