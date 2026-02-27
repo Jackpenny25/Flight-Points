@@ -965,6 +965,124 @@ app.post('/api/points', requireAuth, async (req: AuthRequest, res: Response) => 
   }
 });
 
+// Presentation stats — extra data for competitive slides
+app.get('/api/presentation-stats', async (req, res) => {
+  try {
+    // 1) Rising Stars — top gainers this week (last 7 days)
+    const risingResult = await query(
+      `SELECT cadet_name AS name,
+              COALESCE(
+                (SELECT c.flight FROM cadets c WHERE LOWER(TRIM(c.name)) = LOWER(TRIM(points.cadet_name)) LIMIT 1),
+                MAX(flight)
+              ) AS flight,
+              COALESCE(SUM(points), 0) AS week_points
+       FROM points
+       WHERE date >= NOW() - INTERVAL '7 days'
+         AND (type IS NULL OR type <> 'attendance')
+       GROUP BY cadet_name
+       ORDER BY week_points DESC
+       LIMIT 10`
+    );
+
+    // 2) Weekly comparison — flight totals this week vs last week
+    const thisWeekFlights = await query(
+      `SELECT flight, COALESCE(SUM(points), 0) AS points
+       FROM points
+       WHERE date >= NOW() - INTERVAL '7 days'
+         AND (type IS NULL OR type <> 'attendance')
+       GROUP BY flight`
+    );
+    const lastWeekFlights = await query(
+      `SELECT flight, COALESCE(SUM(points), 0) AS points
+       FROM points
+       WHERE date >= NOW() - INTERVAL '14 days'
+         AND date < NOW() - INTERVAL '7 days'
+         AND (type IS NULL OR type <> 'attendance')
+       GROUP BY flight`
+    );
+
+    // 3) Attendance streaks — consecutive 'present' records per cadet
+    const streakResult = await query(
+      `SELECT cadet_name, date, status
+       FROM attendance
+       ORDER BY cadet_name, date DESC`
+    );
+
+    // Build streaks from consecutive 'present' records
+    const streaks: { name: string; streak: number }[] = [];
+    let currentName = '';
+    let currentStreak = 0;
+    let streakBroken = false;
+    for (const row of streakResult.rows) {
+      if (row.cadet_name !== currentName) {
+        if (currentName && currentStreak > 0) {
+          streaks.push({ name: currentName, streak: currentStreak });
+        }
+        currentName = row.cadet_name;
+        currentStreak = 0;
+        streakBroken = false;
+      }
+      if (!streakBroken) {
+        if (row.status === 'present') {
+          currentStreak++;
+        } else {
+          streakBroken = true;
+        }
+      }
+    }
+    if (currentName && currentStreak > 0) {
+      streaks.push({ name: currentName, streak: currentStreak });
+    }
+    streaks.sort((a, b) => b.streak - a.streak);
+
+    // 4) Flight of the month — which flight had the most points each calendar month
+    const monthlyResult = await query(
+      `SELECT TO_CHAR(date, 'YYYY-MM') AS month,
+              flight,
+              COALESCE(SUM(points), 0) AS points
+       FROM points
+       WHERE date IS NOT NULL
+         AND (type IS NULL OR type <> 'attendance')
+       GROUP BY month, flight
+       ORDER BY month DESC, points DESC`
+    );
+    // Pick winner per month
+    const monthWinners: { month: string; flight: string; points: number }[] = [];
+    const seenMonths = new Set<string>();
+    for (const row of monthlyResult.rows) {
+      if (!seenMonths.has(row.month)) {
+        seenMonths.add(row.month);
+        monthWinners.push({
+          month: row.month,
+          flight: row.flight,
+          points: Number(row.points),
+        });
+      }
+    }
+
+    res.json({
+      risingStars: risingResult.rows.map(r => ({
+        name: r.name,
+        flight: r.flight || '',
+        weekPoints: Number(r.week_points),
+      })),
+      thisWeekFlights: thisWeekFlights.rows.map(r => ({
+        flight: r.flight,
+        points: Number(r.points),
+      })),
+      lastWeekFlights: lastWeekFlights.rows.map(r => ({
+        flight: r.flight,
+        points: Number(r.points),
+      })),
+      attendanceStreaks: streaks.slice(0, 10),
+      flightOfTheMonth: monthWinners.slice(0, 6),
+    });
+  } catch (error) {
+    console.error('Error in GET /api/presentation-stats:', error);
+    res.status(500).json({ error: 'Failed to fetch presentation stats' });
+  }
+});
+
 // Leaderboards
 app.get('/api/leaderboards', async (req, res) => {
   try {

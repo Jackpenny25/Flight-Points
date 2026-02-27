@@ -54,8 +54,14 @@ export function PresentationEditor() {
           <CardContent>
             <ol className="space-y-1.5 text-sm text-muted-foreground list-decimal list-inside">
               <li>Flight Point Totals &amp; Winners</li>
+              <li>Top 3 Podium</li>
               <li>Complete Cadet Leaderboard</li>
+              <li>Rising Stars (weekly top earners)</li>
+              <li>The Flight Race (bar chart)</li>
+              <li>Weekly Comparison</li>
+              <li>Attendance Streaks</li>
               <li>Recent Points Activity</li>
+              <li>Flight of the Month</li>
               <li>Rewards</li>
             </ol>
             <p className="text-xs text-muted-foreground/60 mt-3">

@@ -4,13 +4,19 @@ import { api } from '../../utils/api';
 /* ═══════════════════════════════════════════════════════════════
    PRESENTATION MODE
    Full-screen, PowerPoint-style slideshow for hall display.
-   
+
    Slides:
      1. Flight Point Totals & Winners
-     2. Complete Cadet Leaderboard (ordered by total points)
-     3. Recent Points Activity
-     4. Rewards (from database)
-   
+     2. Top 3 Podium
+     3. Complete Cadet Leaderboard
+     4. Rising Stars (top gainers this week)
+     5. Flight Race (bar chart)
+     6. Weekly Comparison (this week vs last week)
+     7. Attendance Streaks
+     8. Recent Points Activity
+     9. Flight of the Month History
+    10. Rewards (from database)
+
    Controls:
      Arrow keys  – navigate slides
      Space       – pause / resume auto-advance
@@ -54,8 +60,16 @@ interface Reward {
   winnerName?: string | null;
 }
 
+interface PresentationStats {
+  risingStars: Array<{ name: string; flight: string; weekPoints: number }>;
+  thisWeekFlights: Array<{ flight: string; points: number }>;
+  lastWeekFlights: Array<{ flight: string; points: number }>;
+  attendanceStreaks: Array<{ name: string; streak: number }>;
+  flightOfTheMonth: Array<{ month: string; flight: string; points: number }>;
+}
+
 /* ─── Configuration ─── */
-const SLIDE_COUNT = 4;
+const SLIDE_COUNT = 10;
 const AUTO_ADVANCE_MS = 15000; // 15 seconds per slide
 const DATA_REFRESH_MS = 30000; // 30 seconds
 
@@ -67,6 +81,12 @@ const T = {
   text: '#1a1a1a',
   white: '#ffffff',
   border: '#000000',
+  gold: '#FFD700',
+  silver: '#C0C0C0',
+  bronze: '#CD7F32',
+  green: '#22c55e',
+  red: '#ef4444',
+  amber: '#f59e0b',
 };
 
 /* ─── Font ─── */
@@ -74,23 +94,45 @@ const FONT = "'Aptos', 'Calibri', 'Segoe UI', 'Helvetica Neue', Arial, sans-seri
 
 const SLIDE_NAMES = [
   'Flight Points',
+  'Top 3 Podium',
   'Leaderboard',
+  'Rising Stars',
+  'Flight Race',
+  'Weekly Comparison',
+  'Attendance Streaks',
   'Recent Points',
+  'Flight of the Month',
   'Rewards',
 ];
 
-/* ─── Flight sort order ─── */
+/* ─── Flight config ─── */
 const FLIGHT_ORDER: Record<string, number> = { '1': 1, '2': 2, '3': 3, '4': 4, 'hq': 99 };
+const FLIGHT_COLORS: Record<string, string> = {
+  '1': '#e74c3c',
+  '2': '#3498db',
+  '3': '#2ecc71',
+  '4': '#f39c12',
+  'hq': '#9b59b6',
+};
 
 function flightSortKey(f: string): number {
   return FLIGHT_ORDER[f?.toLowerCase()] ?? 50;
 }
 
-/* ─── Helper ─── */
 function flightLabel(f: string): string {
   if (!f) return 'Unknown';
-  if (f.toLowerCase() === 'hq') return 'Staff / HQ Flight';
+  if (f.toLowerCase() === 'hq') return 'Staff / HQ';
   return `${f} Flight`;
+}
+
+function flightColor(f: string): string {
+  return FLIGHT_COLORS[f?.toLowerCase()] ?? '#888';
+}
+
+function monthLabel(ym: string): string {
+  const [y, m] = ym.split('-');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[Number(m) - 1]} ${y}`;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -99,6 +141,7 @@ function flightLabel(f: string): string {
 export function PresentationMode({ onClose }: { onClose: () => void; settings?: unknown }) {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [rewards, setRewards] = useState<Reward[]>([]);
+  const [stats, setStats] = useState<PresentationStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [slide, setSlide] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -108,12 +151,14 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
   /* ── Data ── */
   const fetchData = useCallback(async () => {
     try {
-      const [leaderboard, rewardsData] = await Promise.all([
+      const [leaderboard, rewardsData, statsData] = await Promise.all([
         api.getLeaderboards(),
         api.getRewards().catch(() => []),
+        api.getPresentationStats().catch(() => null),
       ]);
       setData(leaderboard);
       setRewards(Array.isArray(rewardsData) ? rewardsData : []);
+      setStats(statsData);
     } catch (err) {
       console.error('Presentation: fetch failed', err);
     } finally {
@@ -198,8 +243,14 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
   /* ── Slides ── */
   const slides = [
     <SlideFlightPoints key="fp" data={data} />,
+    <SlidePodium key="pod" data={data} />,
     <SlideLeaderboard key="lb" data={data} />,
+    <SlideRisingStars key="rs" stats={stats} />,
+    <SlideFlightRace key="fr" data={data} />,
+    <SlideWeeklyComparison key="wc" stats={stats} />,
+    <SlideAttendanceStreaks key="as" stats={stats} />,
     <SlideRecentPoints key="rp" data={data} />,
+    <SlideFlightOfTheMonth key="fm" stats={stats} />,
     <SlideRewards key="rw" rewards={rewards} />,
   ];
 
@@ -246,9 +297,9 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
                 onClick={() => setSlide(i)}
                 title={SLIDE_NAMES[i]}
                 style={{
-                  width: i === slide ? 32 : 10,
-                  height: 10,
-                  borderRadius: 5,
+                  width: i === slide ? 24 : 8,
+                  height: 8,
+                  borderRadius: 4,
                   border: 'none',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
@@ -274,11 +325,9 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
 
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 1 — Flight Points Summary
-   Flights in chronological order (1, 2, 3). Black borders.
    ═══════════════════════════════════════════════════════════════ */
 function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
   if (!data) return null;
-  // Sort flights in order: 1, 2, 3, 4, hq
   const flights = [...(data.flightLeaderboard || [])].sort((a, b) => flightSortKey(a.flight) - flightSortKey(b.flight));
   const cadet = data.winningCadet;
   const flight = data.winningFlight;
@@ -296,7 +345,6 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
         display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48,
         maxWidth: 1400, width: '100%', margin: '0 auto', flex: 1,
       }}>
-        {/* LEFT — Flight Point Totals */}
         <div style={{ display: 'flex', flexDirection: 'column' as const }}>
           <h2 style={{ fontSize: 36, fontWeight: 'bold', color: T.text, marginBottom: 16, fontFamily: FONT }}>
             Flight Point Totals
@@ -309,7 +357,6 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
           />
         </div>
 
-        {/* RIGHT — Who has the most points */}
         <div style={{ display: 'flex', flexDirection: 'column' as const }}>
           <h2 style={{ fontSize: 36, fontWeight: 'bold', color: T.text, marginBottom: 16, fontFamily: FONT }}>
             Who Has the Most Points
@@ -339,25 +386,106 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   SLIDE 2 — Complete Leaderboard
-   All cadets ordered by total points (descending).
-   Columns: Rank, Name, Points (given), Attendance, Total
-   Single table by default; splits into two columns if many cadets.
+   SLIDE 2 — Top 3 Podium
+   Gold / Silver / Bronze visual for the top 3 cadets.
+   ═══════════════════════════════════════════════════════════════ */
+function SlidePodium({ data }: { data: LeaderboardData | null }) {
+  if (!data) return null;
+
+  const entries = data.detailedLeaderboard && data.detailedLeaderboard.length > 0
+    ? [...data.detailedLeaderboard]
+    : data.cadetLeaderboard.map(c => ({ ...c, totalPoints: c.points }));
+
+  entries.sort((a, b) => (b.totalPoints ?? b.points) - (a.totalPoints ?? a.points));
+  const top3 = entries.slice(0, 3);
+  if (top3.length === 0) return null;
+
+  const medalColors = [T.gold, T.silver, T.bronze];
+  const medalLabels = ['1st', '2nd', '3rd'];
+  // Heights for podium blocks (tallest in middle)
+  const podiumHeights = [220, 280, 180];
+  // Reorder for display: 2nd, 1st, 3rd
+  const displayOrder = top3.length >= 3 ? [1, 0, 2] : top3.length === 2 ? [1, 0] : [0];
+
+  return (
+    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '48px 80px 60px' }}>
+      <h1 style={{
+        fontSize: 52, fontWeight: 'bold', color: T.white,
+        textAlign: 'center' as const, marginBottom: 48, fontFamily: FONT,
+      }}>
+        Top Cadets
+      </h1>
+
+      <div style={{
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        gap: 32, flex: 1, paddingBottom: 40,
+      }}>
+        {displayOrder.map(idx => {
+          const entry = top3[idx];
+          if (!entry) return null;
+          const color = medalColors[idx] || '#888';
+          const height = podiumHeights[idx] || 160;
+          return (
+            <div key={idx} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
+            }}>
+              {/* Medal circle */}
+              <div style={{
+                width: 90, height: 90, borderRadius: '50%',
+                backgroundColor: color,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 32, fontWeight: 'bold', color: '#1a1a1a',
+                fontFamily: FONT,
+                boxShadow: `0 4px 20px ${color}88`,
+              }}>
+                {medalLabels[idx]}
+              </div>
+              {/* Name */}
+              <div style={{
+                fontSize: 26, fontWeight: 'bold', color: T.white,
+                fontFamily: FONT, textAlign: 'center' as const, maxWidth: 200,
+              }}>
+                {entry.name}
+              </div>
+              {/* Points */}
+              <div style={{
+                fontSize: 22, color: 'rgba(255,255,255,0.8)', fontFamily: FONT,
+              }}>
+                {entry.totalPoints ?? entry.points} pts
+              </div>
+              {/* Podium block */}
+              <div style={{
+                width: 180, height,
+                background: `linear-gradient(180deg, ${color}, ${color}88)`,
+                borderRadius: '12px 12px 0 0',
+                display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+                paddingTop: 20, fontSize: 48, fontWeight: 'bold',
+                color: '#1a1a1a', fontFamily: FONT,
+                boxShadow: `0 -4px 20px ${color}44`,
+              }}>
+                {idx + 1}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE 3 — Complete Leaderboard
+   Single table by default; splits if > 20 cadets.
    ═══════════════════════════════════════════════════════════════ */
 function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
   if (!data) return null;
 
-  // Use detailed breakdown if server provides it, otherwise fall back
   const entries: LeaderboardEntry[] = data.detailedLeaderboard && data.detailedLeaderboard.length > 0
     ? [...data.detailedLeaderboard]
     : data.cadetLeaderboard.map(c => ({
-        ...c,
-        flightPoints: c.points,
-        attendancePoints: 0,
-        totalPoints: c.points,
+        ...c, flightPoints: c.points, attendancePoints: 0, totalPoints: c.points,
       }));
 
-  // Sort by total points descending
   entries.sort((a, b) => (b.totalPoints ?? b.points) - (a.totalPoints ?? a.points));
 
   const useTwoColumns = entries.length > 20;
@@ -411,7 +539,6 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
     );
   }
 
-  // Single table — centred with good sizing
   const fontSize = entries.length > 15 ? 17 : 20;
 
   return (
@@ -434,7 +561,327 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   SLIDE 3 — Recent Points
+   SLIDE 4 — Rising Stars (top gainers this week)
+   ═══════════════════════════════════════════════════════════════ */
+function SlideRisingStars({ stats }: { stats: PresentationStats | null }) {
+  const stars = stats?.risingStars || [];
+
+  return (
+    <div style={{ ...S.slide, backgroundColor: T.white, padding: '48px 80px 60px' }}>
+      <h1 style={{
+        fontSize: 48, fontWeight: 'bold', color: T.text,
+        textAlign: 'center' as const, marginBottom: 12, textDecoration: 'underline', fontFamily: FONT,
+      }}>
+        Rising Stars
+      </h1>
+      <p style={{
+        fontSize: 22, color: '#666', textAlign: 'center' as const,
+        marginBottom: 28, fontFamily: FONT,
+      }}>
+        Top point earners this week
+      </p>
+
+      {stars.length === 0 ? (
+        <p style={{ fontSize: 24, color: '#999', fontFamily: FONT, textAlign: 'center' as const }}>
+          No points awarded this week yet.
+        </p>
+      ) : (
+        <div style={{ maxWidth: 900, width: '100%', margin: '0 auto' }}>
+          {stars.slice(0, 8).map((s, i) => {
+            const maxPts = stars[0]?.weekPoints || 1;
+            const pct = Math.max(8, (s.weekPoints / maxPts) * 100);
+            return (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 16,
+                marginBottom: 10, fontFamily: FONT,
+              }}>
+                <span style={{
+                  fontSize: 22, fontWeight: 'bold', color: T.text,
+                  width: 36, textAlign: 'right' as const,
+                }}>
+                  {i + 1}.
+                </span>
+                <span style={{
+                  fontSize: 22, fontWeight: 'bold', color: T.text,
+                  width: 200, overflow: 'hidden', textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap' as const,
+                }}>
+                  {s.name}
+                </span>
+                <div style={{
+                  flex: 1, height: 36, backgroundColor: '#f0f0f0',
+                  borderRadius: 6, overflow: 'hidden', position: 'relative' as const,
+                }}>
+                  <div style={{
+                    width: `${pct}%`, height: '100%',
+                    background: i === 0
+                      ? `linear-gradient(90deg, ${T.gold}, #FFC107)`
+                      : i === 1
+                        ? `linear-gradient(90deg, ${T.silver}, #d0d0d0)`
+                        : i === 2
+                          ? `linear-gradient(90deg, ${T.bronze}, #e8a060)`
+                          : `linear-gradient(90deg, ${T.headerBlue}, #7db8e0)`,
+                    borderRadius: 6,
+                    transition: 'width 0.5s ease',
+                    display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                    paddingRight: 12,
+                  }}>
+                    <span style={{
+                      fontSize: 18, fontWeight: 'bold',
+                      color: i < 3 ? '#1a1a1a' : '#fff',
+                    }}>
+                      {s.weekPoints} pts
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE 5 — Flight Race (horizontal bar chart)
+   ═══════════════════════════════════════════════════════════════ */
+function SlideFlightRace({ data }: { data: LeaderboardData | null }) {
+  if (!data) return null;
+  const flights = [...(data.flightLeaderboard || [])]
+    .filter(f => f.flight?.toLowerCase() !== 'hq')
+    .sort((a, b) => flightSortKey(a.flight) - flightSortKey(b.flight));
+
+  const maxPts = Math.max(...flights.map(f => f.points), 1);
+
+  return (
+    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '48px 80px 60px' }}>
+      <h1 style={{
+        fontSize: 52, fontWeight: 'bold', color: T.white,
+        textAlign: 'center' as const, marginBottom: 48, fontFamily: FONT,
+      }}>
+        The Flight Race
+      </h1>
+
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 28,
+        maxWidth: 1000, width: '100%', margin: '0 auto', flex: 1,
+        justifyContent: 'center',
+      }}>
+        {flights.map((f, i) => {
+          const pct = Math.max(5, (f.points / maxPts) * 100);
+          const color = flightColor(f.flight);
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+              <span style={{
+                fontSize: 28, fontWeight: 'bold', color: T.white,
+                width: 120, textAlign: 'right' as const, fontFamily: FONT,
+              }}>
+                {flightLabel(f.flight)}
+              </span>
+              <div style={{
+                flex: 1, height: 56, backgroundColor: 'rgba(255,255,255,0.1)',
+                borderRadius: 10, overflow: 'hidden', position: 'relative' as const,
+              }}>
+                <div style={{
+                  width: `${pct}%`, height: '100%',
+                  background: `linear-gradient(90deg, ${color}, ${color}cc)`,
+                  borderRadius: 10,
+                  display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                  paddingRight: 16,
+                  boxShadow: `0 2px 12px ${color}66`,
+                  transition: 'width 0.6s ease',
+                }}>
+                  <span style={{
+                    fontSize: 24, fontWeight: 'bold', color: '#fff',
+                    fontFamily: FONT,
+                    textShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                  }}>
+                    {f.points} pts
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE 6 — Weekly Comparison (this week vs last week)
+   ═══════════════════════════════════════════════════════════════ */
+function SlideWeeklyComparison({ stats }: { stats: PresentationStats | null }) {
+  const thisWeek = stats?.thisWeekFlights || [];
+  const lastWeek = stats?.lastWeekFlights || [];
+
+  // Combine flights
+  const allFlights = new Set([...thisWeek.map(f => f.flight), ...lastWeek.map(f => f.flight)]);
+  const rows = [...allFlights]
+    .filter(f => f?.toLowerCase() !== 'hq')
+    .sort((a, b) => flightSortKey(a) - flightSortKey(b))
+    .map(flight => {
+      const tw = thisWeek.find(f => f.flight === flight)?.points ?? 0;
+      const lw = lastWeek.find(f => f.flight === flight)?.points ?? 0;
+      const diff = tw - lw;
+      return { flight, thisWeek: tw, lastWeek: lw, diff };
+    });
+
+  return (
+    <div style={{ ...S.slide, backgroundColor: T.white, padding: '48px 80px 60px' }}>
+      <h1 style={{
+        fontSize: 48, fontWeight: 'bold', color: T.text,
+        textAlign: 'center' as const, marginBottom: 12, textDecoration: 'underline', fontFamily: FONT,
+      }}>
+        Weekly Comparison
+      </h1>
+      <p style={{
+        fontSize: 22, color: '#666', textAlign: 'center' as const,
+        marginBottom: 32, fontFamily: FONT,
+      }}>
+        This week vs last week
+      </p>
+
+      <div style={{ maxWidth: 900, width: '100%', margin: '0 auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', border: `2px solid ${T.border}` }}>
+          <thead>
+            <tr>
+              {['Flight', 'Last Week', 'This Week', 'Change'].map((h, i) => (
+                <th key={i} style={{
+                  backgroundColor: T.headerBlue, color: T.white,
+                  fontWeight: 'bold', fontSize: 24, padding: '14px 18px',
+                  textAlign: i === 0 ? 'left' : 'center' as const,
+                  fontFamily: FONT, borderRight: i < 3 ? `1px solid ${T.border}` : 'none',
+                  borderBottom: `2px solid ${T.border}`,
+                }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, ri) => (
+              <tr key={ri}>
+                <td style={{
+                  backgroundColor: ri % 2 === 0 ? T.lightBlue : T.white,
+                  fontSize: 24, fontWeight: 'bold', padding: '14px 18px',
+                  borderTop: `1px solid ${T.border}`, borderRight: `1px solid ${T.border}`,
+                  fontFamily: FONT,
+                }}>
+                  {flightLabel(r.flight)}
+                </td>
+                <td style={{
+                  backgroundColor: ri % 2 === 0 ? T.lightBlue : T.white,
+                  fontSize: 24, textAlign: 'center' as const, padding: '14px 18px',
+                  borderTop: `1px solid ${T.border}`, borderRight: `1px solid ${T.border}`,
+                  fontFamily: FONT,
+                }}>
+                  {r.lastWeek}
+                </td>
+                <td style={{
+                  backgroundColor: ri % 2 === 0 ? T.lightBlue : T.white,
+                  fontSize: 24, fontWeight: 'bold', textAlign: 'center' as const,
+                  padding: '14px 18px',
+                  borderTop: `1px solid ${T.border}`, borderRight: `1px solid ${T.border}`,
+                  fontFamily: FONT,
+                }}>
+                  {r.thisWeek}
+                </td>
+                <td style={{
+                  backgroundColor: ri % 2 === 0 ? T.lightBlue : T.white,
+                  fontSize: 24, fontWeight: 'bold', textAlign: 'center' as const,
+                  padding: '14px 18px',
+                  borderTop: `1px solid ${T.border}`,
+                  fontFamily: FONT,
+                  color: r.diff > 0 ? T.green : r.diff < 0 ? T.red : '#888',
+                }}>
+                  {r.diff > 0 ? `▲ +${r.diff}` : r.diff < 0 ? `▼ ${r.diff}` : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE 7 — Attendance Streaks
+   ═══════════════════════════════════════════════════════════════ */
+function SlideAttendanceStreaks({ stats }: { stats: PresentationStats | null }) {
+  const streaks = stats?.attendanceStreaks || [];
+  const top = streaks.slice(0, 8);
+
+  return (
+    <div style={{ ...S.slide, backgroundColor: T.white, padding: '48px 80px 60px' }}>
+      <h1 style={{
+        fontSize: 48, fontWeight: 'bold', color: T.text,
+        textAlign: 'center' as const, marginBottom: 12, textDecoration: 'underline', fontFamily: FONT,
+      }}>
+        Attendance Streaks
+      </h1>
+      <p style={{
+        fontSize: 22, color: '#666', textAlign: 'center' as const,
+        marginBottom: 32, fontFamily: FONT,
+      }}>
+        Most consecutive parade nights attended
+      </p>
+
+      {top.length === 0 ? (
+        <p style={{ fontSize: 24, color: '#999', fontFamily: FONT, textAlign: 'center' as const }}>
+          No attendance data yet.
+        </p>
+      ) : (
+        <div style={{ maxWidth: 800, width: '100%', margin: '0 auto' }}>
+          {top.map((s, i) => {
+            const maxStreak = top[0]?.streak || 1;
+            const pct = Math.max(10, (s.streak / maxStreak) * 100);
+            return (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 16,
+                marginBottom: 12, fontFamily: FONT,
+              }}>
+                <span style={{
+                  fontSize: 24, fontWeight: 'bold', color: T.text,
+                  width: 200, overflow: 'hidden', textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap' as const,
+                }}>
+                  {s.name}
+                </span>
+                <div style={{
+                  flex: 1, height: 40, backgroundColor: '#f0f0f0',
+                  borderRadius: 8, overflow: 'hidden',
+                }}>
+                  <div style={{
+                    width: `${pct}%`, height: '100%',
+                    background: i === 0
+                      ? `linear-gradient(90deg, ${T.green}, #4ade80)`
+                      : `linear-gradient(90deg, ${T.headerBlue}, #7db8e0)`,
+                    borderRadius: 8,
+                    display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                    paddingRight: 14,
+                  }}>
+                    <span style={{
+                      fontSize: 20, fontWeight: 'bold', color: '#fff',
+                      textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                    }}>
+                      {s.streak} {s.streak === 1 ? 'night' : 'nights'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE 8 — Recent Points
    ═══════════════════════════════════════════════════════════════ */
 function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
   if (!data) return null;
@@ -466,11 +913,80 @@ function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   SLIDE 4 — Rewards (from database)
-   Shows each active reward: title, how to win, prize.
+   SLIDE 9 — Flight of the Month History
+   ═══════════════════════════════════════════════════════════════ */
+function SlideFlightOfTheMonth({ stats }: { stats: PresentationStats | null }) {
+  const months = stats?.flightOfTheMonth || [];
+
+  return (
+    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '48px 80px 60px' }}>
+      <h1 style={{
+        fontSize: 52, fontWeight: 'bold', color: T.white,
+        textAlign: 'center' as const, marginBottom: 40, fontFamily: FONT,
+      }}>
+        Flight of the Month
+      </h1>
+
+      {months.length === 0 ? (
+        <p style={{ fontSize: 24, color: 'rgba(255,255,255,0.6)', fontFamily: FONT }}>
+          No monthly data yet.
+        </p>
+      ) : (
+        <div style={{
+          display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap' as const,
+          maxWidth: 1200, width: '100%',
+        }}>
+          {months.map((m, i) => {
+            const color = flightColor(m.flight);
+            const isCurrent = i === 0;
+            return (
+              <div key={i} style={{
+                backgroundColor: 'rgba(255,255,255,0.08)',
+                border: isCurrent ? `3px solid ${T.gold}` : '2px solid rgba(255,255,255,0.15)',
+                borderRadius: 16, padding: '28px 36px',
+                textAlign: 'center' as const, minWidth: 180,
+                boxShadow: isCurrent ? `0 0 24px ${T.gold}44` : 'none',
+              }}>
+                <div style={{
+                  fontSize: 18, color: 'rgba(255,255,255,0.5)',
+                  fontFamily: FONT, marginBottom: 8, textTransform: 'uppercase' as const,
+                  letterSpacing: 1,
+                }}>
+                  {monthLabel(m.month)}
+                </div>
+                <div style={{
+                  fontSize: 32, fontWeight: 'bold', color,
+                  fontFamily: FONT, marginBottom: 4,
+                }}>
+                  {flightLabel(m.flight)}
+                </div>
+                <div style={{
+                  fontSize: 20, color: 'rgba(255,255,255,0.7)', fontFamily: FONT,
+                }}>
+                  {m.points} pts
+                </div>
+                {isCurrent && (
+                  <div style={{
+                    marginTop: 10, fontSize: 13, color: T.gold,
+                    fontWeight: 'bold', fontFamily: FONT,
+                    textTransform: 'uppercase' as const, letterSpacing: 2,
+                  }}>
+                    Current
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE 10 — Rewards (from database)
    ═══════════════════════════════════════════════════════════════ */
 function SlideRewards({ rewards }: { rewards: Reward[] }) {
-  // Filter out expired rewards
   const now = Date.now();
   const activeRewards = rewards.filter(r => {
     if (!r.endsAt) return true;
@@ -666,7 +1182,7 @@ const S: Record<string, CSSProperties> = {
   },
   dotsWrap: {
     display: 'flex',
-    gap: 6,
+    gap: 4,
     alignItems: 'center',
     marginLeft: 12,
   },

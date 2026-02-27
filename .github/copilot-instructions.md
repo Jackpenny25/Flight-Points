@@ -117,22 +117,28 @@ LATEST PROJECT NOTES (2026-02-27 - HQ/Staff points blocking & auto-deploy):
 LATEST PROJECT NOTES (2026-02-27 - presentation mode rebuild):
 - PresentationMode.tsx completely rewritten with 6 professional PowerPoint-style slides:
   1. Flight Points Summary (white bg, flight totals table + winning cadet/flight tables)
-  2. Complete Leaderboard (dark bg, two side-by-side tables splitting cadets into halves: Rank, Cadet Name, Flight points, Attendance, Total)
-  3. Recent Points Activity (table of latest points given)
-  4. Structure (static: Main, Deputies, FS Martin)
-  5. Flight Breakdown (static: 1/2/3 Flight, SGT Penny, IT)
-  6. Rewards (static: bullet list of flight rewards)
+  2. Top 3 Podium (gold/silver/bronze visual with podium blocks)
+  3. Complete Leaderboard (dark bg, single table or 2-col if >20 cadets)
+  4. Rising Stars (top point earners this week — bar chart style)
+  5. The Flight Race (horizontal bar chart comparing flights)
+  6. Weekly Comparison (table: this week vs last week with ▲/▼ arrows)
+  7. Attendance Streaks (consecutive parade nights bar chart)
+  8. Recent Points Activity (last 10 entries)
+  9. Flight of the Month (card layout showing monthly winners)
+  10. Rewards (from database, table of active rewards)
 - PresentationEditor.tsx simplified to a clean launch page with "Start Presentation" button, slide list, and keyboard controls reference.
 - Dashboard `presentation` tab now shows PresentationEditor (previously showed broken lucide-react Presentation icon). Old `presentationeditor` tab removed.
 - Server `/api/leaderboards` now returns `detailedLeaderboard` array with per-cadet `flightPoints`, `attendancePoints`, `totalPoints` breakdown (uses subquery to get cadet's flight from cadets table).
-- Presentation uses cornflower blue (#5b9bd5) headers, light blue (#dceaf6) alternating rows, dark (#3d4f5f) background for leaderboard slide.
+- Server `/api/presentation-stats` endpoint provides: risingStars (top 10 this week), thisWeekFlights, lastWeekFlights, attendanceStreaks (consecutive present records), flightOfTheMonth (monthly winners).
+- Presentation uses cornflower blue (#5b9bd5) headers, light blue (#dceaf6) alternating rows, dark (#3d4f5f) background for leaderboard/flight race/flight of the month slides.
+- Flight colors defined: 1=red, 2=blue, 3=green, 4=orange, hq=purple.
 - All presentation styles use inline CSSProperties for complete isolation from app styles.
 - Controls: bottom bar with prev/pause/next, navigation dots, slide counter, close button. Keyboard: arrows, space, escape.
 - Control bar auto-hides after 3 seconds of mouse inactivity, reappears on mouse movement (smooth translateY transition).
-- Auto-advance every 15 seconds, data refresh every 30 seconds.
+- Auto-advance every 15 seconds, data refresh every 30 seconds. SLIDE_COUNT = 10.
 - Leaderboard slide uses a single centred table by default; only splits into two columns when more than 20 cadets.
 - Slide 1 (Flight Points): larger font (28px), reduced gap (48px), wider max-width (1400px) for better space usage.
-- Recent Points slide shows last 10 entries (not 15) with 22px font for good fit.
+- Recent Points slide shows last 10 entries with 22px font for good fit.
 - Rewards slide shows 24px font for table text.
 - PPTable non-compact padding increased to 14px 18px for better spacing.
 - `Presentation.tsx` (old static data view) still exists but is no longer imported/used in Dashboard.
