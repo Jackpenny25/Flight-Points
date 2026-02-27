@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import TopNav from './TopNav';
 import { Button } from './ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -101,36 +100,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
 
-  const [showMyRoleEditor, setShowMyRoleEditor] = useState<boolean>(false);
-  const [myRoleSelection, setMyRoleSelection] = useState<string>(userRole);
-  const [myRoleSaving, setMyRoleSaving] = useState<boolean>(false);
-  const [useAdminPin, setUseAdminPin] = useState<boolean>(false);
-  const [adminPinInput, setAdminPinInput] = useState<string>('');
-  const [temporaryRole, setTemporaryRole] = useState<boolean>(false);
-  const [tempDurationMinutes, setTempDurationMinutes] = useState<number>(30);
 
-  const saveMyRole = async () => {
-    if (!accessToken) { alert('Missing access token'); return }
-    if (!user?.id) { alert('Missing user id'); return }
-    if (myRoleSelection === userRole) { setShowMyRoleEditor(false); return }
-    setMyRoleSaving(true)
-    try {
-      let res;
-      // Replace with local API call
-      res = await api.changeUserRole(user.id, myRoleSelection);
-      if (!res || res.error) {
-        alert('Failed to update role: ' + (res?.error || 'Unknown error'));
-        return;
-      }
-      alert('Role updated. Please sign out and sign in to refresh permissions.');
-      setShowMyRoleEditor(false);
-    } catch (e:any) {
-      console.error('Save role failed', e);
-      alert('Save failed: ' + String(e));
-    } finally {
-      setMyRoleSaving(false);
-    }
-  }
 
   const openPinDialog = () => {
     if (!canUseAdminPin) {
@@ -225,60 +195,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 {/* Retention cleanup moved to Signups tab (admin only) */}
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">{userName}</p>
-                {userRole === 'snco' && adminUnlocked ? (
-                  // Flight Point Leads in admin mode can open the role-change panel
-                  <div className="text-xs text-gray-500 space-y-1">
-                    <div>
-                      <span className="text-left">{displayRole}</span>
-                    </div>
-                    <div>
-                      {!showMyRoleEditor ? (
-                        <button onClick={() => { setMyRoleSelection(userRole); setShowMyRoleEditor(true) }} className="text-[11px] text-primary underline">Change my role</button>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Select value={myRoleSelection} onValueChange={(v)=>setMyRoleSelection(v)}>
-                              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="cadet">Cadet</SelectItem>
-                                <SelectItem value="pointgiver">Point Giver</SelectItem>
-                                <SelectItem value="snco">Flight Point Lead</SelectItem>
-                                <SelectItem value="staff">Staff</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Button size="sm" onClick={saveMyRole} disabled={myRoleSaving}>{myRoleSaving ? 'Saving...' : 'Save'}</Button>
-                            <Button variant="outline" size="sm" onClick={() => setShowMyRoleEditor(false)}>Cancel</Button>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <label className="flex items-center gap-2 text-xs">
-                              <input type="checkbox" checked={temporaryRole} onChange={(e)=>setTemporaryRole(e.target.checked)} /> Temporary role
-                            </label>
-                            <label className="flex items-center gap-2 text-xs">
-                              <input type="checkbox" checked={useAdminPin} onChange={(e)=>setUseAdminPin(e.target.checked)} /> Use admin PIN
-                            </label>
-                          </div>
-
-                          {temporaryRole && (
-                            <div className="flex items-center gap-2 text-xs">
-                              <label>Duration (minutes)</label>
-                              <input type="number" min={1} value={tempDurationMinutes} onChange={(e)=>setTempDurationMinutes(Math.max(1, Number(e.target.value)))} className="w-20 p-1 rounded border" />
-                            </div>
-                          )}
-
-                          {useAdminPin && (
-                            <div className="flex items-center gap-2 text-xs">
-                              <label>Admin PIN</label>
-                              <input type="password" value={adminPinInput} onChange={(e)=>setAdminPinInput(e.target.value)} className="w-32 p-1 rounded border" />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-500">{displayRole}</p>
-                )}
+                <p className="text-xs text-gray-500">{displayRole}</p>
               </div>
               <Button variant="outline" size="sm" onClick={onLogout}>
                 <LogOut className="size-4 mr-2" />
