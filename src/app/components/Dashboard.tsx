@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from './ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileText, Gift, Presentation } from 'lucide-react';
+import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileText, Gift } from 'lucide-react';
 import { PointsManager } from './PointsManager';
 import { Leaderboards } from './Leaderboards';
 import { AdminPointGivers } from './AdminPointGivers';
@@ -24,7 +24,7 @@ import { TicketsAdmin } from './TicketsAdmin';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { Rewards } from './Rewards';
 import { PresentationEditor } from './PresentationEditor';
-import { PresentationMode } from './PresentationMode';
+// PresentationMode is launched from within PresentationEditor
 
 interface DashboardProps {
   user: any;
@@ -449,15 +449,9 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 </TabsContent>
               )}
 
-              <>
-                <TabsContent value="presentationeditor">
-                  <PresentationEditor />
-                </TabsContent>
-                
-                <TabsContent value="presentation" className="h-[calc(100vh-200px)]">
-                  <Presentation />
-                </TabsContent>
-              </>
+              <TabsContent value="presentation">
+                <PresentationEditor />
+              </TabsContent>
             </>
           )}
 

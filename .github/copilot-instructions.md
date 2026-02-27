@@ -113,3 +113,20 @@ LATEST PROJECT NOTES (2026-02-27 - HQ/Staff points blocking & auto-deploy):
   3. Client: PointsManager marks HQ cadets with red indicator "Staff/HQ — cannot receive points".
 - `ResolvedName` interface has both `isNco` and `isHq` fields. `isNco` is set to `true` for both NCOs and HQ cadets (to reuse the same exclusion logic). `isHq` is tracked separately for correct UI label.
 - Auto-deploy system added: `auto-deploy.ps1` (runs as Scheduled Task), `setup-auto-deploy.ps1` (one-time setup on server). Checks every 2 min for new commits, deploys if found.
+
+LATEST PROJECT NOTES (2026-02-27 - presentation mode rebuild):
+- PresentationMode.tsx completely rewritten with 6 professional PowerPoint-style slides:
+  1. Flight Points Summary (white bg, flight totals table + winning cadet/flight tables)
+  2. Complete Leaderboard (dark bg, two side-by-side tables splitting cadets into halves: Rank, Cadet Name, Flight points, Attendance, Total)
+  3. Recent Points Activity (table of latest points given)
+  4. Structure (static: Main, Deputies, FS Martin)
+  5. Flight Breakdown (static: 1/2/3 Flight, SGT Penny, IT)
+  6. Rewards (static: bullet list of flight rewards)
+- PresentationEditor.tsx simplified to a clean launch page with "Start Presentation" button, slide list, and keyboard controls reference.
+- Dashboard `presentation` tab now shows PresentationEditor (previously showed broken lucide-react Presentation icon). Old `presentationeditor` tab removed.
+- Server `/api/leaderboards` now returns `detailedLeaderboard` array with per-cadet `flightPoints`, `attendancePoints`, `totalPoints` breakdown (uses subquery to get cadet's flight from cadets table).
+- Presentation uses cornflower blue (#5b9bd5) headers, light blue (#dceaf6) alternating rows, dark (#3d4f5f) background for leaderboard slide.
+- All presentation styles use inline CSSProperties for complete isolation from app styles.
+- Controls: bottom bar with prev/pause/next, navigation dots, slide counter, close button. Keyboard: arrows, space, escape.
+- Auto-advance every 15 seconds, data refresh every 30 seconds.
+- `Presentation.tsx` (old static data view) still exists but is no longer imported/used in Dashboard.

@@ -207,6 +207,7 @@ while ($true) {
 
     try {
         $script:CheckCount++
+        Write-Log "CHECK #$($script:CheckCount) ($($script:Mode.ToUpper()) mode, interval $($interval)s)"
 
         if (Test-NewCommits) {
             Invoke-Deploy

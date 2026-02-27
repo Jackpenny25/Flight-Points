@@ -1,13 +1,38 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, CSSProperties } from 'react';
 import { api } from '../../utils/api';
-import { formatFlight } from './ui/utils';
-import { X, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
-import { Button } from './ui/button';
+
+/* ═══════════════════════════════════════════════════════════════
+   PRESENTATION MODE
+   Full-screen, PowerPoint-style slideshow for hall display.
+   
+   Slides:
+     1. Flight Point Totals & Winners
+     2. Complete Cadet Leaderboard (two-column)
+     3. Recent Points Activity
+     4. Structure
+     5. Flight Breakdown
+     6. Rewards
+   
+   Controls:
+     Arrow keys  – navigate slides
+     Space       – pause / resume auto-advance
+     Escape      – exit presentation
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Types ─── */
+interface LeaderboardEntry {
+  name: string;
+  points: number;
+  flight?: string;
+  flightPoints?: number;
+  attendancePoints?: number;
+  totalPoints?: number;
+}
 
 interface LeaderboardData {
-  winningCadet?: { name: string; points: number; flight?: string };
+  winningCadet?: { name: string; points: number };
   winningFlight?: { flight: string; points: number };
-  cadetLeaderboard: Array<{ name: string; points: number; flight: string }>;
+  cadetLeaderboard: LeaderboardEntry[];
   flightLeaderboard: Array<{ flight: string; points: number }>;
   recentPoints: Array<{
     id: string;
@@ -19,733 +44,667 @@ interface LeaderboardData {
     date: string;
     givenBy: string;
   }>;
+  detailedLeaderboard?: LeaderboardEntry[];
 }
 
-interface PresentationSettings {
-  slideDuration: number;
-  dataRefreshInterval: number;
-  enabledSlides: {
-    flightPoints: boolean;
-    recentActivity: boolean;
-    completeLeaderboard: boolean;
-  };
-  customText: {
-    squadronName: string;
-    headerSubtitle: string;
-  };
-  colors: {
-    primaryColor: string;
-    secondaryColor: string;
-    accentColor: string;
-  };
-  tableScale: number; // Scale multiplier for table sizes (0.5 - 1.5)
-  elementColors: {
-    tableHeaderBg?: string;
-    tableRowAlt?: string;
-    textColor?: string;
-    recentActivityBg?: string;
-  };
-  // Individual slide customization
-  slideCustomization?: {
-    flightPoints?: {
-      title?: string;
-      leftTableTitle?: string;
-      rightTableTitle?: string;
-      leftTableScale?: number;
-      rightTableScale?: number;
-      titleFontSize?: number;
-      sectionTitleFontSize?: number;
-      tableFontSize?: number;
-    };
-    recentActivity?: {
-      title?: string;
-      rowCount?: number;
-      tableFontSize?: number;
-      titleFontSize?: number;
-    };
-    completeLeaderboard?: {
-      title?: string;
-      tableFontSize?: number;
-      titleFontSize?: number;
-    };
-  };
-}
+/* ─── Configuration ─── */
+const SLIDE_COUNT = 6;
+const AUTO_ADVANCE_MS = 15000; // 15 seconds per slide
+const DATA_REFRESH_MS = 30000; // 30 seconds
 
-const DEFAULT_SETTINGS: PresentationSettings = {
-  slideDuration: 10,
-  dataRefreshInterval: 30,
-  enabledSlides: {
-    flightPoints: true,
-    recentActivity: true,
-    completeLeaderboard: true,
-  },
-  customText: {
-    squadronName: 'Flight Points',
-    headerSubtitle: 'Manage Points Effectively',
-  },
-  colors: {
-    primaryColor: '#004B87',
-    secondaryColor: '#5b9bd5',
-    accentColor: '#dceaf6',
-  },
-  tableScale: 1,
-  elementColors: {},
-  slideCustomization: {
-    flightPoints: {
-      title: 'Flight points:',
-      leftTableTitle: 'Flight point totals:',
-      rightTableTitle: 'Who has the most points:',
-      leftTableScale: 1,
-      rightTableScale: 1,
-      titleFontSize: 60,
-      sectionTitleFontSize: 40,
-      tableFontSize: 24,
-    },
-    recentActivity: {
-      title: 'Who Got Points Recently',
-      rowCount: 12,
-      tableFontSize: 16,
-      titleFontSize: 50,
-    },
-    completeLeaderboard: {
-      title: 'Complete Leaderboard',
-      tableFontSize: 16,
-      titleFontSize: 50,
-    },
-  },
+/* ─── Theme (matches PowerPoint blue style) ─── */
+const T = {
+  headerBlue: '#5b9bd5',
+  lightBlue: '#dceaf6',
+  darkBg: '#3d4f5f',
+  text: '#1a1a1a',
+  white: '#ffffff',
 };
 
-const SLIDES = ['flightPoints', 'recentActivity', 'completeLeaderboard'] as const;
-type SlideType = typeof SLIDES[number];
+const SLIDE_NAMES = [
+  'Flight Points',
+  'Leaderboard',
+  'Recent Points',
+  'Structure',
+  'Flight Breakdown',
+  'Rewards',
+];
 
-export function PresentationMode({ 
-  onClose, 
-  settings: propSettings 
-}: { 
-  onClose: () => void;
-  settings?: PresentationSettings;
-}) {
-  const [settings] = useState<PresentationSettings>(() => {
-    if (propSettings) {
-      // Merge propSettings with defaults
-      return {
-        ...DEFAULT_SETTINGS,
-        ...propSettings,
-        enabledSlides: { ...DEFAULT_SETTINGS.enabledSlides, ...(propSettings.enabledSlides || {}) },
-        customText: { ...DEFAULT_SETTINGS.customText, ...(propSettings.customText || {}) },
-        colors: { ...DEFAULT_SETTINGS.colors, ...(propSettings.colors || {}) },
-        elementColors: { ...DEFAULT_SETTINGS.elementColors, ...(propSettings.elementColors || {}) },
-        slideCustomization: {
-          flightPoints: { ...DEFAULT_SETTINGS.slideCustomization!.flightPoints, ...(propSettings.slideCustomization?.flightPoints || {}) },
-          recentActivity: { ...DEFAULT_SETTINGS.slideCustomization!.recentActivity, ...(propSettings.slideCustomization?.recentActivity || {}) },
-          completeLeaderboard: { ...DEFAULT_SETTINGS.slideCustomization!.completeLeaderboard, ...(propSettings.slideCustomization?.completeLeaderboard || {}) },
-        },
-      };
-    }
-    const saved = localStorage.getItem('presentationSettings');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        // Merge with defaults to ensure all properties exist
-        return {
-          ...DEFAULT_SETTINGS,
-          ...parsed,
-          enabledSlides: { ...DEFAULT_SETTINGS.enabledSlides, ...(parsed.enabledSlides || {}) },
-          customText: { ...DEFAULT_SETTINGS.customText, ...(parsed.customText || {}) },
-          colors: { ...DEFAULT_SETTINGS.colors, ...(parsed.colors || {}) },
-          elementColors: { ...DEFAULT_SETTINGS.elementColors, ...(parsed.elementColors || {}) },
-          slideCustomization: {
-            flightPoints: { ...DEFAULT_SETTINGS.slideCustomization!.flightPoints, ...(parsed.slideCustomization?.flightPoints || {}) },
-            recentActivity: { ...DEFAULT_SETTINGS.slideCustomization!.recentActivity, ...(parsed.slideCustomization?.recentActivity || {}) },
-            completeLeaderboard: { ...DEFAULT_SETTINGS.slideCustomization!.completeLeaderboard, ...(parsed.slideCustomization?.completeLeaderboard || {}) },
-          },
-        };
-      } catch {
-        return DEFAULT_SETTINGS;
-      }
-    }
-    return DEFAULT_SETTINGS;
-  });
+/* ─── Helper ─── */
+function flightLabel(f: string): string {
+  if (!f) return 'Unknown';
+  if (f.toLowerCase() === 'hq') return 'Staff / HQ Flight';
+  return `${f} Flight`;
+}
 
+/* ═══════════════════════════════════════════════════════════════
+   MAIN COMPONENT
+   ═══════════════════════════════════════════════════════════════ */
+export function PresentationMode({ onClose }: { onClose: () => void; settings?: unknown }) {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [slide, setSlide] = useState(0);
+  const [paused, setPaused] = useState(false);
 
-  const SLIDE_DURATION = settings.slideDuration * 1000;
-  const DATA_REFRESH_INTERVAL = settings.dataRefreshInterval * 1000;
-
-  // Get only enabled slides
-  const enabledSlidesList = SLIDES.filter(slide => settings.enabledSlides[slide as keyof typeof settings.enabledSlides]);
-
-  // Fetch leaderboard data
+  /* ── Data ── */
   const fetchData = useCallback(async () => {
     try {
-      const result = await api.getLeaderboards();
-      setData(result);
-      setLoading(false);
-    } catch (error) {
-      console.error('Failed to fetch leaderboard data:', error);
+      setData(await api.getLeaderboards());
+    } catch (err) {
+      console.error('Presentation: fetch failed', err);
+    } finally {
       setLoading(false);
     }
   }, []);
 
-  // Initial data fetch and periodic refresh
   useEffect(() => {
     fetchData();
-    const refreshInterval = setInterval(fetchData, DATA_REFRESH_INTERVAL);
-    return () => clearInterval(refreshInterval);
-  }, [fetchData, DATA_REFRESH_INTERVAL]);
+    const id = setInterval(fetchData, DATA_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [fetchData]);
 
-  // Auto-advance slides
+  /* ── Auto-advance ── */
   useEffect(() => {
-    if (isPaused || loading) return;
-    const enabledCount = enabledSlidesList.length;
-    if (enabledCount === 0) return;
-    
-    const slideInterval = setInterval(() => {
-      setCurrentSlide(prev => (prev + 1) % enabledCount);
-    }, SLIDE_DURATION);
-    
-    return () => clearInterval(slideInterval);
-  }, [isPaused, loading, enabledSlidesList.length]);
+    if (paused || loading) return;
+    const id = setInterval(() => setSlide(s => (s + 1) % SLIDE_COUNT), AUTO_ADVANCE_MS);
+    return () => clearInterval(id);
+  }, [paused, loading]);
 
-  // Keyboard controls
+  /* ── Keyboard ── */
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const enabledCount = enabledSlidesList.length;
-      if (enabledCount === 0) return;
-      
-      switch (e.key) {
-        case 'Escape':
-          exitFullscreen();
-          onClose();
-          break;
-        case 'ArrowLeft':
-          setCurrentSlide(prev => (prev - 1 + enabledCount) % enabledCount);
-          break;
-        case 'ArrowRight':
-          setCurrentSlide(prev => (prev + 1) % enabledCount);
-          break;
-        case ' ':
-          e.preventDefault();
-          setIsPaused(prev => !prev);
-          break;
-      }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { exitAndClose(); }
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { setSlide(s => (s + 1) % SLIDE_COUNT); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { setSlide(s => (s - 1 + SLIDE_COUNT) % SLIDE_COUNT); }
+      else if (e.key === ' ') { e.preventDefault(); setPaused(p => !p); }
     };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  // Fullscreen handling
-  const enterFullscreen = () => {
-    const element = document.documentElement;
-    if (element.requestFullscreen) {
-      element.requestFullscreen();
-      setIsFullscreen(true);
-    }
-  };
-
-  const exitFullscreen = () => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-      setIsFullscreen(false);
-    }
-  };
-
+  /* ── Fullscreen ── */
   useEffect(() => {
-    enterFullscreen();
-    
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+    document.documentElement.requestFullscreen?.().catch(() => {});
+    const onFsChange = () => {
+      // If user presses browser F11 or exits fullscreen via browser chrome, we stay in presentation
     };
-    
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('fullscreenchange', onFsChange);
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      exitFullscreen();
+      document.removeEventListener('fullscreenchange', onFsChange);
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     };
   }, []);
 
-  // Render individual slides
-  const renderSlide = () => {
-    if (loading || !data) {
-      return (
-        <div className="flex items-center justify-center w-full h-full">
-          <div className="text-white text-5xl font-light animate-pulse">Loading presentation...</div>
-        </div>
-      );
-    }
-
-    if (enabledSlidesList.length === 0) {
-      return (
-        <div className="flex items-center justify-center w-full h-full">
-          <div className="text-gray-500 text-5xl font-light">No slides enabled</div>
-        </div>
-      );
-    }
-
-    const slideType = enabledSlidesList[currentSlide];
-    
-    switch (slideType) {
-      case 'flightPoints':
-        return <SlideFlightPoints data={data} settings={settings} />;
-      case 'recentActivity':
-        return <SlideRecentActivity data={data} settings={settings} />;
-      case 'completeLeaderboard':
-        return <SlideCompleteLeaderboard data={data} settings={settings} />;
-    }
+  const exitAndClose = () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    onClose();
   };
 
-  return (
-    <div 
-      className="fixed inset-0 z-50 overflow-hidden bg-white"
-    >
-      {/* Squadron Header */}
-      <div 
-        className="absolute top-0 left-0 right-0 border-b-4 z-10 py-6"
-        style={{ backgroundColor: settings.colors.primaryColor }}
-      >
-        <div className="max-w-7xl mx-auto px-12">
-          <div className="text-white text-3xl font-bold tracking-wide">
-            {settings.customText.squadronName}
-          </div>
-          <div className="text-white/90 text-lg mt-1">{settings.customText.headerSubtitle}</div>
-        </div>
-      </div>
-
-      {/* Main Slide Content */}
-      <div className="presentation-slide-container h-full w-full flex items-center justify-center px-16 py-32">
-        {renderSlide()}
-      </div>
-
-      {/* Progress Dots */}
-      <div className="absolute bottom-24 left-0 right-0 flex justify-center gap-3 z-10">
-        {Array.from({ length: enabledSlidesList.length }).map((_, index) => (
-          <button
-            key={index}
-            onClick={() => setCurrentSlide(index)}
-            className="h-2 rounded-full transition-all duration-300"
-            style={{
-              backgroundColor: index === currentSlide ? settings.colors.primaryColor : settings.colors.accentColor,
-              width: index === currentSlide ? '48px' : '8px'
-            }}
-            aria-label={`Go to slide ${index + 1}`}
-          />
-        ))}
-      </div>
-
-      {/* Slide Number Indicator */}
-      <div 
-        className="absolute bottom-24 right-12 text-sm font-medium z-10"
-        style={{ color: settings.colors.primaryColor }}
-      >
-        {currentSlide + 1} / {enabledSlidesList.length}
-      </div>
-
-      {/* Controls */}
-      <div className="absolute bottom-8 left-0 right-0 flex justify-center items-center gap-4 z-10">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setCurrentSlide(prev => (prev - 1 + enabledSlidesList.length) % enabledSlidesList.length)}
-          className="h-10 w-10"
-          style={{
-            backgroundColor: settings.colors.accentColor,
-            borderColor: settings.colors.secondaryColor,
-            color: settings.colors.primaryColor
-          }}
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </Button>
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setIsPaused(!isPaused)}
-          className="h-10 w-10"
-          style={{
-            backgroundColor: settings.colors.accentColor,
-            borderColor: settings.colors.secondaryColor,
-            color: settings.colors.primaryColor
-          }}
-        >
-          {isPaused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
-        </Button>
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setCurrentSlide(prev => (prev + 1) % enabledSlidesList.length)}
-          className="h-10 w-10"
-          style={{
-            backgroundColor: settings.colors.accentColor,
-            borderColor: settings.colors.secondaryColor,
-            color: settings.colors.primaryColor
-          }}
-        >
-          <ChevronRight className="h-5 w-5" />
-        </Button>
-        
-        <div 
-          className="mx-4 text-sm font-medium min-w-[140px] text-center"
-          style={{ color: settings.colors.primaryColor }}
-        >
-          {isPaused ? 'Paused' : `Next in ${settings.slideDuration}s`}
-        </div>
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => {
-            exitFullscreen();
-            onClose();
-          }}
-          className="bg-red-500/30 hover:bg-red-500/50 border border-red-400/50 text-white h-10 w-10"
-        >
-          <X className="h-5 w-5" />
-        </Button>
-      </div>
-
-      <style>{`
-        .presentation-slide-container > * {
-          animation: fadeIn 0.6s ease-out;
-        }
-        
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-// SLIDE 1: Flight Points Summary
-function SlideFlightPoints({ data, settings }: { data: LeaderboardData; settings: PresentationSettings }) {
-  const flightTotals = data.flightLeaderboard || [];
-  const winningCadet = data.winningCadet;
-  const winningFlight = data.winningFlight;
-  const headerBg = settings.elementColors?.tableHeaderBg || settings.colors.secondaryColor;
-  const rowAltBg = settings.elementColors?.tableRowAlt || settings.colors.accentColor;
-  const textCol = settings.elementColors?.textColor || settings.colors.primaryColor;
-  
-  // Individual slide customization
-  const custom = settings.slideCustomization?.flightPoints || DEFAULT_SETTINGS.slideCustomization!.flightPoints!;
-  const titleText = custom.title || 'Flight points:';
-  const leftTitle = custom.leftTableTitle || 'Flight point totals:';
-  const rightTitle = custom.rightTableTitle || 'Who has the most points:';
-  const leftScale = custom.leftTableScale || 1;
-  const rightScale = custom.rightTableScale || 1;
-  const titleSize = custom.titleFontSize || 60;
-  const sectionTitleSize = custom.sectionTitleFontSize || 40;
-  const tableSize = custom.tableFontSize || 24;
-
-  return (
-    <div className="w-full max-w-7xl mx-auto" style={{ transform: `scale(${settings.tableScale || 1})`, transformOrigin: 'center' }}>
-      <h1 
-        className="font-bold text-center mb-12"
-        style={{ color: textCol, textDecoration: 'underline', fontSize: `${titleSize}px` }}
-      >
-        {titleText}
-      </h1>
-      
-      <div className="grid grid-cols-2 gap-12">
-        {/* LEFT: Flight Point Totals */}
-        <div style={{ transform: `scale(${leftScale})`, transformOrigin: 'top left' }}>
-          <h2 
-            className="font-bold mb-6"
-            style={{ color: textCol, fontSize: `${sectionTitleSize}px` }}
-          >
-            {leftTitle}
-          </h2>
-          
-          <table className="w-full border-2" style={{ borderColor: headerBg }}>
-            <thead>
-              <tr style={{ backgroundColor: headerBg }}>
-                <th className="p-3 text-left text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Flight</th>
-                <th className="p-3 text-right text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Points</th>
-              </tr>
-            </thead>
-            <tbody>
-              {flightTotals.map((flight, idx) => (
-                <tr
-                  key={flight.flight}
-                  style={{
-                    backgroundColor: idx % 2 === 0 ? rowAltBg : '#ffffff',
-                    borderTop: `2px solid ${headerBg}`
-                  }}
-                >
-                  <td 
-                    className="p-3 text-left font-bold"
-                    style={{ color: textCol, fontSize: `${tableSize}px` }}
-                  >
-                    {flight.flight} Flight
-                  </td>
-                  <td 
-                    className="p-3 text-right font-bold"
-                    style={{ color: textCol, fontSize: `${tableSize}px` }}
-                  >
-                    {flight.points}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        
-        {/* RIGHT: Who has the most points */}
-        <div style={{ transform: `scale(${rightScale})`, transformOrigin: 'top right' }}>
-          <h2 
-            className="font-bold mb-6"
-            style={{ color: textCol, fontSize: `${sectionTitleSize}px` }}
-          >
-            {rightTitle}
-          </h2>
-          
-          <div className="space-y-6">
-            {/* Winning Cadet */}
-            {winningCadet && (
-              <table className="w-full border-2" style={{ borderColor: headerBg }}>
-                <thead>
-                  <tr style={{ backgroundColor: headerBg }}>
-                    <th className="p-3 text-left text-white font-bold" style={{ fontSize: `${tableSize * 0.85}px` }}>Winning cadet</th>
-                    <th className="p-3 text-right text-white font-bold" style={{ fontSize: `${tableSize * 0.85}px` }}>Points</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr style={{ backgroundColor: '#ffffff' }}>
-                    <td 
-                      className="p-3 text-left font-bold"
-                      style={{ color: textCol, fontSize: `${tableSize}px` }}
-                    >
-                      {winningCadet.name}
-                    </td>
-                    <td 
-                      className="p-3 text-right font-bold"
-                      style={{ color: textCol, fontSize: `${tableSize}px` }}
-                    >
-                      {winningCadet.points}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            )}
-            
-            {/* Winning Flight */}
-            {winningFlight && (
-              <table className="w-full border-2" style={{ borderColor: headerBg }}>
-                <thead>
-                  <tr style={{ backgroundColor: headerBg }}>
-                    <th className="p-3 text-left text-white font-bold" style={{ fontSize: `${tableSize * 0.85}px` }}>Flight</th>
-                    <th className="p-3 text-right text-white font-bold" style={{ fontSize: `${tableSize * 0.85}px` }}>Points</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr style={{ backgroundColor: '#ffffff' }}>
-                    <td 
-                      className="p-3 text-left font-bold"
-                      style={{ color: textCol, fontSize: `${tableSize}px` }}
-                    >
-                      {winningFlight.flight} Flight
-                    </td>
-                    <td 
-                      className="p-3 text-right font-bold"
-                      style={{ color: textCol, fontSize: `${tableSize}px` }}
-                    >
-                      {winningFlight.points}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// SLIDE 2: Who Got Points Recently
-function SlideRecentActivity({ data, settings }: { data: LeaderboardData; settings: PresentationSettings }) {
-  const bgColor = settings.elementColors?.recentActivityBg || '#4a7a8f';
-  const headerBg = settings.elementColors?.tableHeaderBg || settings.colors.secondaryColor;
-  const rowAltBg = settings.elementColors?.tableRowAlt || settings.colors.accentColor;
-  const textCol = settings.elementColors?.textColor || settings.colors.primaryColor;
-  
-  // Individual slide customization
-  const custom = settings.slideCustomization?.recentActivity || DEFAULT_SETTINGS.slideCustomization!.recentActivity!;
-  const titleText = custom.title || 'Who Got Points Recently';
-  const rowCount = custom.rowCount || 12;
-  const tableSize = custom.tableFontSize || 16;
-  const titleSize = custom.titleFontSize || 50;
-  
-  const recentPoints = data.recentPoints.slice(0, rowCount);
-
-  return (
-    <div 
-      className="w-full h-full flex flex-col items-center justify-center px-12"
-      style={{ backgroundColor: bgColor }}
-    >
-      <div style={{ transform: `scale(${settings.tableScale || 1})`, transformOrigin: 'center' }}>
-        <h1 
-          className="font-bold text-white mb-8"
-          style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.3)', fontSize: `${titleSize}px` }}
-        >
-          {titleText}
-        </h1>
-
-        <div 
-          className="w-full max-w-5xl rounded-lg overflow-hidden border-4"
-          style={{ backgroundColor: '#ffffff', borderColor: textCol }}
-        >
-          <table className="w-full">
-            <thead>
-              <tr style={{ backgroundColor: headerBg }}>
-                <th className="p-4 text-left text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Date</th>
-                <th className="p-4 text-left text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Name</th>
-                <th className="p-4 text-left text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Reason</th>
-                <th className="p-4 text-right text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Points</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentPoints.map((point, idx) => (
-                <tr
-                  key={point.id}
-                  style={{
-                    backgroundColor: idx % 2 === 0 ? rowAltBg : '#ffffff',
-                    borderBottom: idx < recentPoints.length - 1 ? `1px solid ${rowAltBg}` : 'none'
-                  }}
-                >
-                  <td 
-                    className="p-4 text-left font-medium"
-                    style={{ color: textCol, fontSize: `${tableSize}px` }}
-                  >
-                    {new Date(point.date).toLocaleDateString('en-GB')}
-                  </td>
-                  <td 
-                    className="p-4 text-left font-medium"
-                    style={{ color: textCol, fontSize: `${tableSize}px` }}
-                  >
-                    {point.cadetName}
-                  </td>
-                  <td 
-                    className="p-4 text-left font-medium"
-                    style={{ color: textCol, fontSize: `${tableSize}px` }}
-                  >
-                    {point.reason}
-                  </td>
-                  <td 
-                    className="p-4 text-right font-bold"
-                    style={{ color: textCol, fontSize: `${tableSize * 1.125}px` }}
-                  >
-                    {point.points}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// SLIDE 3: Complete Leaderboard
-function SlideCompleteLeaderboard({ data, settings }: { data: LeaderboardData; settings: PresentationSettings }) {
-  const leaderboard = data.cadetLeaderboard || [];
-  const headerBg = settings.elementColors?.tableHeaderBg || settings.colors.secondaryColor;
-  const rowAltBg = settings.elementColors?.tableRowAlt || settings.colors.accentColor;
-  const textCol = settings.elementColors?.textColor || settings.colors.primaryColor;
-  
-  // Individual slide customization
-  const custom = settings.slideCustomization?.completeLeaderboard || DEFAULT_SETTINGS.slideCustomization!.completeLeaderboard!;
-  const titleText = custom.title || 'Complete Leaderboard';
-  const tableSize = custom.tableFontSize || 16;
-  const titleSize = custom.titleFontSize || 50;
-
-  if (leaderboard.length === 0) {
+  /* ── Loading ── */
+  if (loading) {
     return (
-      <div className="flex items-center justify-center w-full h-full text-4xl" style={{ color: textCol }}>
-        Loading leaderboard...
+      <div style={S.container}>
+        <div style={S.loadingWrap}>
+          <div style={S.spinner} />
+          <p style={{ color: '#555', fontSize: 28, marginTop: 24, fontFamily: 'Arial, sans-serif' }}>
+            Loading presentation data…
+          </p>
+        </div>
+        <style>{animations}</style>
       </div>
     );
   }
 
-  return (
-    <div 
-      className="w-full h-full flex flex-col items-center justify-center px-6"
-      style={{ backgroundColor: '#ffffff' }}
-    >
-      <div style={{ transform: `scale(${settings.tableScale || 1})`, transformOrigin: 'center', width: '100%', maxWidth: '1280px' }}>
-        <h1 
-          className="font-bold mb-8 text-center"
-          style={{ color: textCol, fontSize: `${titleSize}px` }}
-        >
-          {titleText}
-        </h1>
+  /* ── Slides ── */
+  const slides = [
+    <SlideFlightPoints key="fp" data={data} />,
+    <SlideLeaderboard key="lb" data={data} />,
+    <SlideRecentPoints key="rp" data={data} />,
+    <SlideStructure key="st" />,
+    <SlideFlightBreakdown key="fb" />,
+    <SlideRewards key="rw" />,
+  ];
 
-        <div 
-          className="w-full rounded-lg overflow-hidden border-2"
-          style={{ borderColor: headerBg, maxHeight: '70vh', overflowY: 'auto' }}
-        >
-          <table className="w-full">
-            <thead style={{ position: 'sticky', top: 0 }}>
-              <tr style={{ backgroundColor: headerBg }}>
-                <th className="p-3 text-center text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Rank</th>
-                <th className="p-3 text-left text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Cadet Name</th>
-                <th className="p-3 text-center text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Flight points</th>
-                <th className="p-3 text-center text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Attendance</th>
-                <th className="p-3 text-center text-white font-bold" style={{ fontSize: `${tableSize}px` }}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leaderboard.map((cadet, idx) => (
-                <tr
-                  key={cadet.name}
-                  style={{
-                    backgroundColor: idx % 2 === 0 ? rowAltBg : '#ffffff',
-                    borderBottom: `1px solid ${headerBg}`
-                  }}
-                >
-                  <td 
-                    className="p-3 text-center font-bold"
-                    style={{ color: textCol, fontSize: `${tableSize}px` }}
-                  >
-                    {idx + 1}
-                  </td>
-                  <td 
-                    className="p-3 text-left font-medium"
-                    style={{ color: textCol, fontSize: `${tableSize}px` }}
-                  >
-                    {cadet.name}
-                  </td>
-                  <td 
-                    className="p-3 text-center font-medium"
-                    style={{ color: textCol, fontSize: `${tableSize}px` }}
-                  >
-                    {cadet.points}
-                  </td>
-                  <td 
-                    className="p-3 text-center font-medium"
-                    style={{ color: textCol, fontSize: `${tableSize}px` }}
-                  >
-                    0
-                  </td>
-                  <td 
-                    className="p-3 text-center font-bold"
-                    style={{ color: textCol, fontSize: `${tableSize}px` }}
-                  >
-                    {cadet.points}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+  return (
+    <div style={S.container}>
+      {/* Current slide */}
+      <div key={slide} style={S.slideWrap}>{slides[slide]}</div>
+
+      {/* Bottom control bar */}
+      <div style={S.bar}>
+        <div style={S.barInner}>
+          <button
+            style={S.barBtn}
+            onClick={() => setSlide(s => (s - 1 + SLIDE_COUNT) % SLIDE_COUNT)}
+            title="Previous slide (←)"
+          >
+            ◀
+          </button>
+          <button
+            style={S.barBtn}
+            onClick={() => setPaused(p => !p)}
+            title={paused ? 'Resume (Space)' : 'Pause (Space)'}
+          >
+            {paused ? '▶' : '⏸'}
+          </button>
+          <button
+            style={S.barBtn}
+            onClick={() => setSlide(s => (s + 1) % SLIDE_COUNT)}
+            title="Next slide (→)"
+          >
+            ▶
+          </button>
+
+          {/* Navigation dots */}
+          <div style={S.dotsWrap}>
+            {Array.from({ length: SLIDE_COUNT }).map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setSlide(i)}
+                title={SLIDE_NAMES[i]}
+                style={{
+                  width: i === slide ? 32 : 10,
+                  height: 10,
+                  borderRadius: 5,
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  backgroundColor: i === slide ? T.headerBlue : 'rgba(255,255,255,0.4)',
+                }}
+              />
+            ))}
+          </div>
+
+          <span style={S.slideNum}>{slide + 1} / {SLIDE_COUNT}</span>
+          {paused && <span style={S.pauseLabel}>⏸ Paused</span>}
+
+          <button style={S.closeBtn} onClick={exitAndClose} title="Exit presentation (Esc)">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <style>{animations}</style>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE 1 — Flight Points Summary
+   White background, matches PowerPoint layout exactly:
+   Left:  Flight point totals table
+   Right: Winning cadet table + Winning flight table
+   ═══════════════════════════════════════════════════════════════ */
+function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
+  if (!data) return null;
+  const flights = data.flightLeaderboard || [];
+  const cadet = data.winningCadet;
+  const flight = data.winningFlight;
+
+  return (
+    <div style={{ ...S.slide, backgroundColor: T.white }}>
+      <h1 style={{
+        fontSize: 56, fontWeight: 'bold', textAlign: 'center' as const,
+        color: T.text, textDecoration: 'underline', marginBottom: 48,
+      }}>
+        Flight points:
+      </h1>
+
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64,
+        maxWidth: 1200, width: '100%', margin: '0 auto',
+      }}>
+        {/* LEFT — Flight Point Totals */}
+        <div>
+          <h2 style={{ fontSize: 32, fontWeight: 'bold', color: T.text, marginBottom: 20 }}>
+            Flight point totals:
+          </h2>
+          <PPTable
+            headers={['Flight', 'Points']}
+            rows={flights.map(f => [flightLabel(f.flight), String(f.points)])}
+            aligns={['left', 'right']}
+            fontSize={24}
+          />
+        </div>
+
+        {/* RIGHT — Who has the most points */}
+        <div>
+          <h2 style={{ fontSize: 32, fontWeight: 'bold', color: T.text, marginBottom: 20 }}>
+            Who has the most points:
+          </h2>
+          {cadet && (
+            <div style={{ marginBottom: 24 }}>
+              <PPTable
+                headers={['Winning cadet', 'Points']}
+                rows={[[cadet.name, String(cadet.points)]]}
+                aligns={['left', 'right']}
+                fontSize={24}
+              />
+            </div>
+          )}
+          {flight && (
+            <PPTable
+              headers={['Flight', 'Points']}
+              rows={[[flightLabel(flight.flight), String(flight.points)]]}
+              aligns={['left', 'right']}
+              fontSize={24}
+            />
+          )}
         </div>
       </div>
     </div>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE 2 — Complete Leaderboard (two columns, dark bg)
+   Matches PowerPoint: dark background, two white table panels
+   Headers: Rank | Cadet Name | Flight points | Attendance | Total
+   ═══════════════════════════════════════════════════════════════ */
+function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
+  if (!data) return null;
+
+  // Use detailed breakdown if server provides it, otherwise fall back
+  const entries: LeaderboardEntry[] = data.detailedLeaderboard && data.detailedLeaderboard.length > 0
+    ? data.detailedLeaderboard
+    : data.cadetLeaderboard.map(c => ({
+        ...c,
+        flightPoints: c.points,
+        attendancePoints: 0,
+        totalPoints: c.points,
+      }));
+
+  const half = Math.ceil(entries.length / 2);
+  const left = entries.slice(0, half);
+  const right = entries.slice(half);
+
+  const headers = ['Rank', 'Cadet Name', 'Flight points', 'Attendance', 'Total'];
+  const aligns: Array<'left' | 'center' | 'right'> = ['center', 'left', 'center', 'center', 'center'];
+
+  const toRows = (list: LeaderboardEntry[], startRank: number) =>
+    list.map((e, i) => [
+      String(startRank + i),
+      e.name,
+      String(e.flightPoints ?? e.points),
+      String(e.attendancePoints ?? 0),
+      String(e.totalPoints ?? e.points),
+    ]);
+
+  // Scale font based on how many cadets
+  const maxRows = Math.max(left.length, right.length);
+  const fontSize = maxRows > 25 ? 13 : maxRows > 20 ? 14 : maxRows > 15 ? 16 : 18;
+
+  return (
+    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '40px 48px 100px' }}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32,
+        width: '100%', height: '100%', alignContent: 'start',
+      }}>
+        {/* Left table */}
+        <div style={{
+          backgroundColor: T.white, borderRadius: 8, overflow: 'hidden',
+          maxHeight: 'calc(100vh - 160px)', overflowY: 'auto',
+        }}>
+          <PPTable headers={headers} rows={toRows(left, 1)} aligns={aligns} fontSize={fontSize} compact />
+        </div>
+        {/* Right table */}
+        <div style={{
+          backgroundColor: T.white, borderRadius: 8, overflow: 'hidden',
+          maxHeight: 'calc(100vh - 160px)', overflowY: 'auto',
+        }}>
+          <PPTable
+            headers={headers}
+            rows={toRows(right, half + 1)}
+            aligns={aligns}
+            fontSize={fontSize}
+            compact
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE 3 — Recent Points
+   ═══════════════════════════════════════════════════════════════ */
+function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
+  if (!data) return null;
+  const recent = data.recentPoints.slice(0, 15);
+
+  return (
+    <div style={{ ...S.slide, backgroundColor: T.white }}>
+      <h1 style={{
+        fontSize: 48, fontWeight: 'bold', color: T.text,
+        textAlign: 'center' as const, marginBottom: 40, textDecoration: 'underline',
+      }}>
+        Who Got Points Recently
+      </h1>
+      <div style={{ maxWidth: 1100, width: '100%', margin: '0 auto' }}>
+        <PPTable
+          headers={['Date', 'Name', 'Reason', 'Points']}
+          rows={recent.map(p => [
+            new Date(p.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
+            p.cadetName,
+            p.reason || '—',
+            String(p.points),
+          ])}
+          aligns={['left', 'left', 'left', 'right']}
+          fontSize={20}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE 4 — Structure
+   ═══════════════════════════════════════════════════════════════ */
+function SlideStructure() {
+  const items = [
+    { label: 'Main', desc: 'Gives out flight points' },
+    { label: 'Deputies', desc: 'Step in as main' },
+    { label: 'FS Martin', desc: '' },
+  ];
+
+  return (
+    <div style={{ ...S.slide, backgroundColor: T.white }}>
+      <h1 style={{
+        fontSize: 56, fontWeight: 'bold', color: T.text,
+        textAlign: 'center' as const, marginBottom: 64, textDecoration: 'underline',
+      }}>
+        Structure
+      </h1>
+      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        {items.map((item, i) => (
+          <div key={i} style={{
+            fontSize: 36, color: T.text, marginBottom: 32,
+            paddingLeft: 24, borderLeft: `5px solid ${T.headerBlue}`,
+          }}>
+            <strong>{item.label}</strong>
+            {item.desc ? `: ${item.desc}` : ''}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE 5 — Flight Breakdown
+   ═══════════════════════════════════════════════════════════════ */
+function SlideFlightBreakdown() {
+  return (
+    <div style={{ ...S.slide, backgroundColor: T.white }}>
+      <h1 style={{
+        fontSize: 56, fontWeight: 'bold', color: T.text,
+        textAlign: 'center' as const, marginBottom: 64, textDecoration: 'underline',
+      }}>
+        Flight Structure
+      </h1>
+      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        {['1 Flight', '2 Flight', '3 Flight'].map((text, i) => (
+          <div key={i} style={{
+            fontSize: 36, color: T.text, marginBottom: 24,
+            paddingLeft: 24, borderLeft: `5px solid ${T.headerBlue}`,
+          }}>
+            {text}
+          </div>
+        ))}
+        <div style={{ height: 32 }} />
+        <div style={{
+          fontSize: 36, color: T.text, marginBottom: 24,
+          paddingLeft: 24, borderLeft: `5px solid ${T.headerBlue}`,
+        }}>
+          <strong>SGT Penny</strong>
+        </div>
+        <div style={{
+          fontSize: 36, color: T.text,
+          paddingLeft: 24, borderLeft: `5px solid ${T.headerBlue}`,
+        }}>
+          <strong>IT</strong> – Any problems with points go to him
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE 6 — Rewards
+   ═══════════════════════════════════════════════════════════════ */
+function SlideRewards() {
+  const rewards = [
+    'Canteen fast track',
+    'General rewards',
+    'Flight simulator (Not working at the moment)',
+    '10 minutes extra break',
+    'Choosing a sport – Sport night',
+    'Redeem a night',
+  ];
+
+  return (
+    <div style={{ ...S.slide, backgroundColor: T.white }}>
+      <h1 style={{
+        fontSize: 56, fontWeight: 'bold', color: T.text,
+        textAlign: 'center' as const, marginBottom: 64, textDecoration: 'underline',
+      }}>
+        Rewards – For Flight
+      </h1>
+      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        {rewards.map((r, i) => (
+          <div key={i} style={{
+            fontSize: 32, color: T.text, marginBottom: 24,
+            paddingLeft: 32, display: 'flex', alignItems: 'center', gap: 20,
+          }}>
+            <span style={{
+              width: 14, height: 14, borderRadius: '50%',
+              backgroundColor: T.headerBlue, flexShrink: 0,
+            }} />
+            {r}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   REUSABLE TABLE — PowerPoint-style with blue headers
+   ═══════════════════════════════════════════════════════════════ */
+function PPTable({
+  headers,
+  rows,
+  aligns,
+  fontSize = 22,
+  compact = false,
+}: {
+  headers: string[];
+  rows: string[][];
+  aligns?: Array<'left' | 'center' | 'right'>;
+  fontSize?: number;
+  compact?: boolean;
+}) {
+  const pad = compact ? '6px 12px' : '12px 16px';
+
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse', border: `2px solid ${T.headerBlue}` }}>
+      <thead>
+        <tr>
+          {headers.map((h, i) => (
+            <th key={i} style={{
+              backgroundColor: T.headerBlue,
+              color: T.white,
+              fontWeight: 'bold',
+              fontSize,
+              padding: pad,
+              textAlign: aligns?.[i] || 'left',
+              whiteSpace: 'nowrap' as const,
+              fontFamily: 'Arial, sans-serif',
+            }}>
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.length > 0 ? rows.map((row, ri) => (
+          <tr key={ri}>
+            {row.map((cell, ci) => (
+              <td key={ci} style={{
+                backgroundColor: ri % 2 === 0 ? T.lightBlue : T.white,
+                color: T.text,
+                fontSize,
+                fontWeight: ci === 0 || ci === row.length - 1 ? 'bold' : 'normal',
+                padding: pad,
+                textAlign: aligns?.[ci] || 'left',
+                borderTop: `1px solid ${T.headerBlue}`,
+                fontFamily: 'Arial, sans-serif',
+              }}>
+                {cell}
+              </td>
+            ))}
+          </tr>
+        )) : (
+          <tr>
+            <td
+              colSpan={headers.length}
+              style={{ padding: 24, textAlign: 'center' as const, color: '#999', fontSize: fontSize - 2 }}
+            >
+              No data available
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STYLES
+   ═══════════════════════════════════════════════════════════════ */
+const S: Record<string, CSSProperties> = {
+  container: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 99999,
+    overflow: 'hidden',
+    fontFamily: 'Arial, Helvetica, sans-serif',
+    backgroundColor: '#000',
+  },
+  slideWrap: {
+    width: '100vw',
+    height: '100vh',
+    animation: 'pres-fadeSlide 0.5s ease-out',
+  },
+  slide: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '60px 80px 100px',
+    boxSizing: 'border-box',
+    overflow: 'hidden',
+    fontFamily: 'Arial, Helvetica, sans-serif',
+  },
+  loadingWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+    backgroundColor: T.white,
+  },
+  spinner: {
+    width: 48,
+    height: 48,
+    border: `4px solid ${T.lightBlue}`,
+    borderTopColor: T.headerBlue,
+    borderRadius: '50%',
+    animation: 'pres-spin 0.8s linear infinite',
+  },
+  bar: {
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 56,
+    backgroundColor: 'rgba(0,0,0,0.88)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100000,
+    backdropFilter: 'blur(8px)',
+  },
+  barInner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    maxWidth: 900,
+    width: '100%',
+    padding: '0 24px',
+  },
+  barBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+    border: '1px solid rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    color: '#fff',
+    fontSize: 14,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background-color 0.2s',
+  },
+  dotsWrap: {
+    display: 'flex',
+    gap: 6,
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  slideNum: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
+    marginLeft: 'auto',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  pauseLabel: {
+    color: '#f59e0b',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+    border: '1px solid rgba(220,50,50,0.5)',
+    backgroundColor: 'rgba(220,50,50,0.25)',
+    color: '#fff',
+    fontSize: 18,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    transition: 'background-color 0.2s',
+  },
+};
+
+/* ─── Animations ─── */
+const animations = `
+  @keyframes pres-fadeSlide {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pres-spin {
+    to { transform: rotate(360deg); }
+  }
+`;

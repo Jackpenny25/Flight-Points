@@ -989,9 +989,32 @@ app.get('/api/leaderboards', async (req, res) => {
        LIMIT 20`
     );
 
+    // Detailed per-cadet breakdown: flight points vs attendance points
+    const detailedResult = await query(
+      `SELECT
+         cadet_name AS name,
+         COALESCE(
+           (SELECT c.flight FROM cadets c WHERE LOWER(TRIM(c.name)) = LOWER(TRIM(points.cadet_name)) LIMIT 1),
+           MAX(flight)
+         ) AS flight,
+         COALESCE(SUM(CASE WHEN type IS NULL OR type <> 'attendance' THEN points ELSE 0 END), 0) AS flight_points,
+         COALESCE(SUM(CASE WHEN type = 'attendance' THEN points ELSE 0 END), 0) AS attendance_points,
+         COALESCE(SUM(points), 0) AS total_points
+       FROM points
+       GROUP BY cadet_name
+       ORDER BY total_points DESC`
+    );
+
     const cadetLeaderboard = cadetResult.rows.map(r => ({ name: r.name, points: Number(r.points) }));
     const flightLeaderboard = flightResult.rows.map(r => ({ flight: r.flight, points: Number(r.points) }));
     const recentPoints = mapRowsToClient('points', recentResult.rows);
+    const detailedLeaderboard = detailedResult.rows.map(r => ({
+      name: r.name,
+      flight: r.flight || '',
+      flightPoints: Number(r.flight_points),
+      attendancePoints: Number(r.attendance_points),
+      totalPoints: Number(r.total_points),
+    }));
 
     const maxCadetPts = cadetLeaderboard.length ? cadetLeaderboard[0].points : null;
     const maxFlightPts = flightLeaderboard.length ? flightLeaderboard[0].points : null;
@@ -1002,6 +1025,7 @@ app.get('/api/leaderboards', async (req, res) => {
       cadetLeaderboard,
       flightLeaderboard,
       recentPoints,
+      detailedLeaderboard,
       winningCadet: cadetLeaderboard[0] || null,
       winningFlight: flightLeaderboard[0] || null,
       winnersCadets,

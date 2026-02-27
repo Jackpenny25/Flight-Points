@@ -128,6 +128,10 @@ function Format-LogLine {
         $icon = "  "
         $color = "DarkGray"
     }
+    elseif ($message -match '^CHECK #') {
+        $icon = [char]0x2022 + " "  # bullet
+        $color = "DarkGray"
+    }
     elseif ($message -match 'Auto-deploy started|====') {
         $icon = "  "
         $color = "Cyan"
