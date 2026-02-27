@@ -7,7 +7,6 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { formatFlight } from './ui/utils';
 import { toast } from 'sonner';
-import { AdminPinManager } from './AdminPinManager';
 import { Copy, KeyRound, UserPlus, Trash2 } from 'lucide-react';
 
 interface AdminSignupsProps {
@@ -227,32 +226,6 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
 
   return (
     <div className="space-y-6">
-      <AdminPinManager accessToken={accessToken} userId={currentUserId} userRole={currentUserRole} />
-
-      <div className="flex justify-end">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={async () => {
-            if (!confirm('Run data retention cleanup now? This will permanently delete records older than 4 years.')) return;
-            try {
-              const res = await api.cleanupRetention();
-              if (!res.ok) {
-                alert('Cleanup failed: ' + (res.statusText || 'Unknown error'));
-                return;
-              }
-              alert('Cleanup completed. Deleted: ' + JSON.stringify(res.deleted));
-              fetchData();
-            } catch (e) {
-              console.error('Cleanup request failed', e);
-              alert('Cleanup request failed');
-            }
-          }}
-        >
-          Run Retention Cleanup
-        </Button>
-      </div>
-
       {/* Create Account */}
       <Card>
         <CardHeader>
