@@ -7,11 +7,9 @@ import { api } from '../../utils/api';
    
    Slides:
      1. Flight Point Totals & Winners
-     2. Complete Cadet Leaderboard (two-column)
+     2. Complete Cadet Leaderboard (ordered by total points)
      3. Recent Points Activity
-     4. Structure
-     5. Flight Breakdown
-     6. Rewards
+     4. Rewards (from database)
    
    Controls:
      Arrow keys  – navigate slides
@@ -47,28 +45,46 @@ interface LeaderboardData {
   detailedLeaderboard?: LeaderboardEntry[];
 }
 
+interface Reward {
+  id: string;
+  title: string;
+  howToWin: string;
+  prize: string;
+  endsAt?: string | null;
+  winnerName?: string | null;
+}
+
 /* ─── Configuration ─── */
-const SLIDE_COUNT = 6;
+const SLIDE_COUNT = 4;
 const AUTO_ADVANCE_MS = 15000; // 15 seconds per slide
 const DATA_REFRESH_MS = 30000; // 30 seconds
 
-/* ─── Theme (matches PowerPoint blue style) ─── */
+/* ─── Theme ─── */
 const T = {
   headerBlue: '#5b9bd5',
   lightBlue: '#dceaf6',
   darkBg: '#3d4f5f',
   text: '#1a1a1a',
   white: '#ffffff',
+  border: '#000000',
 };
+
+/* ─── Font ─── */
+const FONT = "'Aptos', 'Calibri', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
 
 const SLIDE_NAMES = [
   'Flight Points',
   'Leaderboard',
   'Recent Points',
-  'Structure',
-  'Flight Breakdown',
   'Rewards',
 ];
+
+/* ─── Flight sort order ─── */
+const FLIGHT_ORDER: Record<string, number> = { '1': 1, '2': 2, '3': 3, '4': 4, 'hq': 99 };
+
+function flightSortKey(f: string): number {
+  return FLIGHT_ORDER[f?.toLowerCase()] ?? 50;
+}
 
 /* ─── Helper ─── */
 function flightLabel(f: string): string {
@@ -82,6 +98,7 @@ function flightLabel(f: string): string {
    ═══════════════════════════════════════════════════════════════ */
 export function PresentationMode({ onClose }: { onClose: () => void; settings?: unknown }) {
   const [data, setData] = useState<LeaderboardData | null>(null);
+  const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
   const [slide, setSlide] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -89,7 +106,12 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
   /* ── Data ── */
   const fetchData = useCallback(async () => {
     try {
-      setData(await api.getLeaderboards());
+      const [leaderboard, rewardsData] = await Promise.all([
+        api.getLeaderboards(),
+        api.getRewards().catch(() => []),
+      ]);
+      setData(leaderboard);
+      setRewards(Array.isArray(rewardsData) ? rewardsData : []);
     } catch (err) {
       console.error('Presentation: fetch failed', err);
     } finally {
@@ -126,9 +148,7 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
   /* ── Fullscreen ── */
   useEffect(() => {
     document.documentElement.requestFullscreen?.().catch(() => {});
-    const onFsChange = () => {
-      // If user presses browser F11 or exits fullscreen via browser chrome, we stay in presentation
-    };
+    const onFsChange = () => {};
     document.addEventListener('fullscreenchange', onFsChange);
     return () => {
       document.removeEventListener('fullscreenchange', onFsChange);
@@ -147,7 +167,7 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
       <div style={S.container}>
         <div style={S.loadingWrap}>
           <div style={S.spinner} />
-          <p style={{ color: '#555', fontSize: 28, marginTop: 24, fontFamily: 'Arial, sans-serif' }}>
+          <p style={{ color: '#555', fontSize: 28, marginTop: 24, fontFamily: FONT }}>
             Loading presentation data…
           </p>
         </div>
@@ -161,9 +181,7 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
     <SlideFlightPoints key="fp" data={data} />,
     <SlideLeaderboard key="lb" data={data} />,
     <SlideRecentPoints key="rp" data={data} />,
-    <SlideStructure key="st" />,
-    <SlideFlightBreakdown key="fb" />,
-    <SlideRewards key="rw" />,
+    <SlideRewards key="rw" rewards={rewards} />,
   ];
 
   return (
@@ -232,13 +250,12 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
 
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 1 — Flight Points Summary
-   White background, matches PowerPoint layout exactly:
-   Left:  Flight point totals table
-   Right: Winning cadet table + Winning flight table
+   Flights in chronological order (1, 2, 3). Black borders.
    ═══════════════════════════════════════════════════════════════ */
 function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
   if (!data) return null;
-  const flights = data.flightLeaderboard || [];
+  // Sort flights in order: 1, 2, 3, 4, hq
+  const flights = [...(data.flightLeaderboard || [])].sort((a, b) => flightSortKey(a.flight) - flightSortKey(b.flight));
   const cadet = data.winningCadet;
   const flight = data.winningFlight;
 
@@ -246,9 +263,9 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
     <div style={{ ...S.slide, backgroundColor: T.white }}>
       <h1 style={{
         fontSize: 56, fontWeight: 'bold', textAlign: 'center' as const,
-        color: T.text, textDecoration: 'underline', marginBottom: 48,
+        color: T.text, textDecoration: 'underline', marginBottom: 48, fontFamily: FONT,
       }}>
-        Flight points:
+        Flight Points
       </h1>
 
       <div style={{
@@ -257,8 +274,8 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
       }}>
         {/* LEFT — Flight Point Totals */}
         <div>
-          <h2 style={{ fontSize: 32, fontWeight: 'bold', color: T.text, marginBottom: 20 }}>
-            Flight point totals:
+          <h2 style={{ fontSize: 32, fontWeight: 'bold', color: T.text, marginBottom: 20, fontFamily: FONT }}>
+            Flight Point Totals
           </h2>
           <PPTable
             headers={['Flight', 'Points']}
@@ -270,13 +287,13 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
 
         {/* RIGHT — Who has the most points */}
         <div>
-          <h2 style={{ fontSize: 32, fontWeight: 'bold', color: T.text, marginBottom: 20 }}>
-            Who has the most points:
+          <h2 style={{ fontSize: 32, fontWeight: 'bold', color: T.text, marginBottom: 20, fontFamily: FONT }}>
+            Who Has the Most Points
           </h2>
           {cadet && (
             <div style={{ marginBottom: 24 }}>
               <PPTable
-                headers={['Winning cadet', 'Points']}
+                headers={['Winning Cadet', 'Points']}
                 rows={[[cadet.name, String(cadet.points)]]}
                 aligns={['left', 'right']}
                 fontSize={24}
@@ -285,7 +302,7 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
           )}
           {flight && (
             <PPTable
-              headers={['Flight', 'Points']}
+              headers={['Winning Flight', 'Points']}
               rows={[[flightLabel(flight.flight), String(flight.points)]]}
               aligns={['left', 'right']}
               fontSize={24}
@@ -298,16 +315,17 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   SLIDE 2 — Complete Leaderboard (two columns, dark bg)
-   Matches PowerPoint: dark background, two white table panels
-   Headers: Rank | Cadet Name | Flight points | Attendance | Total
+   SLIDE 2 — Complete Leaderboard
+   All cadets ordered by total points (descending).
+   Columns: Rank, Name, Points (given), Attendance, Total
+   Two-column layout for large lists.
    ═══════════════════════════════════════════════════════════════ */
 function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
   if (!data) return null;
 
   // Use detailed breakdown if server provides it, otherwise fall back
   const entries: LeaderboardEntry[] = data.detailedLeaderboard && data.detailedLeaderboard.length > 0
-    ? data.detailedLeaderboard
+    ? [...data.detailedLeaderboard]
     : data.cadetLeaderboard.map(c => ({
         ...c,
         flightPoints: c.points,
@@ -315,11 +333,14 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
         totalPoints: c.points,
       }));
 
+  // Sort by total points descending
+  entries.sort((a, b) => (b.totalPoints ?? b.points) - (a.totalPoints ?? a.points));
+
   const half = Math.ceil(entries.length / 2);
   const left = entries.slice(0, half);
   const right = entries.slice(half);
 
-  const headers = ['Rank', 'Cadet Name', 'Flight points', 'Attendance', 'Total'];
+  const headers = ['Rank', 'Cadet Name', 'Points', 'Attendance', 'Total'];
   const aligns: Array<'left' | 'center' | 'right'> = ['center', 'left', 'center', 'center', 'center'];
 
   const toRows = (list: LeaderboardEntry[], startRank: number) =>
@@ -337,30 +358,38 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
 
   return (
     <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '40px 48px 100px' }}>
+      <h1 style={{
+        fontSize: 48, fontWeight: 'bold', color: T.white,
+        textAlign: 'center' as const, marginBottom: 24, fontFamily: FONT,
+      }}>
+        Cadet Leaderboard
+      </h1>
       <div style={{
         display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32,
-        width: '100%', height: '100%', alignContent: 'start',
+        width: '100%', flex: 1, alignContent: 'start',
       }}>
         {/* Left table */}
         <div style={{
           backgroundColor: T.white, borderRadius: 8, overflow: 'hidden',
-          maxHeight: 'calc(100vh - 160px)', overflowY: 'auto',
+          maxHeight: 'calc(100vh - 200px)', overflowY: 'auto',
         }}>
           <PPTable headers={headers} rows={toRows(left, 1)} aligns={aligns} fontSize={fontSize} compact />
         </div>
         {/* Right table */}
-        <div style={{
-          backgroundColor: T.white, borderRadius: 8, overflow: 'hidden',
-          maxHeight: 'calc(100vh - 160px)', overflowY: 'auto',
-        }}>
-          <PPTable
-            headers={headers}
-            rows={toRows(right, half + 1)}
-            aligns={aligns}
-            fontSize={fontSize}
-            compact
-          />
-        </div>
+        {right.length > 0 && (
+          <div style={{
+            backgroundColor: T.white, borderRadius: 8, overflow: 'hidden',
+            maxHeight: 'calc(100vh - 200px)', overflowY: 'auto',
+          }}>
+            <PPTable
+              headers={headers}
+              rows={toRows(right, half + 1)}
+              aligns={aligns}
+              fontSize={fontSize}
+              compact
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -377,7 +406,7 @@ function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
     <div style={{ ...S.slide, backgroundColor: T.white }}>
       <h1 style={{
         fontSize: 48, fontWeight: 'bold', color: T.text,
-        textAlign: 'center' as const, marginBottom: 40, textDecoration: 'underline',
+        textAlign: 'center' as const, marginBottom: 40, textDecoration: 'underline', fontFamily: FONT,
       }}>
         Who Got Points Recently
       </h1>
@@ -399,118 +428,48 @@ function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   SLIDE 4 — Structure
+   SLIDE 4 — Rewards (from database)
+   Shows each active reward: title, how to win, prize.
    ═══════════════════════════════════════════════════════════════ */
-function SlideStructure() {
-  const items = [
-    { label: 'Main', desc: 'Gives out flight points' },
-    { label: 'Deputies', desc: 'Step in as main' },
-    { label: 'FS Martin', desc: '' },
-  ];
+function SlideRewards({ rewards }: { rewards: Reward[] }) {
+  // Filter out expired rewards
+  const now = Date.now();
+  const activeRewards = rewards.filter(r => {
+    if (!r.endsAt) return true;
+    return new Date(r.endsAt).getTime() >= now;
+  });
 
   return (
     <div style={{ ...S.slide, backgroundColor: T.white }}>
       <h1 style={{
-        fontSize: 56, fontWeight: 'bold', color: T.text,
-        textAlign: 'center' as const, marginBottom: 64, textDecoration: 'underline',
+        fontSize: 48, fontWeight: 'bold', color: T.text,
+        textAlign: 'center' as const, marginBottom: 40, textDecoration: 'underline', fontFamily: FONT,
       }}>
-        Structure
+        Rewards
       </h1>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
-        {items.map((item, i) => (
-          <div key={i} style={{
-            fontSize: 36, color: T.text, marginBottom: 32,
-            paddingLeft: 24, borderLeft: `5px solid ${T.headerBlue}`,
-          }}>
-            <strong>{item.label}</strong>
-            {item.desc ? `: ${item.desc}` : ''}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
-/* ═══════════════════════════════════════════════════════════════
-   SLIDE 5 — Flight Breakdown
-   ═══════════════════════════════════════════════════════════════ */
-function SlideFlightBreakdown() {
-  return (
-    <div style={{ ...S.slide, backgroundColor: T.white }}>
-      <h1 style={{
-        fontSize: 56, fontWeight: 'bold', color: T.text,
-        textAlign: 'center' as const, marginBottom: 64, textDecoration: 'underline',
-      }}>
-        Flight Structure
-      </h1>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
-        {['1 Flight', '2 Flight', '3 Flight'].map((text, i) => (
-          <div key={i} style={{
-            fontSize: 36, color: T.text, marginBottom: 24,
-            paddingLeft: 24, borderLeft: `5px solid ${T.headerBlue}`,
-          }}>
-            {text}
-          </div>
-        ))}
-        <div style={{ height: 32 }} />
-        <div style={{
-          fontSize: 36, color: T.text, marginBottom: 24,
-          paddingLeft: 24, borderLeft: `5px solid ${T.headerBlue}`,
-        }}>
-          <strong>SGT Penny</strong>
+      {activeRewards.length === 0 ? (
+        <p style={{ fontSize: 28, color: '#999', fontFamily: FONT }}>No active rewards at the moment.</p>
+      ) : (
+        <div style={{ maxWidth: 1100, width: '100%', margin: '0 auto' }}>
+          <PPTable
+            headers={['Reward', 'How to Win', 'Prize']}
+            rows={activeRewards.map(r => [
+              r.title || '—',
+              r.howToWin || '—',
+              r.prize || '—',
+            ])}
+            aligns={['left', 'left', 'left']}
+            fontSize={22}
+          />
         </div>
-        <div style={{
-          fontSize: 36, color: T.text,
-          paddingLeft: 24, borderLeft: `5px solid ${T.headerBlue}`,
-        }}>
-          <strong>IT</strong> – Any problems with points go to him
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   SLIDE 6 — Rewards
-   ═══════════════════════════════════════════════════════════════ */
-function SlideRewards() {
-  const rewards = [
-    'Canteen fast track',
-    'General rewards',
-    'Flight simulator (Not working at the moment)',
-    '10 minutes extra break',
-    'Choosing a sport – Sport night',
-    'Redeem a night',
-  ];
-
-  return (
-    <div style={{ ...S.slide, backgroundColor: T.white }}>
-      <h1 style={{
-        fontSize: 56, fontWeight: 'bold', color: T.text,
-        textAlign: 'center' as const, marginBottom: 64, textDecoration: 'underline',
-      }}>
-        Rewards – For Flight
-      </h1>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
-        {rewards.map((r, i) => (
-          <div key={i} style={{
-            fontSize: 32, color: T.text, marginBottom: 24,
-            paddingLeft: 32, display: 'flex', alignItems: 'center', gap: 20,
-          }}>
-            <span style={{
-              width: 14, height: 14, borderRadius: '50%',
-              backgroundColor: T.headerBlue, flexShrink: 0,
-            }} />
-            {r}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   REUSABLE TABLE — PowerPoint-style with blue headers
+   REUSABLE TABLE — Formal style with thin black borders
    ═══════════════════════════════════════════════════════════════ */
 function PPTable({
   headers,
@@ -528,7 +487,7 @@ function PPTable({
   const pad = compact ? '6px 12px' : '12px 16px';
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', border: `2px solid ${T.headerBlue}` }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', border: `2px solid ${T.border}` }}>
       <thead>
         <tr>
           {headers.map((h, i) => (
@@ -540,7 +499,9 @@ function PPTable({
               padding: pad,
               textAlign: aligns?.[i] || 'left',
               whiteSpace: 'nowrap' as const,
-              fontFamily: 'Arial, sans-serif',
+              fontFamily: FONT,
+              borderRight: i < headers.length - 1 ? `1px solid ${T.border}` : 'none',
+              borderBottom: `2px solid ${T.border}`,
             }}>
               {h}
             </th>
@@ -558,8 +519,9 @@ function PPTable({
                 fontWeight: ci === 0 || ci === row.length - 1 ? 'bold' : 'normal',
                 padding: pad,
                 textAlign: aligns?.[ci] || 'left',
-                borderTop: `1px solid ${T.headerBlue}`,
-                fontFamily: 'Arial, sans-serif',
+                borderTop: `1px solid ${T.border}`,
+                borderRight: ci < row.length - 1 ? `1px solid ${T.border}` : 'none',
+                fontFamily: FONT,
               }}>
                 {cell}
               </td>
@@ -569,7 +531,7 @@ function PPTable({
           <tr>
             <td
               colSpan={headers.length}
-              style={{ padding: 24, textAlign: 'center' as const, color: '#999', fontSize: fontSize - 2 }}
+              style={{ padding: 24, textAlign: 'center' as const, color: '#999', fontSize: fontSize - 2, fontFamily: FONT }}
             >
               No data available
             </td>
@@ -592,7 +554,7 @@ const S: Record<string, CSSProperties> = {
     bottom: 0,
     zIndex: 99999,
     overflow: 'hidden',
-    fontFamily: 'Arial, Helvetica, sans-serif',
+    fontFamily: FONT,
     backgroundColor: '#000',
   },
   slideWrap: {
@@ -610,7 +572,7 @@ const S: Record<string, CSSProperties> = {
     padding: '60px 80px 100px',
     boxSizing: 'border-box',
     overflow: 'hidden',
-    fontFamily: 'Arial, Helvetica, sans-serif',
+    fontFamily: FONT,
   },
   loadingWrap: {
     display: 'flex',

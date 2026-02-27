@@ -56,8 +56,6 @@ export function PresentationEditor() {
               <li>Flight Point Totals &amp; Winners</li>
               <li>Complete Cadet Leaderboard</li>
               <li>Recent Points Activity</li>
-              <li>Structure</li>
-              <li>Flight Breakdown</li>
               <li>Rewards</li>
             </ol>
             <p className="text-xs text-muted-foreground/60 mt-3">
