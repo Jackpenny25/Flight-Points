@@ -4,6 +4,8 @@
 
 Please frequently update when you learn new things about the project or make decisions. This file is intended to be a single source of truth for how to work on the project, and it should be updated as the project evolves. The more detailed and up-to-date this file is, the better you can assist with code changes and other tasks.
 
+Always test using npm run build and anything else at the end of any large changes that you do, to make sure you haven't broken anything. If you break something, fix it immediately before doing anything else.
+
 ## Core Working Rules
 - Do not use Supabase. This project uses a PostgreSQL database on a server.
 - The user has database access and can make DB changes in DBeaver.
@@ -17,7 +19,10 @@ Please frequently update when you learn new things about the project or make dec
 
 ## Deployment and Environment Context
 - The website runs on a local server the user can access over wireless.
-- Typical workflow: edit code on local machine, then use `Deploy.bat` to pull latest code to server and restart services.
+- Typical workflow: edit code on local machine, commit & push; the server auto-deploys via scheduled task.
+- Manual deploy is also available via `Deploy.bat` (requires admin for service restart).
+- **Auto-deploy system**: `auto-deploy.ps1` runs as a Windows Scheduled Task (`FlightPoints-AutoDeploy`) under SYSTEM. It checks every 2 minutes for new commits on `main`, and if found: git pull, npm install, npm build, restart `flight-points` service. Logs to `auto-deploy.log`.
+- To set up auto-deploy on a new server: run `setup-auto-deploy.ps1` as Administrator.
 - Backend should load environment values from `.env.local` (not `.env.example`).
 - App DB credentials are expected in project root `.env.local` via `DATABASE_URL`.
 - PostgreSQL local server SSL mode should be non-SSL unless explicitly required (`PGSSLMODE=disable`).
@@ -100,3 +105,11 @@ LATEST PROJECT NOTES (2026-02-27 - NCO support & cadets sorting):
 - Cadets are now sorted alphabetically (A-Z) within each flight column and in the HQ section.
 - Server typeConfig for cadets changed orderBy from `created_at DESC` to `name ASC`.
 - `isNco` is mapped to `is_nco` in the cadets typeConfig columns.
+
+LATEST PROJECT NOTES (2026-02-27 - HQ/Staff points blocking & auto-deploy):
+- Staff/HQ flight cadets (`flight = 'hq'`) cannot receive points. Enforced at three levels:
+  1. Server: `POST /api/points` checks flight and rejects HQ cadets with 403.
+  2. Server: generic `POST /api/data/points` also checks flight for HQ.
+  3. Client: PointsManager marks HQ cadets with red indicator "Staff/HQ — cannot receive points".
+- `ResolvedName` interface has both `isNco` and `isHq` fields. `isNco` is set to `true` for both NCOs and HQ cadets (to reuse the same exclusion logic). `isHq` is tracked separately for correct UI label.
+- Auto-deploy system added: `auto-deploy.ps1` (runs as Scheduled Task), `setup-auto-deploy.ps1` (one-time setup on server). Checks every 2 min for new commits, deploys if found.

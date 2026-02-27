@@ -167,7 +167,8 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     cadet: any | null;
     ambiguous: boolean;
     restrictedFlight: boolean; // true if pointgiver tries to give to another flight
-    isNco: boolean; // true if cadet is an NCO
+    isNco: boolean; // true if cadet is an NCO or HQ (cannot receive points)
+    isHq: boolean; // true if cadet is Staff/HQ flight
   }
 
   const [resolvedEntries, setResolvedEntries] = useState<ResolvedName[]>([]);
@@ -193,20 +194,23 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       const match = matchCadetByPartialName(name);
       if (!match) {
         invalid.push(name);
-        resolved.push({ input: name, cadet: null, ambiguous: false, restrictedFlight: false, isNco: false });
+        resolved.push({ input: name, cadet: null, ambiguous: false, restrictedFlight: false, isNco: false, isHq: false });
       } else if (match.ambiguous) {
         const inputLower = name.trim().toLowerCase();
         const inputParts = inputLower.split(/\s+/);
         const inputLastName = inputParts[0];
         const siblings = cadets.filter(c => c.name.toLowerCase().startsWith(inputLastName));
         ambiguous.push(`${name} (could be: ${siblings.map(s => s.name).join(', ')} - add first initial)`);
-        resolved.push({ input: name, cadet: match.cadet, ambiguous: true, restrictedFlight: false, isNco: false });
+        resolved.push({ input: name, cadet: match.cadet, ambiguous: true, restrictedFlight: false, isNco: false, isHq: false });
       } else {
         const isNco = !!match.cadet.isNco;
+        const isHq = match.cadet.flight === 'hq';
         const restrictedFlight = isPointGiver && userFlight && match.cadet.flight !== userFlight;
-        resolved.push({ input: name, cadet: match.cadet, ambiguous: false, restrictedFlight: !!restrictedFlight, isNco });
+        resolved.push({ input: name, cadet: match.cadet, ambiguous: false, restrictedFlight: !!restrictedFlight, isNco: isNco || isHq, isHq });
         if (isNco) {
           invalid.push(`${name} (NCO — cannot receive points)`);
+        } else if (isHq) {
+          invalid.push(`${name} (Staff/HQ — cannot receive points)`);
         } else if (restrictedFlight) {
           invalid.push(`${name} (${formatFlight(match.cadet.flight)} — not your flight)`);
         }
@@ -446,7 +450,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
                       <>
                         <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
                         <span className="text-red-600">{entry.cadet?.name || entry.input}</span>
-                        <span className="text-xs text-red-500 ml-auto">NCO — cannot receive points</span>
+                        <span className="text-xs text-red-500 ml-auto">{entry.isHq ? 'Staff/HQ' : 'NCO'} — cannot receive points</span>
                       </>
                     ) : entry.restrictedFlight ? (
                       <>

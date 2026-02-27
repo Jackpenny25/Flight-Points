@@ -779,11 +779,14 @@ app.post('/api/data/:type', requireAuth, requireRole(['snco', 'admin']), async (
       const cadetName = req.body?.cadetName || req.body?.cadet_name;
       if (cadetName) {
         const ncoCheck = await query(
-          'SELECT is_nco FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
+          'SELECT is_nco, flight FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
           [cadetName]
         );
         if (ncoCheck.rows.length > 0 && ncoCheck.rows[0].is_nco === true) {
           return res.status(403).json({ error: `${cadetName} is an NCO and cannot receive points` });
+        }
+        if (ncoCheck.rows.length > 0 && ncoCheck.rows[0].flight === 'hq') {
+          return res.status(403).json({ error: `${cadetName} is Staff/HQ and cannot receive points` });
         }
       }
     }
@@ -884,11 +887,14 @@ app.post('/api/points', requireAuth, async (req: AuthRequest, res: Response) => 
 
     // Block giving points to NCOs
     const ncoCheck = await query(
-      'SELECT is_nco FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
+      'SELECT is_nco, flight FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
       [cadetName]
     );
     if (ncoCheck.rows.length > 0 && ncoCheck.rows[0].is_nco === true) {
       return res.status(403).json({ error: `${cadetName} is an NCO and cannot receive points` });
+    }
+    if (ncoCheck.rows.length > 0 && ncoCheck.rows[0].flight === 'hq') {
+      return res.status(403).json({ error: `${cadetName} is Staff/HQ and cannot receive points` });
     }
 
     // For pointgivers, enforce flight restriction
