@@ -128,5 +128,11 @@ LATEST PROJECT NOTES (2026-02-27 - presentation mode rebuild):
 - Presentation uses cornflower blue (#5b9bd5) headers, light blue (#dceaf6) alternating rows, dark (#3d4f5f) background for leaderboard slide.
 - All presentation styles use inline CSSProperties for complete isolation from app styles.
 - Controls: bottom bar with prev/pause/next, navigation dots, slide counter, close button. Keyboard: arrows, space, escape.
+- Control bar auto-hides after 3 seconds of mouse inactivity, reappears on mouse movement (smooth translateY transition).
 - Auto-advance every 15 seconds, data refresh every 30 seconds.
+- Leaderboard slide uses a single centred table by default; only splits into two columns when more than 20 cadets.
+- Slide 1 (Flight Points): larger font (28px), reduced gap (48px), wider max-width (1400px) for better space usage.
+- Recent Points slide shows last 10 entries (not 15) with 22px font for good fit.
+- Rewards slide shows 24px font for table text.
+- PPTable non-compact padding increased to 14px 18px for better spacing.
 - `Presentation.tsx` (old static data view) still exists but is no longer imported/used in Dashboard.

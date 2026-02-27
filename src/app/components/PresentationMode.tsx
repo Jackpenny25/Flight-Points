@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, CSSProperties } from 'react';
+import { useState, useEffect, useCallback, useRef, CSSProperties } from 'react';
 import { api } from '../../utils/api';
 
 /* ═══════════════════════════════════════════════════════════════
@@ -102,6 +102,8 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
   const [loading, setLoading] = useState(true);
   const [slide, setSlide] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [barVisible, setBarVisible] = useState(true);
+  const barTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ── Data ── */
   const fetchData = useCallback(async () => {
@@ -143,6 +145,23 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ── Auto-hide controls bar ── */
+  useEffect(() => {
+    const showBar = () => {
+      setBarVisible(true);
+      if (barTimerRef.current) clearTimeout(barTimerRef.current);
+      barTimerRef.current = setTimeout(() => setBarVisible(false), 3000);
+    };
+    showBar();
+    window.addEventListener('mousemove', showBar);
+    window.addEventListener('mousedown', showBar);
+    return () => {
+      window.removeEventListener('mousemove', showBar);
+      window.removeEventListener('mousedown', showBar);
+      if (barTimerRef.current) clearTimeout(barTimerRef.current);
+    };
   }, []);
 
   /* ── Fullscreen ── */
@@ -189,8 +208,13 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
       {/* Current slide */}
       <div key={slide} style={S.slideWrap}>{slides[slide]}</div>
 
-      {/* Bottom control bar */}
-      <div style={S.bar}>
+      {/* Bottom control bar — auto-hides after 3s of inactivity */}
+      <div style={{
+        ...S.bar,
+        transform: barVisible ? 'translateY(0)' : 'translateY(100%)',
+        opacity: barVisible ? 1 : 0,
+        transition: 'transform 0.4s ease, opacity 0.4s ease',
+      }}>
         <div style={S.barInner}>
           <button
             style={S.barBtn}
@@ -260,43 +284,43 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
   const flight = data.winningFlight;
 
   return (
-    <div style={{ ...S.slide, backgroundColor: T.white }}>
+    <div style={{ ...S.slide, backgroundColor: T.white, padding: '48px 60px 60px' }}>
       <h1 style={{
         fontSize: 56, fontWeight: 'bold', textAlign: 'center' as const,
-        color: T.text, textDecoration: 'underline', marginBottom: 48, fontFamily: FONT,
+        color: T.text, textDecoration: 'underline', marginBottom: 36, fontFamily: FONT,
       }}>
         Flight Points
       </h1>
 
       <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64,
-        maxWidth: 1200, width: '100%', margin: '0 auto',
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48,
+        maxWidth: 1400, width: '100%', margin: '0 auto', flex: 1,
       }}>
         {/* LEFT — Flight Point Totals */}
-        <div>
-          <h2 style={{ fontSize: 32, fontWeight: 'bold', color: T.text, marginBottom: 20, fontFamily: FONT }}>
+        <div style={{ display: 'flex', flexDirection: 'column' as const }}>
+          <h2 style={{ fontSize: 36, fontWeight: 'bold', color: T.text, marginBottom: 16, fontFamily: FONT }}>
             Flight Point Totals
           </h2>
           <PPTable
             headers={['Flight', 'Points']}
             rows={flights.map(f => [flightLabel(f.flight), String(f.points)])}
             aligns={['left', 'right']}
-            fontSize={24}
+            fontSize={28}
           />
         </div>
 
         {/* RIGHT — Who has the most points */}
-        <div>
-          <h2 style={{ fontSize: 32, fontWeight: 'bold', color: T.text, marginBottom: 20, fontFamily: FONT }}>
+        <div style={{ display: 'flex', flexDirection: 'column' as const }}>
+          <h2 style={{ fontSize: 36, fontWeight: 'bold', color: T.text, marginBottom: 16, fontFamily: FONT }}>
             Who Has the Most Points
           </h2>
           {cadet && (
-            <div style={{ marginBottom: 24 }}>
+            <div style={{ marginBottom: 20 }}>
               <PPTable
                 headers={['Winning Cadet', 'Points']}
                 rows={[[cadet.name, String(cadet.points)]]}
                 aligns={['left', 'right']}
-                fontSize={24}
+                fontSize={28}
               />
             </div>
           )}
@@ -305,7 +329,7 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
               headers={['Winning Flight', 'Points']}
               rows={[[flightLabel(flight.flight), String(flight.points)]]}
               aligns={['left', 'right']}
-              fontSize={24}
+              fontSize={28}
             />
           )}
         </div>
@@ -318,7 +342,7 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
    SLIDE 2 — Complete Leaderboard
    All cadets ordered by total points (descending).
    Columns: Rank, Name, Points (given), Attendance, Total
-   Two-column layout for large lists.
+   Single table by default; splits into two columns if many cadets.
    ═══════════════════════════════════════════════════════════════ */
 function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
   if (!data) return null;
@@ -336,10 +360,7 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
   // Sort by total points descending
   entries.sort((a, b) => (b.totalPoints ?? b.points) - (a.totalPoints ?? a.points));
 
-  const half = Math.ceil(entries.length / 2);
-  const left = entries.slice(0, half);
-  const right = entries.slice(half);
-
+  const useTwoColumns = entries.length > 20;
   const headers = ['Rank', 'Cadet Name', 'Points', 'Attendance', 'Total'];
   const aligns: Array<'left' | 'center' | 'right'> = ['center', 'left', 'center', 'center', 'center'];
 
@@ -352,44 +373,61 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
       String(e.totalPoints ?? e.points),
     ]);
 
-  // Scale font based on how many cadets
-  const maxRows = Math.max(left.length, right.length);
-  const fontSize = maxRows > 25 ? 13 : maxRows > 20 ? 14 : maxRows > 15 ? 16 : 18;
+  if (useTwoColumns) {
+    const half = Math.ceil(entries.length / 2);
+    const left = entries.slice(0, half);
+    const right = entries.slice(half);
+    const maxRows = Math.max(left.length, right.length);
+    const fontSize = maxRows > 25 ? 13 : maxRows > 20 ? 14 : 16;
+
+    return (
+      <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '40px 48px 60px' }}>
+        <h1 style={{
+          fontSize: 48, fontWeight: 'bold', color: T.white,
+          textAlign: 'center' as const, marginBottom: 24, fontFamily: FONT,
+        }}>
+          Cadet Leaderboard
+        </h1>
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32,
+          width: '100%', flex: 1, alignContent: 'start',
+        }}>
+          <div style={{
+            backgroundColor: T.white, borderRadius: 8, overflow: 'hidden',
+            maxHeight: 'calc(100vh - 180px)', overflowY: 'auto',
+          }}>
+            <PPTable headers={headers} rows={toRows(left, 1)} aligns={aligns} fontSize={fontSize} compact />
+          </div>
+          {right.length > 0 && (
+            <div style={{
+              backgroundColor: T.white, borderRadius: 8, overflow: 'hidden',
+              maxHeight: 'calc(100vh - 180px)', overflowY: 'auto',
+            }}>
+              <PPTable headers={headers} rows={toRows(right, half + 1)} aligns={aligns} fontSize={fontSize} compact />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Single table — centred with good sizing
+  const fontSize = entries.length > 15 ? 17 : 20;
 
   return (
-    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '40px 48px 100px' }}>
+    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '40px 80px 60px' }}>
       <h1 style={{
         fontSize: 48, fontWeight: 'bold', color: T.white,
-        textAlign: 'center' as const, marginBottom: 24, fontFamily: FONT,
+        textAlign: 'center' as const, marginBottom: 28, fontFamily: FONT,
       }}>
         Cadet Leaderboard
       </h1>
       <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32,
-        width: '100%', flex: 1, alignContent: 'start',
+        backgroundColor: T.white, borderRadius: 8, overflow: 'hidden',
+        maxWidth: 960, width: '100%', margin: '0 auto',
+        maxHeight: 'calc(100vh - 180px)', overflowY: 'auto',
       }}>
-        {/* Left table */}
-        <div style={{
-          backgroundColor: T.white, borderRadius: 8, overflow: 'hidden',
-          maxHeight: 'calc(100vh - 200px)', overflowY: 'auto',
-        }}>
-          <PPTable headers={headers} rows={toRows(left, 1)} aligns={aligns} fontSize={fontSize} compact />
-        </div>
-        {/* Right table */}
-        {right.length > 0 && (
-          <div style={{
-            backgroundColor: T.white, borderRadius: 8, overflow: 'hidden',
-            maxHeight: 'calc(100vh - 200px)', overflowY: 'auto',
-          }}>
-            <PPTable
-              headers={headers}
-              rows={toRows(right, half + 1)}
-              aligns={aligns}
-              fontSize={fontSize}
-              compact
-            />
-          </div>
-        )}
+        <PPTable headers={headers} rows={toRows(entries, 1)} aligns={aligns} fontSize={fontSize} />
       </div>
     </div>
   );
@@ -400,13 +438,13 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
    ═══════════════════════════════════════════════════════════════ */
 function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
   if (!data) return null;
-  const recent = data.recentPoints.slice(0, 15);
+  const recent = data.recentPoints.slice(0, 10);
 
   return (
-    <div style={{ ...S.slide, backgroundColor: T.white }}>
+    <div style={{ ...S.slide, backgroundColor: T.white, padding: '48px 80px 60px' }}>
       <h1 style={{
         fontSize: 48, fontWeight: 'bold', color: T.text,
-        textAlign: 'center' as const, marginBottom: 40, textDecoration: 'underline', fontFamily: FONT,
+        textAlign: 'center' as const, marginBottom: 32, textDecoration: 'underline', fontFamily: FONT,
       }}>
         Who Got Points Recently
       </h1>
@@ -420,7 +458,7 @@ function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
             String(p.points),
           ])}
           aligns={['left', 'left', 'left', 'right']}
-          fontSize={20}
+          fontSize={22}
         />
       </div>
     </div>
@@ -440,10 +478,10 @@ function SlideRewards({ rewards }: { rewards: Reward[] }) {
   });
 
   return (
-    <div style={{ ...S.slide, backgroundColor: T.white }}>
+    <div style={{ ...S.slide, backgroundColor: T.white, padding: '48px 80px 60px' }}>
       <h1 style={{
         fontSize: 48, fontWeight: 'bold', color: T.text,
-        textAlign: 'center' as const, marginBottom: 40, textDecoration: 'underline', fontFamily: FONT,
+        textAlign: 'center' as const, marginBottom: 32, textDecoration: 'underline', fontFamily: FONT,
       }}>
         Rewards
       </h1>
@@ -460,7 +498,7 @@ function SlideRewards({ rewards }: { rewards: Reward[] }) {
               r.prize || '—',
             ])}
             aligns={['left', 'left', 'left']}
-            fontSize={22}
+            fontSize={24}
           />
         </div>
       )}
@@ -484,7 +522,7 @@ function PPTable({
   fontSize?: number;
   compact?: boolean;
 }) {
-  const pad = compact ? '6px 12px' : '12px 16px';
+  const pad = compact ? '6px 12px' : '14px 18px';
 
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', border: `2px solid ${T.border}` }}>
@@ -569,7 +607,7 @@ const S: Record<string, CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '60px 80px 100px',
+    padding: '60px 80px 60px',
     boxSizing: 'border-box',
     overflow: 'hidden',
     fontFamily: FONT,
