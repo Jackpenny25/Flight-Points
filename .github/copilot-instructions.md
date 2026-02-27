@@ -76,3 +76,16 @@ LATEST PROJECT NOTES (2026-02-26 - admin account creation):
 - Server endpoints: POST /api/admin/create-account, POST /api/admin/reset-account-password, DELETE /api/auth/users/:id, POST /api/auth/lookup-email.
 - Old signup system removed: no more join codes, signup_requests, signup_codes, pending approvals, or request-signup endpoint.
 - TopNav tab renamed from "Signups" to "Accounts".
+
+LATEST PROJECT NOTES (2026-02-27 - points tab improvements):
+- Points giving now uses a dedicated `POST /api/points` endpoint (not the generic `/api/data/points`). Allowed roles: snco, admin, staff, pointgiver.
+- Pointgivers (`pointgiver` role) can ONLY give points to cadets in their own flight. Enforced server-side and shown in the UI.
+- Staff (`staff`) and Flight Point Lead (`snco`) can give points to any cadet in any flight.
+- JWT now includes `cadetId` and `flight` fields (looked up from linked cadet record at login time). Stored in `user_metadata` on the client.
+- Users must re-login after deploying this change to get the new JWT with flight info.
+- PointsManager form now has numbered steps: Step 1 (names), Step 2 (flight — auto-detected), Step 3 (type), Step 4 (points), Step 5 (reason).
+- Flight is auto-detected from entered cadet names. If all cadets are in one flight, it shows that flight with a green tick. If cadets span multiple flights, it shows badges for each flight. The manual dropdown is only shown as fallback when no names are matched yet.
+- Each cadet's points are submitted with their own flight (not a single selected flight for all).
+- Name confirmation: as names are typed, a matched cadets list shows below the textarea with green ticks for found names, amber warnings for ambiguous, red for not found, and red for flight-restricted (pointgivers only).
+- Accounts tab: usernames can now be edited inline (pencil icon). Server validates uniqueness. Delete button is now a red "Delete" button with text. Username preview shown when creating accounts.
+- `api.createPoint()` now calls `/api/points` instead of `/api/data/points`.

@@ -40,7 +40,7 @@ export const api = {
 
   // Points
   getPoints: () => fetchWithAuth('/data/points', { method: 'GET' }).then(r => r.json()),
-  createPoint: (data: Partial<Point>) => fetchWithAuth('/data/points', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+  createPoint: (data: Partial<Point>) => fetchWithAuth('/points', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
   updatePoint: (id: string, data: Partial<Point>) => fetchWithAuth(`/data/points/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => r.json()),
   deletePoint: (id: string) => fetchWithAuth(`/data/points/${id}`, { method: 'DELETE' }).then(r => r.json()),
 

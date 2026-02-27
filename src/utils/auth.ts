@@ -52,7 +52,9 @@ export async function login(email: string, password: string): Promise<User> {
         user_metadata: {
           name: payload.name,
           role: payload.role,
-          cadetName: payload.cadetName
+          cadetName: payload.cadetName,
+          cadetId: payload.cadetId,
+          flight: payload.flight,
         }
       };
       localStorage.setItem('user', JSON.stringify(user));

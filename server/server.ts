@@ -133,12 +133,33 @@ app.post('/api/auth/login', authLimiter, async (req: Request, res: Response) => 
     if (!valid) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
+
+    // Look up linked cadet to get flight info
+    let cadetId: string | null = null;
+    let userFlight: string | null = null;
+    try {
+      const cadetResult = await query(
+        `SELECT c.id, c.flight FROM cadets c
+         INNER JOIN app_users u ON u.cadet_id = c.id
+         WHERE u.id = $1`,
+        [user.id]
+      );
+      if (cadetResult.rows.length > 0) {
+        cadetId = cadetResult.rows[0].id;
+        userFlight = cadetResult.rows[0].flight;
+      }
+    } catch (e) {
+      // cadet_id column may not exist yet — skip
+    }
+
     // Create JWT
     const token = jwt.sign({
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role
+      role: user.role,
+      cadetId: cadetId || undefined,
+      flight: userFlight || undefined,
     }, JWT_SECRET, { expiresIn: '7d' });
     return res.json({ token });
   } catch (err) {
@@ -829,6 +850,88 @@ app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), a
   } catch (error) {
     console.error('Error in DELETE /api/data/:type/:id:', error);
     res.status(500).json({ error: 'Failed to delete data' });
+  }
+});
+
+// ========== DEDICATED POINTS ENDPOINT (allows pointgiver/staff/snco) ==========
+app.post('/api/points', requireAuth, async (req: AuthRequest, res: Response) => {
+  const userRole = (req.user?.role || '').toLowerCase();
+  const allowedRoles = ['snco', 'admin', 'staff', 'pointgiver'];
+  if (!allowedRoles.includes(userRole)) {
+    return res.status(403).json({ error: 'You do not have permission to give points' });
+  }
+
+  try {
+    const { cadetName, flight, points: pointsValue, reason, type, date, givenBy } = req.body || {};
+    if (!cadetName || pointsValue === undefined || !reason) {
+      return res.status(400).json({ error: 'cadetName, points, and reason are required' });
+    }
+
+    // For pointgivers, enforce flight restriction
+    if (userRole === 'pointgiver') {
+      // Look up the user's flight via their cadet_id
+      let userFlight: string | null = null;
+      try {
+        const cadetResult = await query(
+          `SELECT c.flight FROM cadets c
+           INNER JOIN app_users u ON u.cadet_id = c.id
+           WHERE u.id = $1`,
+          [req.user!.id]
+        );
+        if (cadetResult.rows.length > 0) {
+          userFlight = cadetResult.rows[0].flight;
+        }
+      } catch (e) {
+        // If cadet_id column doesn't exist yet, skip restriction
+      }
+
+      if (userFlight) {
+        // Look up the target cadet's flight
+        const targetResult = await query(
+          'SELECT flight FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
+          [cadetName]
+        );
+        if (targetResult.rows.length > 0) {
+          const targetFlight = targetResult.rows[0].flight;
+          if (targetFlight !== userFlight) {
+            return res.status(403).json({
+              error: `You can only give points to cadets in your flight (${userFlight})`,
+            });
+          }
+        }
+      }
+    }
+
+    const id = crypto.randomUUID();
+    const result = await query(
+      `INSERT INTO points (id, cadet_name, date, flight, reason, points, type, given_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [
+        id,
+        cadetName,
+        date || new Date().toISOString(),
+        flight || '',
+        reason,
+        parseFloat(pointsValue),
+        type || 'general',
+        givenBy || req.user?.name || 'unknown',
+      ]
+    );
+
+    const row = result.rows[0];
+    res.status(201).json({
+      id: row.id,
+      cadetName: row.cadet_name,
+      date: row.date,
+      flight: row.flight,
+      reason: row.reason,
+      points: row.points,
+      type: row.type,
+      givenBy: row.given_by,
+    });
+  } catch (error) {
+    console.error('Error in POST /api/points:', error);
+    res.status(500).json({ error: 'Failed to create point' });
   }
 });
 
