@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { formatFlight } from './ui/utils';
 import { toast } from 'sonner';
-import { Copy, KeyRound, UserPlus, Trash2 } from 'lucide-react';
+import { Copy, KeyRound, UserPlus, Trash2, Pencil } from 'lucide-react';
 
 interface AdminSignupsProps {
   accessToken: string;
@@ -63,6 +63,23 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
   // Search filters
   const [accountSearch, setAccountSearch] = useState('');
   const [cadetSearch, setCadetSearch] = useState('');
+
+  // Edit username state
+  const [editingUsernameId, setEditingUsernameId] = useState<string | null>(null);
+  const [editUsernameValue, setEditUsernameValue] = useState('');
+  const [savingUsername, setSavingUsername] = useState(false);
+
+  // Generate username preview (mirrors server logic)
+  function generateUsernamePreview(name: string): string {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s.-]/g, '')
+      .replace(/\s+/g, '.')
+      .replace(/\.{2,}/g, '.')
+      .replace(/^\.+|\.+$/g, '')
+      .slice(0, 30);
+  }
 
   const fetchData = async () => {
     setLoading(true);
@@ -208,6 +225,34 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
     }
   };
 
+  const handleChangeUsername = async (userId: string) => {
+    const newUsername = editUsernameValue.trim().toLowerCase()
+      .replace(/[^a-z0-9.\-]/g, '')
+      .replace(/\.{2,}/g, '.')
+      .replace(/^\.+|\.+$/g, '')
+      .slice(0, 30);
+    if (!newUsername) {
+      toast.error('Invalid username');
+      return;
+    }
+    setSavingUsername(true);
+    try {
+      const res = await api.updateUsername(userId, newUsername);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success('Username updated');
+      setEditingUsernameId(null);
+      setEditUsernameValue('');
+      fetchData();
+    } catch (e: any) {
+      toast.error('Failed to update username: ' + String(e));
+    } finally {
+      setSavingUsername(false);
+    }
+  };
+
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(() => {
       toast.success(`${label} copied`);
@@ -298,6 +343,18 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
                 </Select>
               </div>
             </div>
+
+            {/* Username preview */}
+            {selectedCadetId && (() => {
+              const cadet = cadets.find(c => c.id === selectedCadetId);
+              if (!cadet) return null;
+              const preview = generateUsernamePreview(cadet.name);
+              return (
+                <div className="text-sm text-muted-foreground">
+                  Username will be: <code className="font-mono bg-muted px-1.5 py-0.5 rounded text-foreground">{preview || '—'}</code>
+                </div>
+              );
+            })()}
 
             <Button onClick={handleCreateAccount} disabled={!selectedCadetId || creating}>
               {creating ? 'Creating…' : 'Create Account'}
@@ -440,7 +497,39 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
                       <TableRow key={u.id}>
                         <TableCell className="font-medium">{u.name}</TableCell>
                         <TableCell>
-                          <code className="text-sm font-mono">{u.username}</code>
+                          {editingUsernameId === u.id ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                value={editUsernameValue}
+                                onChange={(e) => setEditUsernameValue(e.target.value)}
+                                className="h-8 w-[160px] font-mono text-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleChangeUsername(u.id);
+                                  if (e.key === 'Escape') { setEditingUsernameId(null); setEditUsernameValue(''); }
+                                }}
+                                autoFocus
+                              />
+                              <Button size="sm" onClick={() => handleChangeUsername(u.id)} disabled={savingUsername}>
+                                Save
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => { setEditingUsernameId(null); setEditUsernameValue(''); }}>
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <code className="text-sm font-mono">{u.username}</code>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0"
+                                onClick={() => { setEditingUsernameId(u.id); setEditUsernameValue(u.username); }}
+                                title="Edit username"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Select
@@ -478,12 +567,12 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
                             {u.id !== currentUserId && (
                               <Button
                                 size="sm"
-                                variant="ghost"
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                variant="destructive"
                                 onClick={() => handleDeleteUser(u.id, u.name)}
-                                title="Delete account"
+                                title="Permanently delete account"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Delete
                               </Button>
                             )}
                           </div>

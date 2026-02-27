@@ -101,6 +101,8 @@ export const api = {
   getUsers: () => fetchWithAuth('/auth/users', { method: 'GET' }).then(parseJsonSafe),
   updateUserRole: (userId: string, role: string) =>
     fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ role }) }).then(parseJsonSafe),
+  updateUsername: (userId: string, username: string) =>
+    fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ username }) }).then(parseJsonSafe),
   deleteUser: (userId: string) =>
     fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'DELETE' }).then(parseJsonSafe),
   createAccount: (data: { cadetId: string; role?: string }) =>

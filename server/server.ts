@@ -288,7 +288,7 @@ app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Respon
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
-    const { role, name } = req.body || {};
+    const { role, name, username } = req.body || {};
     const updates: string[] = [];
     const params: any[] = [];
 
@@ -299,6 +299,28 @@ app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Respon
     if (name !== undefined) {
       params.push(String(name));
       updates.push(`name = $${params.length}`);
+    }
+    if (username !== undefined) {
+      // Validate and check for collisions
+      const cleanUsername = String(username).trim().toLowerCase()
+        .replace(/[^a-z0-9.\-]/g, '')
+        .replace(/\.{2,}/g, '.')
+        .replace(/^\.+|\.+$/g, '')
+        .slice(0, 30);
+      if (!cleanUsername) {
+        return res.status(400).json({ error: 'Invalid username' });
+      }
+      const newEmail = `${cleanUsername}@flightpoints.local`;
+      // Check collision
+      const collision = await query(
+        'SELECT id FROM app_users WHERE LOWER(email) = LOWER($1) AND id != $2 LIMIT 1',
+        [newEmail, req.params.id]
+      );
+      if (collision.rows.length > 0) {
+        return res.status(409).json({ error: 'Username already taken' });
+      }
+      params.push(newEmail);
+      updates.push(`email = $${params.length}`);
     }
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No update fields provided' });
@@ -314,7 +336,13 @@ app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Respon
       return res.status(404).json({ error: 'User not found' });
     }
 
-    return res.json({ user: result.rows[0] });
+    const user = result.rows[0];
+    return res.json({
+      user: {
+        ...user,
+        username: user.email.includes('@') ? user.email.split('@')[0] : user.email,
+      },
+    });
   } catch (error) {
     console.error('Error in PUT /api/auth/users/:id:', error);
     return res.status(500).json({ error: 'Failed to update user' });
