@@ -191,6 +191,9 @@ if ($RunOnce) {
 }
 
 # Continuous loop with adaptive intervals
+$script:CheckCount = 0
+$script:LastHeartbeat = Get-Date
+
 while ($true) {
     $interval = Get-CurrentInterval
 
@@ -203,9 +206,26 @@ while ($true) {
     Start-Sleep -Seconds $interval
 
     try {
+        $script:CheckCount++
+
         if (Test-NewCommits) {
             Invoke-Deploy
             Enter-HeightenedMode  # Reset to burst mode on every new commit
+        } else {
+            # Periodic heartbeat so the monitor knows we're alive
+            $sinceHeartbeat = ((Get-Date) - $script:LastHeartbeat).TotalMinutes
+            $heartbeatInterval = switch ($script:Mode) {
+                'burst'    { 5 }    # every 5 min during burst
+                'cooldown' { 10 }   # every 10 min during cooldown
+                'normal'   { 30 }   # every 30 min during normal
+                'idle'     { 120 }  # every 2 hrs during idle
+                default    { 30 }
+            }
+            if ($sinceHeartbeat -ge $heartbeatInterval) {
+                Write-Log "Heartbeat: $($script:Mode.ToUpper()) mode, checked $($script:CheckCount) times, no new commits. Next check in $($interval)s."
+                $script:LastHeartbeat = Get-Date
+                $script:CheckCount = 0
+            }
         }
     }
     catch {

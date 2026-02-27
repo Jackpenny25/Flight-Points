@@ -132,14 +132,28 @@ $shortcut.Save()
 
 Write-Host "  Desktop shortcut created: $shortcutPath" -ForegroundColor Green
 
+# --- Create Monitor shortcut on desktop ---
+$monitorScriptPath = Join-Path $ProjectDir "monitor-deploy.ps1"
+$monitorShortcutPath = Join-Path $desktopPath "Deploy Monitor.lnk"
+
+$monitorShortcut = $shell.CreateShortcut($monitorShortcutPath)
+$monitorShortcut.TargetPath = "powershell.exe"
+$monitorShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -File `"$monitorScriptPath`""
+$monitorShortcut.WorkingDirectory = $ProjectDir
+$monitorShortcut.Description = "Live dashboard showing Flight-Points deploy commits and status"
+$monitorShortcut.Save()
+
+Write-Host "  Monitor shortcut created: $monitorShortcutPath" -ForegroundColor Green
+
 Write-Host ""
 Write-Host "The system will:" -ForegroundColor Cyan
 Write-Host "  1. Start automatically at system boot"
 Write-Host "  2. After a commit: check every 30s (30min), then 1min (30min), then 2min"
 Write-Host "  3. After 7 days idle: slow to hourly checks"
 Write-Host "  4. After 30 days idle: stop entirely (hibernate)"
-Write-Host "  5. Double-click desktop shortcut to restart after hibernation"
-Write-Host "  6. Log all activity to: $ProjectDir\auto-deploy.log"
+Write-Host "  5. Double-click 'Restart Flight-Points Deploy' to restart after hibernation"
+Write-Host "  6. Double-click 'Deploy Monitor' to watch live commit/deploy status"
+Write-Host "  7. Log all activity to: $ProjectDir\auto-deploy.log"
 Write-Host ""
 
 # Offer to start it now
