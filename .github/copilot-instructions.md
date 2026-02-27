@@ -115,17 +115,20 @@ LATEST PROJECT NOTES (2026-02-27 - HQ/Staff points blocking & auto-deploy):
 - Auto-deploy system added: `auto-deploy.ps1` (runs as Scheduled Task), `setup-auto-deploy.ps1` (one-time setup on server). Checks every 2 min for new commits, deploys if found.
 
 LATEST PROJECT NOTES (2026-02-27 - presentation mode rebuild):
-- PresentationMode.tsx completely rewritten with 6 professional PowerPoint-style slides:
-  1. Flight Points Summary (white bg, flight totals table + winning cadet/flight tables)
-  2. Top 3 Podium (gold/silver/bronze visual with podium blocks)
+- PresentationMode.tsx completely rewritten with 9 professional PowerPoint-style slides using dark slate/gold/green theme:
+  1. Flight Points Summary (dark bg, flight totals table + winning cadet/flight tables)
+  2. Top Cadets & Flight of the Month (combined: gold/silver/bronze podium at top with 1st place tallest, flight-of-the-month cards below)
   3. Complete Leaderboard (dark bg, single table or 2-col if >20 cadets)
   4. Rising Stars (top point earners this week — bar chart style)
-  5. The Flight Race (horizontal bar chart comparing flights)
+  5. The Flight Race (horizontal bar chart comparing flights — sorted by most points at top)
   6. Weekly Comparison (table: this week vs last week with ▲/▼ arrows)
   7. Attendance Streaks (consecutive parade nights bar chart)
   8. Recent Points Activity (last 10 entries)
-  9. Flight of the Month (card layout showing monthly winners)
-  10. Rewards (from database, table of active rewards)
+  9. Rewards (from database, table of active rewards)
+- Global dark theme: dark slate (#2d3a45) background, gold (#FFD700) headings and accents, green (#22c55e) for positive changes, slate header bg (#3d4f5f) for tables.
+- Podium: 1st place centre tallest (280px), 2nd left (220px), 3rd right (180px). Display order is 2nd-1st-3rd.
+- Flight Race bars sorted by most points at top, least at bottom (descending).
+- Flight of the Month merged into the Top Cadets slide as compact card row below the podium.
 - PresentationEditor.tsx simplified to a clean launch page with "Start Presentation" button, slide list, and keyboard controls reference.
 - Dashboard `presentation` tab now shows PresentationEditor (previously showed broken lucide-react Presentation icon). Old `presentationeditor` tab removed.
 - Server `/api/leaderboards` now returns `detailedLeaderboard` array with per-cadet `flightPoints`, `attendancePoints`, `totalPoints` breakdown (uses subquery to get cadet's flight from cadets table).
@@ -135,7 +138,8 @@ LATEST PROJECT NOTES (2026-02-27 - presentation mode rebuild):
 - All presentation styles use inline CSSProperties for complete isolation from app styles.
 - Controls: bottom bar with prev/pause/next, navigation dots, slide counter, close button. Keyboard: arrows, space, escape.
 - Control bar auto-hides after 3 seconds of mouse inactivity, reappears on mouse movement (smooth translateY transition).
-- Auto-advance every 15 seconds, data refresh every 30 seconds. SLIDE_COUNT = 10.
+- Auto-advance every 15 seconds, data refresh every 30 seconds. SLIDE_COUNT = 9.
+- PPTable: dark themed with slate header (#3d4f5f), gold header text, alternating semi-transparent rows.
 - Leaderboard slide uses a single centred table by default; only splits into two columns when more than 20 cadets.
 - Slide 1 (Flight Points): larger font (28px), reduced gap (48px), wider max-width (1400px) for better space usage.
 - Recent Points slide shows last 10 entries with 22px font for good fit.
