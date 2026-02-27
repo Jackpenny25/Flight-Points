@@ -1,8 +1,18 @@
 # auto-deploy.ps1 — Periodically checks for new commits and deploys if needed.
 # Designed to run as a Scheduled Task with admin privileges.
+#
+# Adaptive polling schedule:
+#   After a commit detected:
+#     - Every 30 seconds for 30 minutes  (heightened burst)
+#     - Every 1 minute for the next 30 minutes (heightened cooldown)
+#     - Then back to normal (every 2 minutes)
+#   If no commit for 1 week:  every 1 hour (idle mode)
+#   If no commit for 1 month: stop entirely (hibernated)
+#   On restart after hibernation: resume normal schedule
+#
+# A desktop shortcut is created by setup-auto-deploy.ps1 to restart if hibernated.
 
 param(
-    [int]$IntervalMinutes = 2,
     [switch]$RunOnce
 )
 
@@ -11,12 +21,81 @@ $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $LogFile = Join-Path $ProjectDir "auto-deploy.log"
 $Branch = "main"
 
+# --- Timing constants (in seconds) ---
+$BURST_INTERVAL     = 30        # 30 seconds — first 30 min after commit
+$COOLDOWN_INTERVAL  = 60        # 1 minute  — next 30 min after burst
+$NORMAL_INTERVAL    = 120       # 2 minutes — standard polling
+$IDLE_INTERVAL      = 3600      # 1 hour    — no commit for 1 week
+
+$BURST_DURATION     = 1800      # 30 minutes in seconds
+$COOLDOWN_DURATION  = 1800      # 30 minutes in seconds
+$IDLE_THRESHOLD     = 604800    # 1 week in seconds
+$HIBERNATE_THRESHOLD = 2592000  # 30 days in seconds
+
+# --- State ---
+$script:LastCommitTime = Get-Date
+$script:Mode = "normal"  # normal, burst, cooldown, idle
+
 function Write-Log {
     param([string]$Message)
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $line = "[$timestamp] $Message"
     Write-Host $line
     Add-Content -Path $LogFile -Value $line
+}
+
+function Get-CurrentInterval {
+    $now = Get-Date
+    $secsSinceCommit = ($now - $script:LastCommitTime).TotalSeconds
+
+    # Check for hibernate (1 month without commit)
+    if ($secsSinceCommit -ge $HIBERNATE_THRESHOLD) {
+        if ($script:Mode -ne "hibernate") {
+            $script:Mode = "hibernate"
+            Write-Log "MODE -> HIBERNATE (no commits for 30 days). Stopping auto-deploy."
+            Write-Log "Double-click the desktop shortcut 'Restart Flight-Points Deploy' to resume."
+        }
+        return -1  # signal to stop
+    }
+
+    # Check for idle (1 week without commit)
+    if ($secsSinceCommit -ge $IDLE_THRESHOLD) {
+        if ($script:Mode -ne "idle") {
+            $script:Mode = "idle"
+            Write-Log "MODE -> IDLE (no commits for 7 days). Polling every $($IDLE_INTERVAL / 60) min."
+        }
+        return $IDLE_INTERVAL
+    }
+
+    # If we're in heightened mode (burst or cooldown), check timing
+    if ($script:Mode -eq "burst") {
+        if ($secsSinceCommit -lt $BURST_DURATION) {
+            return $BURST_INTERVAL
+        }
+        # Transition to cooldown
+        $script:Mode = "cooldown"
+        Write-Log "MODE -> COOLDOWN (every $($COOLDOWN_INTERVAL)s for 30 min)"
+        return $COOLDOWN_INTERVAL
+    }
+
+    if ($script:Mode -eq "cooldown") {
+        if ($secsSinceCommit -lt ($BURST_DURATION + $COOLDOWN_DURATION)) {
+            return $COOLDOWN_INTERVAL
+        }
+        # Transition to normal
+        $script:Mode = "normal"
+        Write-Log "MODE -> NORMAL (every $($NORMAL_INTERVAL / 60) min)"
+        return $NORMAL_INTERVAL
+    }
+
+    # Normal mode
+    return $NORMAL_INTERVAL
+}
+
+function Enter-HeightenedMode {
+    $script:LastCommitTime = Get-Date
+    $script:Mode = "burst"
+    Write-Log "MODE -> BURST (every $($BURST_INTERVAL)s for 30 min)"
 }
 
 function Invoke-Deploy {
@@ -89,16 +168,21 @@ function Test-NewCommits {
     }
 }
 
-# --- Main loop ---
-Write-Log "Auto-deploy started. Checking every $IntervalMinutes minute(s) on branch '$Branch'."
-Write-Log "Project directory: $ProjectDir"
-Write-Log "Log file: $LogFile"
+# --- Main ---
+Write-Log "============================================"
+Write-Log "Auto-deploy started with adaptive polling."
+Write-Log "  Project : $ProjectDir"
+Write-Log "  Branch  : $Branch"
+Write-Log "  Schedule: burst(30s/30min) -> cooldown(1min/30min) -> normal(2min)"
+Write-Log "            idle after 7 days (1hr), hibernate after 30 days (stop)"
+Write-Log "============================================"
 
 # Initial deploy check on startup
 if (Test-NewCommits) {
     Invoke-Deploy
+    Enter-HeightenedMode
 } else {
-    Write-Log "No new commits. Up to date."
+    Write-Log "No new commits. Up to date. Starting in NORMAL mode."
 }
 
 if ($RunOnce) {
@@ -106,12 +190,22 @@ if ($RunOnce) {
     exit 0
 }
 
-# Continuous loop
+# Continuous loop with adaptive intervals
 while ($true) {
-    Start-Sleep -Seconds ($IntervalMinutes * 60)
+    $interval = Get-CurrentInterval
+
+    # Hibernate: stop the script
+    if ($interval -lt 0) {
+        Write-Log "Auto-deploy hibernated. Exiting process."
+        exit 0
+    }
+
+    Start-Sleep -Seconds $interval
+
     try {
         if (Test-NewCommits) {
             Invoke-Deploy
+            Enter-HeightenedMode  # Reset to burst mode on every new commit
         }
     }
     catch {

@@ -1,4 +1,5 @@
-# setup-auto-deploy.ps1 — Registers the auto-deploy script as a Windows Scheduled Task.
+# setup-auto-deploy.ps1 — Registers the auto-deploy script as a Windows Scheduled Task
+# and creates a desktop shortcut to restart it after hibernation.
 # Must be run as Administrator on the server.
 
 $ErrorActionPreference = "Stop"
@@ -6,7 +7,6 @@ $ErrorActionPreference = "Stop"
 $TaskName = "FlightPoints-AutoDeploy"
 $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ScriptPath = Join-Path $ProjectDir "auto-deploy.ps1"
-$IntervalMinutes = 2
 
 # Check admin
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -21,8 +21,12 @@ Write-Host "=== Flight-Points Auto-Deploy Setup ===" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Task Name       : $TaskName"
 Write-Host "Script          : $ScriptPath"
-Write-Host "Check Interval  : Every $IntervalMinutes minutes"
 Write-Host "Working Dir     : $ProjectDir"
+Write-Host ""
+Write-Host "Adaptive polling schedule:" -ForegroundColor DarkCyan
+Write-Host "  After commit : 30s for 30min, then 1min for 30min, then 2min"
+Write-Host "  After 7 days : every 1 hour (idle)"
+Write-Host "  After 30 days: stop entirely (hibernate)"
 Write-Host ""
 
 # Remove existing task if present
@@ -35,7 +39,7 @@ if ($existing) {
 # Build the action — run PowerShell with the auto-deploy script
 $action = New-ScheduledTaskAction `
     -Execute "powershell.exe" `
-    -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$ScriptPath`" -IntervalMinutes $IntervalMinutes" `
+    -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$ScriptPath`"" `
     -WorkingDirectory $ProjectDir
 
 # Trigger: at system startup (the script loops internally)
@@ -60,17 +64,82 @@ Register-ScheduledTask `
     -Trigger $trigger `
     -Settings $settings `
     -Principal $principal `
-    -Description "Checks for new commits every $IntervalMinutes minutes and deploys Flight-Points automatically." `
+    -Description "Adaptive auto-deploy for Flight-Points. Checks for commits with burst/cooldown/normal/idle/hibernate modes." `
     -Force
 
 Write-Host ""
 Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
+
+# --- Create Desktop Shortcut ---
 Write-Host ""
-Write-Host "The task will:" -ForegroundColor Cyan
+Write-Host "Creating desktop shortcut..." -ForegroundColor Cyan
+
+# Try common desktop paths
+$desktopPath = [Environment]::GetFolderPath("CommonDesktopDirectory")  # All users desktop
+if (-not $desktopPath -or -not (Test-Path $desktopPath)) {
+    $desktopPath = [Environment]::GetFolderPath("Desktop")  # Current user desktop
+}
+
+$shortcutPath = Join-Path $desktopPath "Restart Flight-Points Deploy.lnk"
+
+# Create restart helper script
+$restartScriptPath = Join-Path $ProjectDir "restart-auto-deploy.ps1"
+$restartScriptContent = @"
+# restart-auto-deploy.ps1 — Restarts the auto-deploy scheduled task.
+# Double-click the desktop shortcut to run this after hibernation.
+
+`$TaskName = "FlightPoints-AutoDeploy"
+
+# Check admin
+`$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not `$isAdmin) {
+    Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"`$PSCommandPath`"" -Verb RunAs
+    exit
+}
+
+Write-Host "Restarting Flight-Points Auto-Deploy..." -ForegroundColor Cyan
+
+# Stop if running
+`$task = Get-ScheduledTask -TaskName `$TaskName -ErrorAction SilentlyContinue
+if (`$task) {
+    if (`$task.State -eq 'Running') {
+        Stop-ScheduledTask -TaskName `$TaskName
+        Start-Sleep -Seconds 2
+    }
+    Start-ScheduledTask -TaskName `$TaskName
+    Write-Host "Auto-deploy restarted successfully!" -ForegroundColor Green
+    Write-Host "It will check for commits immediately, then follow the adaptive schedule." -ForegroundColor DarkCyan
+} else {
+    Write-Host "Scheduled task '`$TaskName' not found. Run setup-auto-deploy.ps1 first." -ForegroundColor Red
+}
+
+Write-Host ""
+Write-Host "Press any key to close..."
+`$null = `$Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+"@
+
+Set-Content -Path $restartScriptPath -Value $restartScriptContent -Encoding UTF8
+Write-Host "  Created restart script: $restartScriptPath" -ForegroundColor DarkGray
+
+# Create .lnk shortcut on desktop
+$shell = New-Object -ComObject WScript.Shell
+$shortcut = $shell.CreateShortcut($shortcutPath)
+$shortcut.TargetPath = "powershell.exe"
+$shortcut.Arguments = "-ExecutionPolicy Bypass -File `"$restartScriptPath`""
+$shortcut.WorkingDirectory = $ProjectDir
+$shortcut.Description = "Restart Flight-Points Auto-Deploy (after hibernation or manual stop)"
+$shortcut.Save()
+
+Write-Host "  Desktop shortcut created: $shortcutPath" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "The system will:" -ForegroundColor Cyan
 Write-Host "  1. Start automatically at system boot"
-Write-Host "  2. Check for new commits every $IntervalMinutes minutes"
-Write-Host "  3. Pull, build, and restart the service if new commits are found"
-Write-Host "  4. Log all activity to: $ProjectDir\auto-deploy.log"
+Write-Host "  2. After a commit: check every 30s (30min), then 1min (30min), then 2min"
+Write-Host "  3. After 7 days idle: slow to hourly checks"
+Write-Host "  4. After 30 days idle: stop entirely (hibernate)"
+Write-Host "  5. Double-click desktop shortcut to restart after hibernation"
+Write-Host "  6. Log all activity to: $ProjectDir\auto-deploy.log"
 Write-Host ""
 
 # Offer to start it now
