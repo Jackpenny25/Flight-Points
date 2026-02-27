@@ -67,6 +67,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   const [editName, setEditName] = useState('');
   const [editFlight, setEditFlight] = useState('');
   const [editRank, setEditRank] = useState('');
+  const [editNco, setEditNco] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
 
   const ensureAdminPin = () => {
@@ -279,6 +280,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     setEditName(cadet.name);
     setEditFlight(cadet.flight);
     setEditRank(cadet.rank || '');
+    setEditNco(!!cadet.isNco);
     setEditOpen(true);
   };
 
@@ -287,7 +289,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     if (!editingCadet) return;
     setEditSubmitting(true);
     try {
-      const payload: any = { name: editName, flight: editFlight };
+      const payload: any = { name: editName, flight: editFlight, isNco: editNco };
       if (editFlight === 'hq') payload.rank = editRank;
       const res = await api.updateCadet(editingCadet.id, payload);
       if (res && res.id) {
@@ -409,15 +411,6 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant={cadet.isNco ? 'default' : 'outline'}
-            className={`h-7 px-2 text-xs ${cadet.isNco ? 'bg-amber-600 hover:bg-amber-700' : ''}`}
-            onClick={() => handleToggleNco(cadet)}
-            title={cadet.isNco ? 'Remove NCO status' : 'Mark as NCO (cannot receive points)'}
-          >
-            <Shield size={12} className="mr-1" />{cadet.isNco ? 'NCO' : 'NCO'}
-          </Button>
           <Button size="sm" variant="ghost" onClick={() => openEditCadet(cadet)}><Edit2 size={14} /></Button>
           <Button size="sm" variant="destructive" onClick={() => handleDeleteCadet(cadet.id, cadet.name)}><Trash2 size={14} /></Button>
         </div>
@@ -703,6 +696,24 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                 <div className="space-y-2">
                   <Label>Full Name</Label>
                   <Input value={editName} onChange={(e) => setEditName(e.target.value)} required />
+                </div>
+                <div className="flex items-center justify-between rounded-md border p-3">
+                  <div>
+                    <div className="flex items-center gap-1.5 font-medium text-sm">
+                      <Shield size={14} className={editNco ? 'text-amber-600' : 'text-muted-foreground'} />
+                      NCO Status
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">NCOs cannot receive points</p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={editNco ? 'default' : 'outline'}
+                    className={editNco ? 'bg-amber-600 hover:bg-amber-700' : ''}
+                    onClick={() => setEditNco(!editNco)}
+                  >
+                    {editNco ? 'NCO ✓' : 'Mark NCO'}
+                  </Button>
                 </div>
               </div>
               <DialogFooter>
