@@ -30,7 +30,7 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
   useEffect(() => {
     performIntegrityChecks();
     // Refresh every 30 seconds
-    const interval = setInterval(performIntegrityChecks, 30000);
+    const interval = setInterval(performIntegrityChecks, 120000);
     return () => clearInterval(interval);
   }, [accessToken]);
 

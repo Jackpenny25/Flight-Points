@@ -514,10 +514,11 @@ const typeConfig: Record<DataType, { table: string; columns: Record<string, stri
       name: 'name',
       flight: 'flight',
       rank: 'rank',
+      isNco: 'is_nco',
       createdAt: 'created_at',
       updatedAt: 'updated_at',
     },
-    orderBy: 'created_at DESC NULLS LAST',
+    orderBy: 'name ASC',
     hasUpdatedAt: true,
   },
   points: {
@@ -773,6 +774,20 @@ app.post('/api/data/:type', requireAuth, requireRole(['snco', 'admin']), async (
       return res.status(400).json({ error: 'Unsupported data type' });
     }
 
+    // Block giving points to NCOs via the generic endpoint too
+    if (normalized === 'points') {
+      const cadetName = req.body?.cadetName || req.body?.cadet_name;
+      if (cadetName) {
+        const ncoCheck = await query(
+          'SELECT is_nco FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
+          [cadetName]
+        );
+        if (ncoCheck.rows.length > 0 && ncoCheck.rows[0].is_nco === true) {
+          return res.status(403).json({ error: `${cadetName} is an NCO and cannot receive points` });
+        }
+      }
+    }
+
     const { table } = typeConfig[normalized];
     const data = mapToDb(normalized, req.body || {});
     data.id = data.id || crypto.randomUUID();
@@ -865,6 +880,15 @@ app.post('/api/points', requireAuth, async (req: AuthRequest, res: Response) => 
     const { cadetName, flight, points: pointsValue, reason, type, date, givenBy } = req.body || {};
     if (!cadetName || pointsValue === undefined || !reason) {
       return res.status(400).json({ error: 'cadetName, points, and reason are required' });
+    }
+
+    // Block giving points to NCOs
+    const ncoCheck = await query(
+      'SELECT is_nco FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
+      [cadetName]
+    );
+    if (ncoCheck.rows.length > 0 && ncoCheck.rows[0].is_nco === true) {
+      return res.status(403).json({ error: `${cadetName} is an NCO and cannot receive points` });
     }
 
     // For pointgivers, enforce flight restriction

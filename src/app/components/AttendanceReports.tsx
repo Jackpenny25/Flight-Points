@@ -32,7 +32,7 @@ export function AttendanceReports({ accessToken }: AttendanceReportsProps) {
   useEffect(() => {
     fetchAttendanceReports();
     // Refresh every 30 seconds
-    const interval = setInterval(fetchAttendanceReports, 30000);
+    const interval = setInterval(fetchAttendanceReports, 120000);
     return () => clearInterval(interval);
   }, []);
 

@@ -35,7 +35,7 @@ export function NotificationCenter({ accessToken }: Props) {
   useEffect(() => {
     if (!accessToken) return;
     fetchNotifications();
-    const timer = setInterval(fetchNotifications, 15000); // Poll every 15s
+    const timer = setInterval(fetchNotifications, 120000); // Poll every 2 min
     return () => clearInterval(timer);
   }, [accessToken]);
 

@@ -191,7 +191,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       }
     };
     fetchCount();
-    timer = setInterval(fetchCount, 20000);
+    timer = setInterval(fetchCount, 120000);
     return () => clearInterval(timer);
   }, [canManageCadets, accessToken]);
 

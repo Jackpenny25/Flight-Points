@@ -26,7 +26,7 @@ export function Leaderboards() {
   useEffect(() => {
     fetchLeaderboards();
     // Refresh every 30 seconds
-    const interval = setInterval(fetchLeaderboards, 30000);
+    const interval = setInterval(fetchLeaderboards, 120000);
     return () => clearInterval(interval);
   }, []);
 

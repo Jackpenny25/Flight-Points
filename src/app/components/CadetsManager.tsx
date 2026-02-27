@@ -10,7 +10,7 @@ import { formatFlight } from './ui/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
-import { Plus, Trash2, UserPlus, Edit2 } from 'lucide-react';
+import { Plus, Trash2, UserPlus, Edit2, Shield } from 'lucide-react';
 import { Checkbox } from './ui/checkbox';
 import { toast } from 'sonner';
 
@@ -19,6 +19,7 @@ interface Cadet {
   name: string;
   flight: string;
   rank?: string;
+  isNco?: boolean;
   createdAt: string;
 }
 
@@ -134,7 +135,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     fetchCadets();
     const id = setInterval(() => {
       fetchCadets();
-    }, 30000);
+    }, 120000);
     return () => clearInterval(id);
   }, []);
 
@@ -307,6 +308,26 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
       setEditSubmitting(false);
     }
   };
+
+  const handleToggleNco = async (cadet: Cadet) => {
+    if (!ensureAdminPin()) return;
+    const newValue = !cadet.isNco;
+    try {
+      const res = await api.updateCadet(cadet.id, { isNco: newValue } as any);
+      if (res && res.id) {
+        const updated = cadets.map(c => c.id === cadet.id ? { ...c, isNco: newValue } : c);
+        setCadets(updated);
+        localStorage.setItem('cadets', JSON.stringify(updated));
+        toast.success(`${cadet.name} ${newValue ? 'marked as NCO — cannot receive points' : 'unmarked as NCO — can receive points again'}`);
+      } else {
+        toast.error(res?.error || 'Failed to update NCO status');
+      }
+    } catch (err) {
+      console.error('Toggle NCO failed', err);
+      toast.error('Failed to update NCO status');
+    }
+  };
+
   const confirmBulkRemove = async () => {
     if (!ensureAdminPin()) return;
     if (bulkRemoveConfirmText !== 'DELETE') {
@@ -366,7 +387,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     const isHq = cadet.flight === 'hq';
 
     return (
-      <div ref={isHq ? undefined : drag as any} className={`p-3 mb-2 bg-white rounded border flex justify-between items-center ${checked ? 'ring-2 ring-red-200' : ''}`}>
+      <div ref={isHq ? undefined : drag as any} className={`p-3 mb-2 bg-white rounded border flex justify-between items-center ${checked ? 'ring-2 ring-red-200' : ''} ${cadet.isNco ? 'border-amber-300 bg-amber-50' : ''}`}>
         <div className="flex items-center gap-3">
           <Checkbox checked={checked} onCheckedChange={() => {
             const next = new Set(selectedCadetIds);
@@ -375,14 +396,28 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             setSelectedCadetIds(next);
           }} />
           <div className="flex-1 min-w-0">
-            <div className="font-medium truncate max-w-[220px]">
+            <div className="font-medium truncate max-w-[220px] flex items-center gap-1">
               {isHq && cadet.rank ? <span className="text-blue-700 mr-1">{cadet.rank}</span> : null}
               {formatDisplayName(cadet.name)}
+              {cadet.isNco && (
+                <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-700 bg-amber-200 px-1.5 py-0.5 rounded ml-1" title="NCO — cannot receive points">
+                  <Shield className="h-3 w-3" />NCO
+                </span>
+              )}
             </div>
             {!isHq && <div className="text-sm text-gray-500">{formatFlight(cadet.flight)}</div>}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant={cadet.isNco ? 'default' : 'outline'}
+            className={`h-7 px-2 text-xs ${cadet.isNco ? 'bg-amber-600 hover:bg-amber-700' : ''}`}
+            onClick={() => handleToggleNco(cadet)}
+            title={cadet.isNco ? 'Remove NCO status' : 'Mark as NCO (cannot receive points)'}
+          >
+            <Shield size={12} className="mr-1" />{cadet.isNco ? 'NCO' : 'NCO'}
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => openEditCadet(cadet)}><Edit2 size={14} /></Button>
           <Button size="sm" variant="destructive" onClick={() => handleDeleteCadet(cadet.id, cadet.name)}><Trash2 size={14} /></Button>
         </div>
@@ -468,7 +503,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     }
   };
 
-  // Group cadets by flight (exclude hq)
+  // Group cadets by flight (exclude hq) and sort alphabetically
   const cadetsByFlight = cadets.filter(c => c.flight !== 'hq').reduce((acc, cadet) => {
     if (!acc[cadet.flight]) {
       acc[cadet.flight] = [];
@@ -477,8 +512,13 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     return acc;
   }, {} as Record<string, Cadet[]>);
 
-  // HQ / Staff members
-  const hqMembers = cadets.filter(c => c.flight === 'hq');
+  // Sort each flight group alphabetically
+  for (const key of Object.keys(cadetsByFlight)) {
+    cadetsByFlight[key].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // HQ / Staff members (sorted alphabetically)
+  const hqMembers = cadets.filter(c => c.flight === 'hq').sort((a, b) => a.name.localeCompare(b.name));
 
   // Ensure we always show at least three flight headings (1,2,3)
   const defaultFlights = ['1', '2', '3'];

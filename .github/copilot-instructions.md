@@ -89,3 +89,14 @@ LATEST PROJECT NOTES (2026-02-27 - points tab improvements):
 - Name confirmation: as names are typed, a matched cadets list shows below the textarea with green ticks for found names, amber warnings for ambiguous, red for not found, and red for flight-restricted (pointgivers only).
 - Accounts tab: usernames can now be edited inline (pencil icon). Server validates uniqueness. Delete button is now a red "Delete" button with text. Username preview shown when creating accounts.
 - `api.createPoint()` now calls `/api/points` instead of `/api/data/points`.
+
+LATEST PROJECT NOTES (2026-02-27 - NCO support & cadets sorting):
+- Cadets table now has an `is_nco` BOOLEAN column (default FALSE). Migration: `20260227_add_nco_to_cadets.sql` — must be run in DBeaver.
+- NCOs cannot receive points. Enforced at three levels:
+  1. Server: `POST /api/points` checks `is_nco` and rejects with 403.
+  2. Server: generic `POST /api/data/points` also checks `is_nco`.
+  3. Client: PointsManager name validation marks NCOs with red indicator and adds them to the invalid list.
+- CadetsManager now shows an NCO toggle button (shield icon) on each cadet card. When toggled on, the card gets an amber highlight and "NCO" badge.
+- Cadets are now sorted alphabetically (A-Z) within each flight column and in the HQ section.
+- Server typeConfig for cadets changed orderBy from `created_at DESC` to `name ASC`.
+- `isNco` is mapped to `is_nco` in the cadets typeConfig columns.

@@ -167,6 +167,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     cadet: any | null;
     ambiguous: boolean;
     restrictedFlight: boolean; // true if pointgiver tries to give to another flight
+    isNco: boolean; // true if cadet is an NCO
   }
 
   const [resolvedEntries, setResolvedEntries] = useState<ResolvedName[]>([]);
@@ -192,18 +193,21 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       const match = matchCadetByPartialName(name);
       if (!match) {
         invalid.push(name);
-        resolved.push({ input: name, cadet: null, ambiguous: false, restrictedFlight: false });
+        resolved.push({ input: name, cadet: null, ambiguous: false, restrictedFlight: false, isNco: false });
       } else if (match.ambiguous) {
         const inputLower = name.trim().toLowerCase();
         const inputParts = inputLower.split(/\s+/);
         const inputLastName = inputParts[0];
         const siblings = cadets.filter(c => c.name.toLowerCase().startsWith(inputLastName));
         ambiguous.push(`${name} (could be: ${siblings.map(s => s.name).join(', ')} - add first initial)`);
-        resolved.push({ input: name, cadet: match.cadet, ambiguous: true, restrictedFlight: false });
+        resolved.push({ input: name, cadet: match.cadet, ambiguous: true, restrictedFlight: false, isNco: false });
       } else {
+        const isNco = !!match.cadet.isNco;
         const restrictedFlight = isPointGiver && userFlight && match.cadet.flight !== userFlight;
-        resolved.push({ input: name, cadet: match.cadet, ambiguous: false, restrictedFlight: !!restrictedFlight });
-        if (restrictedFlight) {
+        resolved.push({ input: name, cadet: match.cadet, ambiguous: false, restrictedFlight: !!restrictedFlight, isNco });
+        if (isNco) {
+          invalid.push(`${name} (NCO — cannot receive points)`);
+        } else if (restrictedFlight) {
           invalid.push(`${name} (${formatFlight(match.cadet.flight)} — not your flight)`);
         }
       }
@@ -217,7 +221,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
   const detectedFlights = useMemo(() => {
     const flights = new Set<string>();
     resolvedEntries.forEach(entry => {
-      if (entry.cadet && !entry.ambiguous && !entry.restrictedFlight) {
+      if (entry.cadet && !entry.ambiguous && !entry.restrictedFlight && !entry.isNco) {
         flights.add(entry.cadet.flight);
       }
     });
@@ -254,7 +258,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       const userName = currentUser?.name || 'unknown';
 
       // Use resolved entries to get each cadet's flight
-      const validEntries = resolvedEntries.filter(e => e.cadet && !e.ambiguous && !e.restrictedFlight);
+      const validEntries = resolvedEntries.filter(e => e.cadet && !e.ambiguous && !e.restrictedFlight && !e.isNco);
       const promises = validEntries.map(async (entry) => {
         const cadetFlight = entry.cadet.flight || selectedFlight || '';
         const data = {
@@ -432,11 +436,17 @@ export function PointsManager({ userRole }: PointsManagerProps) {
                 <div className="text-xs font-medium text-muted-foreground mb-1">Matched cadets:</div>
                 {resolvedEntries.map((entry, idx) => (
                   <div key={idx} className="flex items-center gap-2 text-sm">
-                    {entry.cadet && !entry.ambiguous && !entry.restrictedFlight ? (
+                    {entry.cadet && !entry.ambiguous && !entry.restrictedFlight && !entry.isNco ? (
                       <>
                         <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
                         <span className="text-green-700 dark:text-green-400 font-medium">{entry.cadet.name}</span>
                         <Badge variant="outline" className="text-xs ml-auto">{formatFlight(entry.cadet.flight)}</Badge>
+                      </>
+                    ) : entry.isNco ? (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                        <span className="text-red-600">{entry.cadet?.name || entry.input}</span>
+                        <span className="text-xs text-red-500 ml-auto">NCO — cannot receive points</span>
                       </>
                     ) : entry.restrictedFlight ? (
                       <>
