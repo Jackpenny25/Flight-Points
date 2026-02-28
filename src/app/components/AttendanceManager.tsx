@@ -140,7 +140,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const fetchAttendance = async () => {
     try {
       const data = await api.getAttendance();
-      const attendanceData = data.attendance || [];
+      const attendanceData = Array.isArray(data) ? data : (data.attendance || data || []);
       setAttendance(attendanceData);
       try { localStorage.setItem('attendance', JSON.stringify(attendanceData)); } catch (e) { }
     } catch (error) {
@@ -156,7 +156,8 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const fetchBulkAttendance = async () => {
     try {
       const data = await api.getAttendanceReports ? await api.getAttendanceReports() : {};
-      setBulkEvents(data.bulks || []);
+      const bulksData = Array.isArray(data) ? data : (data.bulks || []);
+      setBulkEvents(bulksData);
     } catch (error) {
       console.error('Error fetching bulk attendance:', error);
     }
@@ -165,7 +166,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const fetchCadets = async () => {
     try {
       const data = await api.getCadets();
-      const cadetList = data.cadets || [];
+      const cadetList = Array.isArray(data) ? data : (data.cadets || []);
       setCadets(cadetList);
       setAttendanceStatuses(prev => {
         const next = { ...prev };

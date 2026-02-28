@@ -1363,6 +1363,7 @@ let rewardsSchemaInitPromise: Promise<void> | null = null;
 async function ensureRewardsSchema() {
   if (!rewardsSchemaInitPromise) {
     rewardsSchemaInitPromise = (async () => {
+      console.log('[ensureRewardsSchema] Initialising rewards schema...');
       await query('ALTER TABLE rewards ADD COLUMN IF NOT EXISTS winner_name VARCHAR');
       await query('ALTER TABLE rewards ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT \'active\'');
       await query(`CREATE TABLE IF NOT EXISTS reward_suggestions (
@@ -1371,8 +1372,7 @@ async function ensureRewardsSchema() {
         description TEXT,
         suggested_by VARCHAR NOT NULL,
         suggested_by_name VARCHAR,
-        suggested_at TIMESTAMP DEFAULT NOW(),
-        vote_count INTEGER DEFAULT 0
+        suggested_at TIMESTAMP DEFAULT NOW()
       )`);
       await query(`CREATE TABLE IF NOT EXISTS reward_votes (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1381,10 +1381,13 @@ async function ensureRewardsSchema() {
         created_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(suggestion_id, user_id)
       )`);
-      await query('CREATE INDEX IF NOT EXISTS idx_reward_suggestions_vote_count ON reward_suggestions (vote_count DESC)');
+      // Drop the old vote_count column if it exists (we compute it via subquery now)
+      await query('ALTER TABLE reward_suggestions DROP COLUMN IF EXISTS vote_count').catch(() => {});
       await query('CREATE INDEX IF NOT EXISTS idx_reward_votes_suggestion_id ON reward_votes (suggestion_id)');
       await query('CREATE INDEX IF NOT EXISTS idx_reward_votes_user_id ON reward_votes (user_id)');
+      console.log('[ensureRewardsSchema] Schema ready.');
     })().catch((error) => {
+      console.error('[ensureRewardsSchema] Failed:', error?.message || error);
       rewardsSchemaInitPromise = null;
       throw error;
     });
@@ -1397,10 +1400,10 @@ app.get('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Re
   try {
     await ensureRewardsSchema();
     const result = await query(
-      `SELECT rs.*, 
-        (SELECT COUNT(*)::int FROM reward_votes rv WHERE rv.suggestion_id = rs.id) AS vote_count
+      `SELECT rs.id, rs.title, rs.description, rs.suggested_by, rs.suggested_by_name, rs.suggested_at,
+        (SELECT COUNT(*)::int FROM reward_votes rv WHERE rv.suggestion_id = rs.id) AS computed_vote_count
        FROM reward_suggestions rs
-       ORDER BY vote_count DESC, rs.suggested_at DESC`
+       ORDER BY computed_vote_count DESC, rs.suggested_at DESC`
     );
     // Also get the current user's votes
     const userId = req.user?.id || '';
@@ -1416,12 +1419,12 @@ app.get('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Re
       suggestedBy: row.suggested_by,
       suggestedByName: row.suggested_by_name,
       suggestedAt: row.suggested_at,
-      voteCount: Number(row.vote_count),
+      voteCount: Number(row.computed_vote_count || 0),
       hasVoted: userVotes.has(row.id),
     }));
     res.json(suggestions);
-  } catch (error) {
-    console.error('Error in GET /api/reward-suggestions:', error);
+  } catch (error: any) {
+    console.error('Error in GET /api/reward-suggestions:', error?.message || error);
     res.status(500).json({ error: 'Failed to fetch suggestions' });
   }
 });
@@ -1513,6 +1516,48 @@ app.delete('/api/reward-suggestions/:id', requireAuth, async (req: AuthRequest, 
   } catch (error) {
     console.error('Error in DELETE /api/reward-suggestions/:id:', error);
     res.status(500).json({ error: 'Failed to delete suggestion' });
+  }
+});
+
+// Notifications stub endpoint (no notifications table yet — return empty)
+app.get('/api/notifications', requireAuth, async (req: AuthRequest, res: Response) => {
+  res.json([]);
+});
+app.post('/api/notifications/:id/read', requireAuth, async (req: AuthRequest, res: Response) => {
+  res.json({ success: true });
+});
+app.post('/api/notifications/read-all', requireAuth, async (req: AuthRequest, res: Response) => {
+  res.json({ success: true });
+});
+
+// My Points endpoint — returns points for a specific cadet
+app.get('/api/my-points', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const cadetName = req.query.name as string;
+    if (!cadetName) {
+      return res.status(400).json({ error: 'Missing name parameter' });
+    }
+    const result = await query(
+      'SELECT * FROM points WHERE LOWER(cadet_name) = LOWER($1) ORDER BY date DESC NULLS LAST',
+      [cadetName]
+    );
+    const points = result.rows.map((row: any) => ({
+      id: row.id,
+      cadetName: row.cadet_name,
+      date: row.date,
+      flight: row.flight,
+      reason: row.reason,
+      points: row.points,
+      type: row.type,
+      givenBy: row.given_by,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+    const total = points.reduce((sum: number, p: any) => sum + (Number(p.points) || 0), 0);
+    res.json({ points, total });
+  } catch (error) {
+    console.error('Error in GET /api/my-points:', error);
+    res.status(500).json({ error: 'Failed to fetch points' });
   }
 });
 

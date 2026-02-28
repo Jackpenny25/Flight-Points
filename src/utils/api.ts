@@ -67,7 +67,7 @@ export const api = {
   getPresentationStats: () => fetchWithAuth('/presentation-stats', { method: 'GET' }).then(r => r.json()),
   getReports: () => fetchWithAuth('/reports', { method: 'GET' }).then(r => r.json()),
   runIntegrityCheck: () => fetchWithAuth('/integrity-check', { method: 'GET' }).then(r => r.json()),
-  getAttendanceSummary: () => fetchWithAuth('/attendance-summary', { method: 'GET' }).then(r => r.json()),
+  getAttendanceSummary: () => fetchWithAuth('/attendance/reports', { method: 'GET' }).then(r => r.json()),
   
   // Admin Point Givers
   getPointGivers: () => fetchWithAuth('/admin/point-givers', { method: 'GET' }).then(r => r.json()),
@@ -92,7 +92,7 @@ export const api = {
   markAllNotificationsRead: () => fetchWithAuth('/notifications/read-all', { method: 'POST' }).then(r => r.json()),
   
   // User's own points
-  getMyPoints: (cadetName: string) => fetchWithAuth(`/data/my-points?name=${encodeURIComponent(cadetName)}`, { method: 'GET' }).then(r => r.json()),
+  getMyPoints: (cadetName: string) => fetchWithAuth(`/my-points?name=${encodeURIComponent(cadetName)}`, { method: 'GET' }).then(r => r.json()),
   
   // CSV Export
   exportCsv: (type: string) => fetchWithAuth(`/export/${type}`, { method: 'GET' }).then(r => r.blob()),

@@ -178,3 +178,12 @@ LATEST PROJECT NOTES (2026-02-28 - rewards improvements):
 - Server endpoints added: `GET/POST /api/reward-suggestions`, `POST /api/reward-suggestions/:id/vote`, `DELETE /api/reward-suggestions/:id`.
 - API methods added: `getRewardSuggestions()`, `createRewardSuggestion()`, `voteRewardSuggestion()`, `deleteRewardSuggestion()`.
 - Migration must be run in DBeaver: `migrations/20260228_reward_suggestions_and_winner.sql`.
+
+LATEST PROJECT NOTES (2026-02-28 - bug fixes batch):
+- **AttendanceManager data parsing fixed**: `fetchCadets`, `fetchAttendance`, `fetchBulkAttendance` all used `data.xxx || []` pattern which fails when API returns a flat array. Fixed to use `Array.isArray(data) ? data : (data.xxx || [])`.
+- **Reward suggestions GET 500 fixed**: The `reward_suggestions` table had a `vote_count` column that clashed with the computed subquery alias `vote_count` in the GET query. Fixed by: removing the `vote_count` column from the table (schema now drops it), explicitly selecting named columns instead of `rs.*`, and renaming the computed alias to `computed_vote_count`.
+- **Notifications 404 fixed**: Added stub `/api/notifications`, `/api/notifications/:id/read`, and `/api/notifications/read-all` endpoints that return empty arrays/success. No `notifications` table exists yet — these are placeholder endpoints to prevent console errors.
+- **MyPoints endpoint created**: Added `GET /api/my-points?name=<cadetName>` endpoint that returns `{ points: [...], total: N }`. Previously, `api.getMyPoints` called `/data/my-points` which didn't exist (no type alias). Client URL updated from `/data/my-points` to `/my-points`.
+- **Attendance summary URL fixed**: `api.getAttendanceSummary` was calling `/attendance-summary` but the server endpoint is at `/attendance/reports`. Fixed the URL in api.ts.
+- **Cadet nav bar visibility fixed**: Dashboard condition `userRole === 'cadet' && cadetName &&` prevented cadet nav from showing when cadetName was null. Fixed by removing the cadetName requirement for the nav bar; only "My Points" button requires cadetName.
+- Generic CRUD endpoints (`/api/data/:type`) return **flat arrays** via `res.json(mapRowsToClient(...))`, NOT wrapped objects. Components must use `Array.isArray(data) ? data : []` when consuming these.
