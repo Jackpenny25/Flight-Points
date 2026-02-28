@@ -163,6 +163,7 @@ app.post('/api/auth/login', authLimiter, async (req: Request, res: Response) => 
       name: user.name,
       role: user.role,
       cadetId: cadetId || undefined,
+      cadetName: cadetId ? user.name : undefined,
       flight: userFlight || undefined,
     }, JWT_SECRET, { expiresIn: '7d' });
     return res.json({ token });
@@ -2095,13 +2096,18 @@ app.post('/api/tickets', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Description is required' });
     }
     const id = crypto.randomUUID();
-    const result = await query(
-      `INSERT INTO tickets (id, title, description, type, category, evidence_url, created_by, status, priority, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', 'medium', NOW(), NOW()) RETURNING *`,
-      [id, category || type || 'Ticket', description.trim(), type || 'Request', category || 'Other', evidenceUrl || null, user.name]
+    // Insert using only guaranteed base columns
+    await query(
+      `INSERT INTO tickets (id, title, description, created_by, status, priority, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'open', 'medium', NOW(), NOW())`,
+      [id, category || type || 'Ticket', description.trim(), user.name]
     );
-    // Ensure comments column exists and is set
+    // Update extended columns (added by ensureTicketsSchema)
+    await query(`UPDATE tickets SET type = $1, category = $2, evidence_url = $3 WHERE id = $4`,
+      [type || 'Request', category || 'Other', evidenceUrl || null, id]
+    ).catch(() => {});
     await query(`UPDATE tickets SET comments = '[]'::jsonb WHERE id = $1 AND comments IS NULL`, [id]).catch(() => {});
+    const result = await query('SELECT * FROM tickets WHERE id = $1', [id]);
     res.status(201).json({ ticket: mapTicket(result.rows[0]) });
   } catch (error) {
     console.error('Error in POST /api/tickets:', error);
