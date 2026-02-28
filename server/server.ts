@@ -984,6 +984,22 @@ app.get('/api/presentation-stats', async (req, res) => {
        LIMIT 10`
     );
 
+    // 1b) Rising Cadets — top earners this calendar month
+    const risingMonthResult = await query(
+      `SELECT cadet_name AS name,
+              COALESCE(
+                (SELECT c.flight FROM cadets c WHERE LOWER(TRIM(c.name)) = LOWER(TRIM(points.cadet_name)) LIMIT 1),
+                MAX(flight)
+              ) AS flight,
+              COALESCE(SUM(points), 0) AS month_points
+       FROM points
+       WHERE date >= DATE_TRUNC('month', NOW())
+         AND (type IS NULL OR type <> 'attendance')
+       GROUP BY cadet_name
+       ORDER BY month_points DESC
+       LIMIT 10`
+    );
+
     // 2) Weekly comparison — flight totals this week vs last week
     const thisWeekFlights = await query(
       `SELECT flight, COALESCE(SUM(points), 0) AS points
@@ -1065,6 +1081,11 @@ app.get('/api/presentation-stats', async (req, res) => {
         name: r.name,
         flight: r.flight || '',
         weekPoints: Number(r.week_points),
+      })),
+      risingCadets: risingMonthResult.rows.map(r => ({
+        name: r.name,
+        flight: r.flight || '',
+        monthPoints: Number(r.month_points),
       })),
       thisWeekFlights: thisWeekFlights.rows.map(r => ({
         flight: r.flight,

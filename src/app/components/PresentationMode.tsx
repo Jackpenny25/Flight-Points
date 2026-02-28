@@ -106,7 +106,7 @@ const SLIDE_NAMES = [
   'Flight Points',
   'Top Cadets',
   'Leaderboard',
-  'Rising Stars',
+  'Rising Cadets',
   'Flight Race',
   'Weekly Comparison',
   'Attendance Streaks',
@@ -341,41 +341,42 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
   const flight = data.winningFlight;
 
   return (
-    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '48px 60px 60px' }}>
+    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '36px 48px 70px', justifyContent: 'flex-start' }}>
       <h1 style={{
-        fontSize: 56, fontWeight: 'bold', textAlign: 'center' as const,
-        color: T.gold, marginBottom: 36, fontFamily: FONT,
+        fontSize: 64, fontWeight: 'bold', textAlign: 'center' as const,
+        color: T.gold, marginBottom: 32, fontFamily: FONT,
       }}>
         Flight Points
       </h1>
 
       <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48,
-        maxWidth: 1400, width: '100%', margin: '0 auto', flex: 1,
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 56,
+        maxWidth: 1500, width: '100%', margin: '0 auto', flex: 1,
+        alignContent: 'start',
       }}>
         <div style={{ display: 'flex', flexDirection: 'column' as const }}>
-          <h2 style={{ fontSize: 32, fontWeight: 'bold', color: T.textLight, marginBottom: 16, fontFamily: FONT }}>
+          <h2 style={{ fontSize: 40, fontWeight: 'bold', color: T.textLight, marginBottom: 20, fontFamily: FONT }}>
             Flight Point Totals
           </h2>
           <PPTable
             headers={['Flight', 'Points']}
             rows={flights.map(f => [flightLabel(f.flight), String(f.points)])}
             aligns={['left', 'right']}
-            fontSize={28}
+            fontSize={34}
           />
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column' as const }}>
-          <h2 style={{ fontSize: 32, fontWeight: 'bold', color: T.textLight, marginBottom: 16, fontFamily: FONT }}>
+          <h2 style={{ fontSize: 40, fontWeight: 'bold', color: T.textLight, marginBottom: 20, fontFamily: FONT }}>
             Who Has the Most Points
           </h2>
           {cadet && (
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: 28 }}>
               <PPTable
                 headers={['Winning Cadet', 'Points']}
                 rows={[[cadet.name, String(cadet.points)]]}
                 aligns={['left', 'right']}
-                fontSize={28}
+                fontSize={34}
               />
             </div>
           )}
@@ -384,7 +385,7 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
               headers={['Winning Flight', 'Points']}
               rows={[[flightLabel(flight.flight), String(flight.points)]]}
               aligns={['left', 'right']}
-              fontSize={28}
+              fontSize={34}
             />
           )}
         </div>
@@ -409,70 +410,70 @@ function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; st
 
   const medalColors = [T.gold, T.silver, T.bronze];
   const medalLabels = ['1st', '2nd', '3rd'];
-  // 1st = tallest (280), 2nd = 220, 3rd = 180
-  const podiumHeights = [280, 220, 180];
+  // 1st = tallest (340), 2nd = 260, 3rd = 210 — scaled up
+  const podiumHeights = [340, 260, 210];
   // Display order: 2nd, 1st, 3rd (1st in the centre)
   const displayOrder = top3.length >= 3 ? [1, 0, 2] : top3.length === 2 ? [1, 0] : [0];
 
   const months = stats?.flightOfTheMonth || [];
 
   return (
-    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '36px 60px 48px' }}>
+    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '24px 60px 70px', justifyContent: 'flex-start' }}>
       <h1 style={{
-        fontSize: 48, fontWeight: 'bold', color: T.gold,
-        textAlign: 'center' as const, marginBottom: 20, fontFamily: FONT,
+        fontSize: 56, fontWeight: 'bold', color: T.gold,
+        textAlign: 'center' as const, marginBottom: 12, fontFamily: FONT,
       }}>
         Top Cadets
       </h1>
 
-      {/* Podium */}
+      {/* Podium — pushed to top */}
       {top3.length > 0 && (
         <div style={{
           display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-          gap: 28, paddingBottom: 24, flex: 1,
+          gap: 36, flex: 1, paddingBottom: 16,
         }}>
           {displayOrder.map(idx => {
             const entry = top3[idx];
             if (!entry) return null;
             const color = medalColors[idx] || '#888';
-            const height = podiumHeights[idx] || 160;
+            const height = podiumHeights[idx] || 180;
             return (
               <div key={idx} style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
               }}>
                 {/* Medal circle */}
                 <div style={{
-                  width: 80, height: 80, borderRadius: '50%',
+                  width: 96, height: 96, borderRadius: '50%',
                   backgroundColor: color,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 28, fontWeight: 'bold', color: '#1a1a1a',
+                  fontSize: 34, fontWeight: 'bold', color: '#1a1a1a',
                   fontFamily: FONT,
-                  boxShadow: `0 4px 20px ${color}88`,
+                  boxShadow: `0 4px 24px ${color}88`,
                 }}>
                   {medalLabels[idx]}
                 </div>
                 {/* Name */}
                 <div style={{
-                  fontSize: 22, fontWeight: 'bold', color: T.white,
-                  fontFamily: FONT, textAlign: 'center' as const, maxWidth: 180,
+                  fontSize: 28, fontWeight: 'bold', color: T.white,
+                  fontFamily: FONT, textAlign: 'center' as const, maxWidth: 220,
                 }}>
                   {entry.name}
                 </div>
                 {/* Points */}
                 <div style={{
-                  fontSize: 18, color: T.textMuted, fontFamily: FONT,
+                  fontSize: 22, color: T.textMuted, fontFamily: FONT,
                 }}>
                   {entry.totalPoints ?? entry.points} pts
                 </div>
                 {/* Podium block */}
                 <div style={{
-                  width: 160, height,
+                  width: 190, height,
                   background: `linear-gradient(180deg, ${color}, ${color}88)`,
-                  borderRadius: '12px 12px 0 0',
+                  borderRadius: '14px 14px 0 0',
                   display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-                  paddingTop: 16, fontSize: 42, fontWeight: 'bold',
+                  paddingTop: 20, fontSize: 52, fontWeight: 'bold',
                   color: '#1a1a1a', fontFamily: FONT,
-                  boxShadow: `0 -4px 20px ${color}44`,
+                  boxShadow: `0 -4px 24px ${color}44`,
                 }}>
                   {idx + 1}
                 </div>
@@ -484,16 +485,16 @@ function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; st
 
       {/* Flight of the Month — compact cards row */}
       {months.length > 0 && (
-        <div style={{ width: '100%', maxWidth: 1200 }}>
+        <div style={{ width: '100%', maxWidth: 1300, marginTop: 4 }}>
           <h2 style={{
-            fontSize: 22, fontWeight: 'bold', color: T.gold,
-            textAlign: 'center' as const, marginBottom: 12, fontFamily: FONT,
+            fontSize: 26, fontWeight: 'bold', color: T.gold,
+            textAlign: 'center' as const, marginBottom: 14, fontFamily: FONT,
             textTransform: 'uppercase' as const, letterSpacing: 2,
           }}>
             Flight of the Month
           </h2>
           <div style={{
-            display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' as const,
+            display: 'flex', gap: 18, justifyContent: 'center', flexWrap: 'wrap' as const,
           }}>
             {months.slice(0, 6).map((m, i) => {
               const color = flightColor(m.flight);
@@ -502,31 +503,31 @@ function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; st
                 <div key={i} style={{
                   backgroundColor: T.cardBg,
                   border: isCurrent ? `2px solid ${T.gold}` : `1px solid ${T.border}`,
-                  borderRadius: 12, padding: '14px 24px',
-                  textAlign: 'center' as const, minWidth: 140,
+                  borderRadius: 12, padding: '14px 28px',
+                  textAlign: 'center' as const, minWidth: 160,
                   boxShadow: isCurrent ? `0 0 16px ${T.gold}33` : 'none',
                 }}>
                   <div style={{
-                    fontSize: 13, color: T.textMuted,
+                    fontSize: 14, color: T.textMuted,
                     fontFamily: FONT, marginBottom: 4, textTransform: 'uppercase' as const,
                     letterSpacing: 1,
                   }}>
                     {monthLabel(m.month)}
                   </div>
                   <div style={{
-                    fontSize: 22, fontWeight: 'bold', color,
+                    fontSize: 24, fontWeight: 'bold', color,
                     fontFamily: FONT,
                   }}>
                     {flightLabel(m.flight)}
                   </div>
                   <div style={{
-                    fontSize: 15, color: T.textMuted, fontFamily: FONT,
+                    fontSize: 16, color: T.textMuted, fontFamily: FONT,
                   }}>
                     {m.points} pts
                   </div>
                   {isCurrent && (
                     <div style={{
-                      marginTop: 4, fontSize: 11, color: T.gold,
+                      marginTop: 4, fontSize: 12, color: T.gold,
                       fontWeight: 'bold', fontFamily: FONT,
                       textTransform: 'uppercase' as const, letterSpacing: 2,
                     }}>
@@ -634,53 +635,68 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
    SLIDE 4 — Rising Stars (top gainers this week)
    ═══════════════════════════════════════════════════════════════ */
 function SlideRisingStars({ stats }: { stats: PresentationStats | null }) {
-  const stars = stats?.risingStars || [];
+  // Use monthly risers if available, else fall back to weekly
+  const stars = (stats as any)?.risingCadets?.length > 0
+    ? (stats as any).risingCadets as Array<{ name: string; flight: string; monthPoints: number }>
+    : null;
+  const weekStars = stats?.risingStars || [];
+
+  // Normalise into common shape
+  const items = stars
+    ? stars.map(s => ({ name: s.name, flight: s.flight, points: s.monthPoints }))
+    : weekStars.map(s => ({ name: s.name, flight: s.flight, points: s.weekPoints }));
+
+  const periodLabel = stars ? 'Top point earners this month' : 'Top point earners this month';
+
+  // Colour for 4th+ place — cornflower blue
+  const fourthPlus = '#6495ED';
+  const fourthPlusDim = '#4a75c7';
 
   return (
-    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '48px 80px 60px' }}>
+    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '36px 60px 70px' }}>
       <h1 style={{
-        fontSize: 48, fontWeight: 'bold', color: T.gold,
+        fontSize: 56, fontWeight: 'bold', color: T.gold,
         textAlign: 'center' as const, marginBottom: 8, fontFamily: FONT,
       }}>
-        Rising Stars
+        Rising Cadets
       </h1>
       <p style={{
-        fontSize: 20, color: T.textMuted, textAlign: 'center' as const,
-        marginBottom: 28, fontFamily: FONT,
+        fontSize: 24, color: T.textMuted, textAlign: 'center' as const,
+        marginBottom: 32, fontFamily: FONT,
       }}>
-        Top point earners this week
+        {periodLabel}
       </p>
 
-      {stars.length === 0 ? (
-        <p style={{ fontSize: 24, color: T.textMuted, fontFamily: FONT, textAlign: 'center' as const }}>
-          No points awarded this week yet.
+      {items.length === 0 ? (
+        <p style={{ fontSize: 28, color: T.textMuted, fontFamily: FONT, textAlign: 'center' as const }}>
+          No points awarded this month yet.
         </p>
       ) : (
-        <div style={{ maxWidth: 900, width: '100%', margin: '0 auto' }}>
-          {stars.slice(0, 8).map((s, i) => {
-            const maxPts = stars[0]?.weekPoints || 1;
-            const pct = Math.max(8, (s.weekPoints / maxPts) * 100);
+        <div style={{ maxWidth: 1100, width: '100%', margin: '0 auto' }}>
+          {items.slice(0, 10).map((s, i) => {
+            const maxPts = items[0]?.points || 1;
+            const pct = Math.max(8, (s.points / maxPts) * 100);
             return (
               <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 16,
-                marginBottom: 10, fontFamily: FONT,
+                display: 'flex', alignItems: 'center', gap: 20,
+                marginBottom: 14, fontFamily: FONT,
               }}>
                 <span style={{
-                  fontSize: 22, fontWeight: 'bold', color: T.textLight,
-                  width: 36, textAlign: 'right' as const,
+                  fontSize: 28, fontWeight: 'bold', color: T.textLight,
+                  width: 44, textAlign: 'right' as const,
                 }}>
                   {i + 1}.
                 </span>
                 <span style={{
-                  fontSize: 22, fontWeight: 'bold', color: T.white,
-                  width: 200, overflow: 'hidden', textOverflow: 'ellipsis',
+                  fontSize: 28, fontWeight: 'bold', color: T.white,
+                  width: 260, overflow: 'hidden', textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap' as const,
                 }}>
                   {s.name}
                 </span>
                 <div style={{
-                  flex: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.08)',
-                  borderRadius: 6, overflow: 'hidden', position: 'relative' as const,
+                  flex: 1, height: 44, backgroundColor: 'rgba(255,255,255,0.08)',
+                  borderRadius: 8, overflow: 'hidden', position: 'relative' as const,
                 }}>
                   <div style={{
                     width: `${pct}%`, height: '100%',
@@ -690,17 +706,17 @@ function SlideRisingStars({ stats }: { stats: PresentationStats | null }) {
                         ? `linear-gradient(90deg, ${T.silver}, #a8a8a8)`
                         : i === 2
                           ? `linear-gradient(90deg, ${T.bronze}, #b06828)`
-                          : `linear-gradient(90deg, ${T.green}, ${T.greenDim})`,
-                    borderRadius: 6,
+                          : `linear-gradient(90deg, ${fourthPlus}, ${fourthPlusDim})`,
+                    borderRadius: 8,
                     transition: 'width 0.5s ease',
                     display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                    paddingRight: 12,
+                    paddingRight: 14,
                   }}>
                     <span style={{
-                      fontSize: 18, fontWeight: 'bold',
+                      fontSize: 22, fontWeight: 'bold',
                       color: i < 3 ? '#1a1a1a' : '#fff',
                     }}>
-                      {s.weekPoints} pts
+                      {s.points} pts
                     </span>
                   </div>
                 </div>
