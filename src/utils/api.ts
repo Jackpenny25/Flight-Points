@@ -56,6 +56,12 @@ export const api = {
   updateReward: (id: string, data: any) => fetchWithAuth(`/data/rewards/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => r.json()),
   deleteReward: (id: string) => fetchWithAuth(`/data/rewards/${id}`, { method: 'DELETE' }).then(r => r.json()),
 
+  // Reward Suggestions
+  getRewardSuggestions: () => fetchWithAuth('/reward-suggestions', { method: 'GET' }).then(r => r.json()),
+  createRewardSuggestion: (data: { title: string; description?: string }) => fetchWithAuth('/reward-suggestions', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+  voteRewardSuggestion: (id: string) => fetchWithAuth(`/reward-suggestions/${id}/vote`, { method: 'POST' }).then(r => r.json()),
+  deleteRewardSuggestion: (id: string) => fetchWithAuth(`/reward-suggestions/${id}`, { method: 'DELETE' }).then(r => r.json()),
+
   // Other endpoints
   getLeaderboards: () => fetchWithAuth('/leaderboards', { method: 'GET' }).then(r => r.json()),
   getPresentationStats: () => fetchWithAuth('/presentation-stats', { method: 'GET' }).then(r => r.json()),

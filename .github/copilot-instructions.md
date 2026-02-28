@@ -160,3 +160,21 @@ LATEST PROJECT NOTES (2026-02-28 - presentation role & slide tweaks):
 - Slide 4 renamed from "Rising Stars" to "Rising Cadets", now shows monthly top earners. 4th+ place bars changed from green to cornflower blue (#6495ED).
 - Slide 1 (Flight Points): tables scaled up — title 64px, section headings 40px, table text 34px, max-width 1500px, content starts from top.
 - Slide 2 (Top Cadets): podium moved up and enlarged — 1st=340px, 2nd=260px, 3rd=210px, medals 96px, names 28px, podium columns 190px wide.
+
+LATEST PROJECT NOTES (2026-02-28 - rewards improvements):
+- **Winner save bug fixed**: The `rewards` table now has `winner_name` (VARCHAR) and `status` (VARCHAR, default 'active') columns. Migration: `20260228_reward_suggestions_and_winner.sql`.
+- `typeConfig` for rewards now maps `winnerName` → `winner_name` and `status` → `status`.
+- When saving a winner (via "Save winner" button or Edit dialog), the reward's status is set to `'claimed'`, moving it out of active rewards.
+- Rewards are now categorised into three sections: Active, Claimed (amber header), and Previous/Expired.
+- Status badge shows: Active (green), Claimed (amber), Expired (grey).
+- **Cadet name matching for winners**: Winner input fields now have autocomplete dropdown that matches cadet names from the cadets table (same partial-match logic as PointsManager). Works in both inline "Save winner" and Edit dialog.
+- **Reward Suggestions & Voting system**: New `reward_suggestions` and `reward_votes` tables.
+  - Any logged-in user except snco can suggest a reward (title + optional description).
+  - All users can vote (toggle) on suggestions. Each user gets one vote per suggestion.
+  - Suggestions are ordered by vote count (highest first).
+  - Each suggestion shows: title, description, who suggested it, when, and vote count.
+  - The suggester or snco can delete a suggestion.
+  - UI: purple/indigo gradient header card in the Rewards tab, between Active Rewards and Claimed Rewards.
+- Server endpoints added: `GET/POST /api/reward-suggestions`, `POST /api/reward-suggestions/:id/vote`, `DELETE /api/reward-suggestions/:id`.
+- API methods added: `getRewardSuggestions()`, `createRewardSuggestion()`, `voteRewardSuggestion()`, `deleteRewardSuggestion()`.
+- Migration must be run in DBeaver: `migrations/20260228_reward_suggestions_and_winner.sql`.

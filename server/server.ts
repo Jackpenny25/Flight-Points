@@ -569,6 +569,8 @@ const typeConfig: Record<DataType, { table: string; columns: Record<string, stri
       howToWin: 'how_to_win',
       prize: 'prize',
       endsAt: 'ends_at',
+      winnerName: 'winner_name',
+      status: 'status',
       createdBy: 'created_by',
       createdAt: 'created_at',
       updatedAt: 'updated_at',
@@ -1341,6 +1343,129 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   } catch (error) {
     console.error('Error handling file upload:', error);
     res.status(500).json({ error: 'Failed to handle file upload' });
+  }
+});
+
+// ========== REWARD SUGGESTIONS & VOTING ENDPOINTS ==========
+
+// GET /api/reward-suggestions - List all suggestions ordered by votes
+app.get('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await query(
+      `SELECT rs.*, 
+        (SELECT COUNT(*)::int FROM reward_votes rv WHERE rv.suggestion_id = rs.id) AS vote_count
+       FROM reward_suggestions rs
+       ORDER BY vote_count DESC, rs.suggested_at DESC`
+    );
+    // Also get the current user's votes
+    const userId = req.user?.id || '';
+    const votesResult = await query(
+      'SELECT suggestion_id FROM reward_votes WHERE user_id = $1',
+      [userId]
+    );
+    const userVotes = new Set(votesResult.rows.map((r: any) => r.suggestion_id));
+    const suggestions = result.rows.map((row: any) => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      suggestedBy: row.suggested_by,
+      suggestedByName: row.suggested_by_name,
+      suggestedAt: row.suggested_at,
+      voteCount: Number(row.vote_count),
+      hasVoted: userVotes.has(row.id),
+    }));
+    res.json(suggestions);
+  } catch (error) {
+    console.error('Error in GET /api/reward-suggestions:', error);
+    res.status(500).json({ error: 'Failed to fetch suggestions' });
+  }
+});
+
+// POST /api/reward-suggestions - Create a suggestion (any role except snco)
+app.post('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user?.role === 'snco') {
+      return res.status(403).json({ error: 'Flight Point Leads create rewards directly, not suggestions.' });
+    }
+    const { title, description } = req.body || {};
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ error: 'Title is required' });
+    }
+    const id = crypto.randomUUID();
+    const result = await query(
+      `INSERT INTO reward_suggestions (id, title, description, suggested_by, suggested_by_name)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [id, String(title).trim(), String(description || '').trim() || null, req.user?.id || 'unknown', req.user?.name || 'Unknown']
+    );
+    const row = result.rows[0];
+    res.status(201).json({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      suggestedBy: row.suggested_by,
+      suggestedByName: row.suggested_by_name,
+      suggestedAt: row.suggested_at,
+      voteCount: 0,
+      hasVoted: false,
+    });
+  } catch (error) {
+    console.error('Error in POST /api/reward-suggestions:', error);
+    res.status(500).json({ error: 'Failed to create suggestion' });
+  }
+});
+
+// POST /api/reward-suggestions/:id/vote - Toggle vote on a suggestion
+app.post('/api/reward-suggestions/:id/vote', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id || '';
+    const suggestionId = req.params.id;
+    // Check suggestion exists
+    const check = await query('SELECT id FROM reward_suggestions WHERE id = $1', [suggestionId]);
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Suggestion not found' });
+    }
+    // Check if already voted
+    const existing = await query(
+      'SELECT id FROM reward_votes WHERE suggestion_id = $1 AND user_id = $2',
+      [suggestionId, userId]
+    );
+    if (existing.rows.length > 0) {
+      // Remove vote
+      await query('DELETE FROM reward_votes WHERE suggestion_id = $1 AND user_id = $2', [suggestionId, userId]);
+      const countResult = await query('SELECT COUNT(*)::int AS count FROM reward_votes WHERE suggestion_id = $1', [suggestionId]);
+      res.json({ voted: false, voteCount: Number(countResult.rows[0].count) });
+    } else {
+      // Add vote
+      await query(
+        'INSERT INTO reward_votes (id, suggestion_id, user_id) VALUES ($1, $2, $3)',
+        [crypto.randomUUID(), suggestionId, userId]
+      );
+      const countResult = await query('SELECT COUNT(*)::int AS count FROM reward_votes WHERE suggestion_id = $1', [suggestionId]);
+      res.json({ voted: true, voteCount: Number(countResult.rows[0].count) });
+    }
+  } catch (error) {
+    console.error('Error in POST /api/reward-suggestions/:id/vote:', error);
+    res.status(500).json({ error: 'Failed to toggle vote' });
+  }
+});
+
+// DELETE /api/reward-suggestions/:id - Delete a suggestion (snco or the person who suggested it)
+app.delete('/api/reward-suggestions/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const suggestionId = req.params.id;
+    const suggestion = await query('SELECT * FROM reward_suggestions WHERE id = $1', [suggestionId]);
+    if (suggestion.rows.length === 0) {
+      return res.status(404).json({ error: 'Suggestion not found' });
+    }
+    // Allow delete by the suggester or by snco
+    if (suggestion.rows[0].suggested_by !== req.user?.id && req.user?.role !== 'snco') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    await query('DELETE FROM reward_suggestions WHERE id = $1', [suggestionId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error in DELETE /api/reward-suggestions/:id:', error);
+    res.status(500).json({ error: 'Failed to delete suggestion' });
   }
 });
 
