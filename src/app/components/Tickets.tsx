@@ -62,7 +62,7 @@ export function Tickets({ accessToken }: TicketsProps) {
 
       const result = await api.createTicket({ type, category, description, evidenceUrl: uploadedUrl || evidenceUrl });
       if (result?.error) {
-        toast.error(`Failed to submit: ${result.error}`);
+        toast.error(`Failed: ${result.detail || result.error}`);
         return;
       }
       toast.success('Ticket submitted');

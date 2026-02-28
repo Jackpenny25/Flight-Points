@@ -2044,11 +2044,25 @@ app.get('/api/my-points', requireAuth, async (req: AuthRequest, res: Response) =
 // ========== TICKETS ENDPOINTS ==========
 
 async function ensureTicketsSchema() {
+  // Create table if it doesn't exist (safe on any DB)
+  await query(`
+    CREATE TABLE IF NOT EXISTS tickets (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      title VARCHAR NOT NULL,
+      description TEXT,
+      created_by VARCHAR NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `).catch(() => {});
+  // Add all optional columns safely
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS assigned_to VARCHAR`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'open'`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS priority VARCHAR DEFAULT 'medium'`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP`).catch(() => {});
   await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS type VARCHAR DEFAULT 'Request'`).catch(() => {});
   await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category VARCHAR DEFAULT 'Other'`).catch(() => {});
   await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS evidence_url TEXT`).catch(() => {});
   await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS comments JSONB DEFAULT '[]'::jsonb`).catch(() => {});
-  // Back-fill any rows with null comments
   await query(`UPDATE tickets SET comments = '[]'::jsonb WHERE comments IS NULL`).catch(() => {});
 }
 
@@ -2068,6 +2082,17 @@ function mapTicket(row: any) {
   };
 }
 
+// GET /api/tickets/debug — check table schema
+app.get('/api/tickets/debug', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
+  try {
+    const cols = await query(`SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'tickets' ORDER BY ordinal_position`);
+    const count = await query('SELECT COUNT(*) FROM tickets');
+    res.json({ columns: cols.rows, rowCount: count.rows[0].count });
+  } catch (e: any) {
+    res.json({ error: e.message });
+  }
+});
+
 // GET /api/tickets — admins see all, cadets see their own
 app.get('/api/tickets', requireAuth, async (req: AuthRequest, res) => {
   try {
@@ -2080,9 +2105,9 @@ app.get('/api/tickets', requireAuth, async (req: AuthRequest, res) => {
       result = await query('SELECT * FROM tickets ORDER BY created_at DESC');
     }
     res.json({ tickets: result.rows.map(mapTicket) });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in GET /api/tickets:', error);
-    res.json({ tickets: [] });
+    res.status(500).json({ error: 'Failed to fetch tickets', detail: error?.message });
   }
 });
 
@@ -2096,10 +2121,10 @@ app.post('/api/tickets', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Description is required' });
     }
     const id = crypto.randomUUID();
-    // Insert using only guaranteed base columns
+    // Insert using only the guaranteed base columns (everything else has a DEFAULT or is nullable)
     await query(
-      `INSERT INTO tickets (id, title, description, created_by, status, priority, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, 'open', 'medium', NOW(), NOW())`,
+      `INSERT INTO tickets (id, title, description, created_by, created_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
       [id, category || type || 'Ticket', description.trim(), user.name]
     );
     // Update extended columns (added by ensureTicketsSchema)
@@ -2109,9 +2134,9 @@ app.post('/api/tickets', requireAuth, async (req: AuthRequest, res) => {
     await query(`UPDATE tickets SET comments = '[]'::jsonb WHERE id = $1 AND comments IS NULL`, [id]).catch(() => {});
     const result = await query('SELECT * FROM tickets WHERE id = $1', [id]);
     res.status(201).json({ ticket: mapTicket(result.rows[0]) });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in POST /api/tickets:', error);
-    res.status(500).json({ error: 'Failed to create ticket' });
+    res.status(500).json({ error: 'Failed to create ticket', detail: error?.message });
   }
 });
 
