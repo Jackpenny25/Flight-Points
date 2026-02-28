@@ -740,6 +740,11 @@ app.get('/api/data/:type', async (req, res) => {
       return res.status(400).json({ error: 'Unsupported data type' });
     }
 
+    // Ensure rewards schema columns exist before reading
+    if (normalized === 'rewards') {
+      await ensureRewardsSchema();
+    }
+
     const { table, orderBy } = typeConfig[normalized];
     const sql = orderBy ? `SELECT * FROM ${table} ORDER BY ${orderBy}` : `SELECT * FROM ${table}`;
     const result = await query(sql);
@@ -819,6 +824,11 @@ app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), asyn
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
       return res.status(400).json({ error: 'Unsupported data type' });
+    }
+
+    // Ensure rewards schema columns exist before updating
+    if (normalized === 'rewards') {
+      await ensureRewardsSchema();
     }
 
     const { table, hasUpdatedAt } = typeConfig[normalized];
@@ -1348,9 +1358,44 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 
 // ========== REWARD SUGGESTIONS & VOTING ENDPOINTS ==========
 
+// Ensure rewards schema has winner_name, status, and suggestion tables
+let rewardsSchemaInitPromise: Promise<void> | null = null;
+async function ensureRewardsSchema() {
+  if (!rewardsSchemaInitPromise) {
+    rewardsSchemaInitPromise = (async () => {
+      await query('ALTER TABLE rewards ADD COLUMN IF NOT EXISTS winner_name VARCHAR');
+      await query('ALTER TABLE rewards ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT \'active\'');
+      await query(`CREATE TABLE IF NOT EXISTS reward_suggestions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title VARCHAR NOT NULL,
+        description TEXT,
+        suggested_by VARCHAR NOT NULL,
+        suggested_by_name VARCHAR,
+        suggested_at TIMESTAMP DEFAULT NOW(),
+        vote_count INTEGER DEFAULT 0
+      )`);
+      await query(`CREATE TABLE IF NOT EXISTS reward_votes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        suggestion_id UUID NOT NULL REFERENCES reward_suggestions(id) ON DELETE CASCADE,
+        user_id VARCHAR NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(suggestion_id, user_id)
+      )`);
+      await query('CREATE INDEX IF NOT EXISTS idx_reward_suggestions_vote_count ON reward_suggestions (vote_count DESC)');
+      await query('CREATE INDEX IF NOT EXISTS idx_reward_votes_suggestion_id ON reward_votes (suggestion_id)');
+      await query('CREATE INDEX IF NOT EXISTS idx_reward_votes_user_id ON reward_votes (user_id)');
+    })().catch((error) => {
+      rewardsSchemaInitPromise = null;
+      throw error;
+    });
+  }
+  return rewardsSchemaInitPromise;
+}
+
 // GET /api/reward-suggestions - List all suggestions ordered by votes
 app.get('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
+    await ensureRewardsSchema();
     const result = await query(
       `SELECT rs.*, 
         (SELECT COUNT(*)::int FROM reward_votes rv WHERE rv.suggestion_id = rs.id) AS vote_count
@@ -1384,6 +1429,7 @@ app.get('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Re
 // POST /api/reward-suggestions - Create a suggestion (any role except snco)
 app.post('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
+    await ensureRewardsSchema();
     if (req.user?.role === 'snco') {
       return res.status(403).json({ error: 'Flight Point Leads create rewards directly, not suggestions.' });
     }
@@ -1417,6 +1463,7 @@ app.post('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: R
 // POST /api/reward-suggestions/:id/vote - Toggle vote on a suggestion
 app.post('/api/reward-suggestions/:id/vote', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
+    await ensureRewardsSchema();
     const userId = req.user?.id || '';
     const suggestionId = req.params.id;
     // Check suggestion exists
