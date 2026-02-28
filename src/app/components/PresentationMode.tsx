@@ -189,9 +189,10 @@ export function PresentationMode({ onClose, slideDuration = 15000 }: { onClose: 
     // Slide 2 (leaderboard) has extended duration for table scrolling
     let duration = slideDuration;
     if (slide === 2 && data?.cadetLeaderboard) {
-      // ~2 seconds per 10 cadets for slow viewing
+      // ~2 seconds per 10 cadets for slow viewing, but advance at 85% to avoid blank screen
       const cadets = data.detailedLeaderboard?.length || data.cadetLeaderboard?.length || 0;
-      duration = Math.max(30000, Math.ceil((cadets / 10) * 20000));
+      const fullDuration = Math.max(30000, Math.ceil((cadets / 10) * 20000));
+      duration = Math.round(fullDuration * 0.85); // Advance when most content scrolled but last cadets still visible
     }
     
     const id = setTimeout(() => setSlide(s => (s + 1) % SLIDE_COUNT), duration);
@@ -1328,6 +1329,6 @@ const animations = `
   }
   @keyframes tableScroll {
     0% { transform: translateY(0); }
-    100% { transform: translateY(-100%); }
+    100% { transform: translateY(-85%); }
   }
 `;
