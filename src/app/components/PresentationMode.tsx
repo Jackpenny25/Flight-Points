@@ -184,9 +184,19 @@ export function PresentationMode({ onClose, slideDuration = 15000 }: { onClose: 
   /* ── Auto-advance ── */
   useEffect(() => {
     if (paused || loading) return;
-    const id = setInterval(() => setSlide(s => (s + 1) % SLIDE_COUNT), slideDuration);
-    return () => clearInterval(id);
-  }, [paused, loading, slideDuration]);
+    
+    // Calculate duration for this slide
+    // Slide 2 (leaderboard) has extended duration for table scrolling
+    let duration = slideDuration;
+    if (slide === 2 && data?.cadetLeaderboard) {
+      // ~2 seconds per 10 cadets for slow viewing
+      const cadets = data.detailedLeaderboard?.length || data.cadetLeaderboard?.length || 0;
+      duration = Math.max(30000, Math.ceil((cadets / 10) * 20000));
+    }
+    
+    const id = setTimeout(() => setSlide(s => (s + 1) % SLIDE_COUNT), duration);
+    return () => clearTimeout(id);
+  }, [paused, loading, slideDuration, slide, data]);
 
   /* ── Keyboard ── */
   useEffect(() => {
@@ -619,7 +629,6 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
           <div style={{
             borderRadius: 8, overflow: 'hidden',
             maxHeight: 'calc(100vh - 180px)',
-            animation: 'slideScroll 45s linear infinite',
           }}>
             <PPTable headers={headers} rows={toRows(left, 1)} aligns={aligns} fontSize={fontSize} compact />
           </div>
@@ -627,7 +636,6 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
             <div style={{
               borderRadius: 8, overflow: 'hidden',
               maxHeight: 'calc(100vh - 180px)',
-              animation: 'slideScroll 45s linear infinite',
             }}>
               <PPTable headers={headers} rows={toRows(right, half + 1)} aligns={aligns} fontSize={fontSize} compact />
             </div>
@@ -638,6 +646,8 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
   }
 
   const fontSize = entries.length > 15 ? 17 : 20;
+  // Estimate scroll duration: ~2 seconds per 10 rows for slow viewing
+  const scrollDuration = Math.max(30, Math.ceil((entries.length / 10) * 20));
 
   return (
     <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '40px 80px 60px' }}>
@@ -651,9 +661,13 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
         borderRadius: 8, overflow: 'hidden',
         maxWidth: 960, width: '100%', margin: '0 auto',
         maxHeight: 'calc(100vh - 180px)',
-        animation: 'slideScroll 45s linear infinite',
+        position: 'relative' as const,
       }}>
-        <PPTable headers={headers} rows={toRows(entries, 1)} aligns={aligns} fontSize={fontSize} />
+        <div style={{
+          animation: `tableScroll ${scrollDuration}s linear forwards`,
+        }}>
+          <PPTable headers={headers} rows={toRows(entries, 1)} aligns={aligns} fontSize={fontSize} />
+        </div>
       </div>
     </div>
   );
@@ -1312,10 +1326,8 @@ const animations = `
   @keyframes pres-spin {
     to { transform: rotate(360deg); }
   }
-  @keyframes slideScroll {
-    from { transform: translateY(0); }
-    50% { transform: translateY(-100%); }
-    50.1% { transform: translateY(100%); }
-    to { transform: translateY(0); }
+  @keyframes tableScroll {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-100%); }
   }
 `;
