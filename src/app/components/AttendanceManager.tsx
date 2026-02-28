@@ -7,10 +7,9 @@ import { Label } from './ui/label';
 import { Checkbox } from './ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { formatFlight } from './ui/utils';
-import { UserCheck, Trash2 } from 'lucide-react';
+import { UserCheck, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface AttendanceRecord {
@@ -41,6 +40,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const [flightFilter, setFlightFilter] = useState<string>('all');
   const [bulkErrors, setBulkErrors] = useState<Array<{ cadetName: string; reason?: string }>>([]);
   const [bulkFailedEntries, setBulkFailedEntries] = useState<Array<any>>([]);
+  const [collapsedFlights, setCollapsedFlights] = useState<Set<string>>(new Set());
 
   // Form state
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -205,6 +205,24 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const presentCount = visibleCadets.filter(c => attendanceStatuses[c.id] === 'present').length;
   const selectedCount = selectedIds.size;
 
+  // Group visible cadets by flight, sorted alphabetically within each flight
+  const flightGroups: Record<string, any[]> = {};
+  visibleCadets.forEach(c => {
+    if (!flightGroups[c.flight]) flightGroups[c.flight] = [];
+    flightGroups[c.flight].push(c);
+  });
+  Object.values(flightGroups).forEach(group => group.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '')));
+  const sortedFlightKeys = Object.keys(flightGroups).sort();
+
+  const toggleFlightCollapse = (flight: string) => {
+    setCollapsedFlights(prev => {
+      const next = new Set(prev);
+      if (next.has(flight)) next.delete(flight);
+      else next.add(flight);
+      return next;
+    });
+  };
+
   return (
     <div className={`space-y-6 ${userRole === 'snco' ? 'grid gap-6 md:grid-cols-3' : ''}`}>
 
@@ -252,35 +270,61 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
             </div>
 
             <div className="mt-4 border-t pt-4">
-              <Label>Mark Attendance (Manual)</Label>
-              <div className="mt-3 grid gap-2 max-h-80 overflow-y-auto">
-                {visibleCadets.length === 0 ? (
-                  <div className="text-sm text-gray-500">No cadets for the selected flight.</div>
-                ) : (
-                  visibleCadets.map((c) => (
-                    <label key={c.id} className="flex items-center justify-between p-2 border rounded">
-                      <div className="flex items-center gap-3">
-                        <Checkbox
-                          checked={attendanceStatuses[c.id] === 'present'}
-                          onCheckedChange={(v) => {
-                            const isPresent = Boolean(v);
-                            setAttendanceStatuses(prev => ({ ...prev, [c.id]: isPresent ? 'present' : 'absent' }));
-                            const ids = new Set(selectedIds);
-                            if (isPresent) ids.add(c.id); else ids.delete(c.id);
-                            setSelectedIds(ids);
-                            setSelectAll(ids.size === visibleCadets.length && visibleCadets.length > 0);
-                          }}
-                        />
-                        <div>
-                          <div className="font-medium">{c.name}</div>
-                          <div className="text-xs text-gray-500">{formatFlight(c.flight)}</div>
-                        </div>
+              {visibleCadets.length === 0 ? (
+                <div className="text-sm text-gray-500 py-4">No cadets for the selected flight.</div>
+              ) : (
+                <div className="space-y-3">
+                  {sortedFlightKeys.map(flight => {
+                    const group = flightGroups[flight];
+                    const isCollapsed = collapsedFlights.has(flight);
+                    const flightPresent = group.filter((c: any) => attendanceStatuses[c.id] === 'present').length;
+
+                    return (
+                      <div key={flight} className="border rounded-lg overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => toggleFlightCollapse(flight)}
+                          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            {isCollapsed ? <ChevronRight className="size-4 text-gray-500" /> : <ChevronDown className="size-4 text-gray-500" />}
+                            <span className="font-semibold text-sm">{formatFlight(flight)}</span>
+                            <Badge variant="outline" className="text-xs">{group.length} cadet{group.length !== 1 ? 's' : ''}</Badge>
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {flightPresent}/{group.length} present
+                          </div>
+                        </button>
+                        {!isCollapsed && (
+                          <div className="divide-y">
+                            {group.map((c: any) => (
+                              <label key={c.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 cursor-pointer">
+                                <div className="flex items-center gap-3">
+                                  <Checkbox
+                                    checked={attendanceStatuses[c.id] === 'present'}
+                                    onCheckedChange={(v) => {
+                                      const isPresent = Boolean(v);
+                                      setAttendanceStatuses(prev => ({ ...prev, [c.id]: isPresent ? 'present' : 'absent' }));
+                                      const ids = new Set(selectedIds);
+                                      if (isPresent) ids.add(c.id); else ids.delete(c.id);
+                                      setSelectedIds(ids);
+                                      setSelectAll(ids.size === visibleCadets.length && visibleCadets.length > 0);
+                                    }}
+                                  />
+                                  <span className="font-medium text-sm">{c.name}</span>
+                                </div>
+                                <span className={`text-xs font-medium ${attendanceStatuses[c.id] === 'present' ? 'text-green-600' : 'text-gray-400'}`}>
+                                  {attendanceStatuses[c.id] === 'present' ? 'Present' : 'Absent'}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <div className="text-xs text-gray-500">{attendanceStatuses[c.id] === 'present' ? 'Present' : 'Absent'}</div>
-                    </label>
-                  ))
-                )}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {bulkErrors.length > 0 && (

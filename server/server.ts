@@ -1454,15 +1454,13 @@ app.get('/api/integrity-check', async (req, res) => {
 
     const [
       usersWithoutCadet,
-      cadetsWithoutAccount,
       usersInvalidRole,
       usersNoPassword,
       usersInvalidEmail,
       multipleAccountsSameCadet,
       ncoWithNonCadetAccount,
     ] = await Promise.all([
-      query(`SELECT u.id, u.name, u.role FROM app_users u WHERE u.cadet_id IS NULL AND u.role NOT IN ('snco', 'admin', 'staff')`).catch(() => ({ rows: [] })),
-      query(`SELECT c.id, c.name, c.flight FROM cadets c WHERE c.flight != 'hq' AND c.is_nco = false AND NOT EXISTS (SELECT 1 FROM app_users u WHERE u.cadet_id = c.id)`).catch(() => ({ rows: [] })),
+      query(`SELECT u.id, u.name, u.role FROM app_users u WHERE u.cadet_id IS NULL AND u.role NOT IN ('snco', 'admin', 'staff', 'presentation')`).catch(() => ({ rows: [] })),
       query(`SELECT id, name, role FROM app_users WHERE role NOT IN ('snco', 'admin', 'staff', 'pointgiver', 'cadet', 'presentation')`).catch(() => ({ rows: [] })),
       query(`SELECT id, name FROM app_users WHERE password_hash IS NULL OR TRIM(password_hash) = ''`).catch(() => ({ rows: [] })),
       query(`SELECT id, name, email FROM app_users WHERE email IS NULL OR TRIM(email) = '' OR email NOT LIKE '%@%'`).catch(() => ({ rows: [] })),
@@ -1474,12 +1472,6 @@ app.get('/api/integrity-check', async (req, res) => {
       usersWithoutCadet.rows.length === 0 ? 'pass' : 'warning',
       usersWithoutCadet.rows.length === 0 ? 'All cadet/pointgiver accounts are linked to a cadet record' : `${usersWithoutCadet.rows.length} non-admin account(s) without cadet link`,
       usersWithoutCadet.rows.length > 0 ? usersWithoutCadet.rows.slice(0, 5).map((r: any) => `${r.name} (${r.role})`).join(', ') : undefined
-    );
-
-    add('Accounts', 'All Cadets Have Accounts',
-      cadetsWithoutAccount.rows.length === 0 ? 'pass' : 'warning',
-      cadetsWithoutAccount.rows.length === 0 ? 'All eligible cadets have user accounts' : `${cadetsWithoutAccount.rows.length} cadet(s) without accounts`,
-      cadetsWithoutAccount.rows.length > 0 ? cadetsWithoutAccount.rows.slice(0, 8).map((r: any) => r.name).join(', ') : undefined
     );
 
     add('Accounts', 'Valid User Roles',
