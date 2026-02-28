@@ -2046,7 +2046,9 @@ async function ensureTicketsSchema() {
   await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS type VARCHAR DEFAULT 'Request'`).catch(() => {});
   await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category VARCHAR DEFAULT 'Other'`).catch(() => {});
   await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS evidence_url TEXT`).catch(() => {});
-  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS comments JSONB DEFAULT '[]'`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS comments JSONB DEFAULT '[]'::jsonb`).catch(() => {});
+  // Back-fill any rows with null comments
+  await query(`UPDATE tickets SET comments = '[]'::jsonb WHERE comments IS NULL`).catch(() => {});
 }
 
 function mapTicket(row: any) {
@@ -2094,10 +2096,12 @@ app.post('/api/tickets', requireAuth, async (req: AuthRequest, res) => {
     }
     const id = crypto.randomUUID();
     const result = await query(
-      `INSERT INTO tickets (id, title, description, type, category, evidence_url, created_by, status, priority, comments, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', 'medium', '[]', NOW(), NOW()) RETURNING *`,
+      `INSERT INTO tickets (id, title, description, type, category, evidence_url, created_by, status, priority, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', 'medium', NOW(), NOW()) RETURNING *`,
       [id, category || type || 'Ticket', description.trim(), type || 'Request', category || 'Other', evidenceUrl || null, user.name]
     );
+    // Ensure comments column exists and is set
+    await query(`UPDATE tickets SET comments = '[]'::jsonb WHERE id = $1 AND comments IS NULL`, [id]).catch(() => {});
     res.status(201).json({ ticket: mapTicket(result.rows[0]) });
   } catch (error) {
     console.error('Error in POST /api/tickets:', error);
