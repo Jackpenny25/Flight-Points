@@ -1265,6 +1265,7 @@ app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'poi
 
     // Award attendance points to present cadets (skip NCOs and HQ/Staff)
     let pointsAwarded = 0;
+    const pointErrors: string[] = [];
     if (ATTENDANCE_POINTS > 0) {
       const presentEntries = entries.filter((e: any) => e.status === 'present');
       for (const entry of presentEntries) {
@@ -1276,7 +1277,7 @@ app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'poi
           );
           if (cadetCheck.rows.length > 0) {
             const { is_nco, flight: cadetFlight } = cadetCheck.rows[0];
-            if (is_nco === true || (cadetFlight && cadetFlight.toLowerCase() === 'hq')) {
+            if (is_nco || (cadetFlight && cadetFlight.toLowerCase() === 'hq')) {
               continue; // Skip NCOs and HQ cadets
             }
           }
@@ -1287,8 +1288,10 @@ app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'poi
             [pointId, entry.cadetName, entry.date || date, entry.flight, 'Attendance', ATTENDANCE_POINTS, 'attendance', submittedBy]
           );
           pointsAwarded++;
-        } catch (pointErr) {
-          console.error(`Failed to award attendance point to ${entry.cadetName}:`, pointErr);
+        } catch (pointErr: any) {
+          const errMsg = pointErr?.message || String(pointErr);
+          console.error(`Failed to award attendance point to ${entry.cadetName}:`, errMsg);
+          pointErrors.push(`${entry.cadetName}: ${errMsg}`);
         }
       }
     }
@@ -1298,6 +1301,7 @@ app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'poi
       totalRecords: entries.length,
       totalPresent,
       pointsAwarded,
+      pointErrors: pointErrors.length > 0 ? pointErrors : undefined,
       message: `Saved ${entries.length} attendance records, awarded ${pointsAwarded} x ${ATTENDANCE_POINTS}pt`,
     });
   } catch (error) {

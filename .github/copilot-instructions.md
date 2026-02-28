@@ -26,6 +26,8 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - Clearly state when the user needs to do a manual step.
 - Use the VS Code terminal (PowerShell) for commands.
 - You have permission to make repo file changes without asking first.
+- `LOCAL_MODE` / `localApiShim.ts` / `localStore.ts` have been removed — all data goes through the live API. Do not re-introduce local storage mode.
+- Deleted dead files: `src/app/setupFetch.ts`, `src/utils/localApiShim.ts`, `src/utils/localStore.ts`, `src/app/components/RoleChangePanel.tsx`, `src/app/components/AdminPinManager.tsx`.
 
 ## Database & API Architecture
 - Generic CRUD: `GET/POST/PUT/DELETE /api/data/:type` with `typeConfig` mapping.
@@ -44,7 +46,7 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - `reward_suggestions` — id, title, description, suggested_by, suggested_by_name, suggested_at
 - `reward_votes` — id, suggestion_id, user_id, created_at (UNIQUE on suggestion_id+user_id)
 - `app_users` — id, email, name, role, password_hash, cadet_id (FK to cadets), created_by, created_at
-- `tickets` — id and other columns
+- `tickets` — id, title, description, created_by, created_at, status, priority, updated_at, assigned_to, type, category, evidence_url, comments (JSONB)
 
 ## Role Permissions
 | Role | Access |
