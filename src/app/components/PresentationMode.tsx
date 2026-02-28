@@ -396,7 +396,7 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
 
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 2 — Top 3 Podium + Flight of the Month (combined)
-   1st place = tallest podium. Monthly winners shown below.
+   1st place = tallest podium. Handles joint winners (ties).
    ═══════════════════════════════════════════════════════════════ */
 function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; stats: PresentationStats | null }) {
   if (!data) return null;
@@ -406,14 +406,29 @@ function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; st
     : data.cadetLeaderboard.map(c => ({ ...c, totalPoints: c.points }));
 
   entries.sort((a, b) => (b.totalPoints ?? b.points) - (a.totalPoints ?? a.points));
-  const top3 = entries.slice(0, 3);
+
+  // Group cadets by tied points to find medal positions (handling joint winners)
+  const podiumGroups: Array<{ medal: number; cadets: typeof entries; points: number }> = [];
+  let currentIdx = 0;
+  let medalsAssigned = 0;
+  while (currentIdx < entries.length && medalsAssigned < 3) {
+    const currentPoints = entries[currentIdx].totalPoints ?? entries[currentIdx].points;
+    const tiedCadets: typeof entries = [];
+    let tempIdx = currentIdx;
+    while (tempIdx < entries.length && (entries[tempIdx].totalPoints ?? entries[tempIdx].points) === currentPoints) {
+      tiedCadets.push(entries[tempIdx]);
+      tempIdx++;
+    }
+    podiumGroups.push({ medal: medalsAssigned + 1, cadets: tiedCadets, points: currentPoints });
+    currentIdx = tempIdx;
+    medalsAssigned++;
+  }
 
   const medalColors = [T.gold, T.silver, T.bronze];
   const medalLabels = ['1st', '2nd', '3rd'];
-  // 1st = tallest (340), 2nd = 260, 3rd = 210 — scaled up
   const podiumHeights = [340, 260, 210];
   // Display order: 2nd, 1st, 3rd (1st in the centre)
-  const displayOrder = top3.length >= 3 ? [1, 0, 2] : top3.length === 2 ? [1, 0] : [0];
+  const displayOrder = podiumGroups.length >= 3 ? [1, 0, 2] : podiumGroups.length === 2 ? [1, 0] : [0];
 
   const months = stats?.flightOfTheMonth || [];
 
@@ -427,16 +442,17 @@ function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; st
       </h1>
 
       {/* Podium — pushed to top */}
-      {top3.length > 0 && (
+      {podiumGroups.length > 0 && (
         <div style={{
           display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
           gap: 36, flex: 1, paddingBottom: 16,
         }}>
           {displayOrder.map(idx => {
-            const entry = top3[idx];
-            if (!entry) return null;
+            const group = podiumGroups[idx];
+            if (!group) return null;
             const color = medalColors[idx] || '#888';
             const height = podiumHeights[idx] || 180;
+            const isJointWinner = group.cadets.length > 1;
             return (
               <div key={idx} style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
@@ -449,21 +465,31 @@ function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; st
                   fontSize: 34, fontWeight: 'bold', color: '#1a1a1a',
                   fontFamily: FONT,
                   boxShadow: `0 4px 24px ${color}88`,
+                  position: 'relative' as const,
                 }}>
                   {medalLabels[idx]}
+                  {isJointWinner && (
+                    <div style={{
+                      position: 'absolute', top: 4, right: 6,
+                      fontSize: 14, fontWeight: 'bold', color: '#1a1a1a',
+                    }}>
+                      ×{group.cadets.length}
+                    </div>
+                  )}
                 </div>
-                {/* Name */}
+                {/* Names — all joint winners */}
                 <div style={{
-                  fontSize: 28, fontWeight: 'bold', color: T.white,
-                  fontFamily: FONT, textAlign: 'center' as const, maxWidth: 220,
+                  fontSize: isJointWinner ? 20 : 28, fontWeight: 'bold', color: T.white,
+                  fontFamily: FONT, textAlign: 'center' as const, maxWidth: 240,
+                  lineHeight: 1.3,
                 }}>
-                  {entry.name}
+                  {group.cadets.map(c => c.name).join(', ')}
                 </div>
                 {/* Points */}
                 <div style={{
                   fontSize: 22, color: T.textMuted, fontFamily: FONT,
                 }}>
-                  {entry.totalPoints ?? entry.points} pts
+                  {group.points} pts
                 </div>
                 {/* Podium block */}
                 <div style={{
@@ -894,13 +920,18 @@ function SlideWeeklyComparison({ stats }: { stats: PresentationStats | null }) {
 
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 7 — Attendance Streaks
+   Shows current streaks and the record holder(s) for longest streak.
    ═══════════════════════════════════════════════════════════════ */
 function SlideAttendanceStreaks({ stats }: { stats: PresentationStats | null }) {
   const streaks = stats?.attendanceStreaks || [];
   const top = streaks.slice(0, 8);
 
+  // Find the record holder(s) — longest streak (could be tied)
+  const recordStreak = streaks.length > 0 ? Math.max(...streaks.map(s => s.streak)) : 0;
+  const recordHolders = streaks.filter(s => s.streak === recordStreak);
+
   return (
-    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '48px 80px 60px' }}>
+    <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '48px 80px 60px', justifyContent: 'flex-start' }}>
       <h1 style={{
         fontSize: 48, fontWeight: 'bold', color: T.gold,
         textAlign: 'center' as const, marginBottom: 8, fontFamily: FONT,
@@ -914,52 +945,96 @@ function SlideAttendanceStreaks({ stats }: { stats: PresentationStats | null }) 
         Most consecutive parade nights attended
       </p>
 
-      {top.length === 0 ? (
+      {streaks.length === 0 ? (
         <p style={{ fontSize: 24, color: T.textMuted, fontFamily: FONT, textAlign: 'center' as const }}>
           No attendance data yet.
         </p>
       ) : (
-        <div style={{ maxWidth: 800, width: '100%', margin: '0 auto' }}>
-          {top.map((s, i) => {
-            const maxStreak = top[0]?.streak || 1;
-            const pct = Math.max(10, (s.streak / maxStreak) * 100);
-            return (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 16,
-                marginBottom: 12, fontFamily: FONT,
+        <>
+          {/* Record Holder Section */}
+          {recordHolders.length > 0 && recordStreak > 0 && (
+            <div style={{
+              backgroundColor: 'rgba(255,215,0,0.12)',
+              border: `2px solid ${T.gold}`,
+              borderRadius: 16,
+              padding: '28px 32px',
+              marginBottom: 36,
+              textAlign: 'center' as const,
+            }}>
+              <div style={{
+                fontSize: 20, color: T.gold, fontFamily: FONT,
+                textTransform: 'uppercase' as const, letterSpacing: 1.5,
+                marginBottom: 12, fontWeight: 'bold',
               }}>
-                <span style={{
-                  fontSize: 24, fontWeight: 'bold', color: T.white,
-                  width: 200, overflow: 'hidden', textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap' as const,
+                🏆 Record Holder{recordHolders.length > 1 ? 's' : ''}
+              </div>
+              <div style={{
+                fontSize: 32, fontWeight: 'bold', color: T.white,
+                fontFamily: FONT, marginBottom: 8,
+              }}>
+                {recordHolders.map(h => h.name).join(', ')}
+              </div>
+              <div style={{
+                fontSize: 28, color: T.gold, fontFamily: FONT, fontWeight: 'bold',
+              }}>
+                {recordStreak} {recordStreak === 1 ? 'night' : 'nights'} consecutive
+              </div>
+            </div>
+          )}
+
+          {/* Current Top Streaks */}
+          <div style={{ maxWidth: 800, width: '100%', margin: '0 auto' }}>
+            <h2 style={{
+              fontSize: 24, color: T.textLight, fontFamily: FONT,
+              marginBottom: 20, textAlign: 'left' as const,
+            }}>
+              Current Top Streaks
+            </h2>
+            {top.map((s, i) => {
+              const maxStreak = top[0]?.streak || 1;
+              const pct = Math.max(10, (s.streak / maxStreak) * 100);
+              const isRecord = s.streak === recordStreak;
+              return (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 16,
+                  marginBottom: 12, fontFamily: FONT,
+                  opacity: isRecord ? 1 : 0.8,
                 }}>
-                  {s.name}
-                </span>
-                <div style={{
-                  flex: 1, height: 40, backgroundColor: 'rgba(255,255,255,0.08)',
-                  borderRadius: 8, overflow: 'hidden',
-                }}>
-                  <div style={{
-                    width: `${pct}%`, height: '100%',
-                    background: i === 0
-                      ? `linear-gradient(90deg, ${T.gold}, ${T.goldDim})`
-                      : `linear-gradient(90deg, ${T.green}, ${T.greenDim})`,
-                    borderRadius: 8,
-                    display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                    paddingRight: 14,
+                  <span style={{
+                    fontSize: 24, fontWeight: 'bold', color: T.white,
+                    width: 200, overflow: 'hidden', textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap' as const,
                   }}>
-                    <span style={{
-                      fontSize: 20, fontWeight: 'bold', color: i === 0 ? '#1a1a1a' : '#fff',
-                      textShadow: i === 0 ? 'none' : '0 1px 2px rgba(0,0,0,0.3)',
+                    {s.name}
+                  </span>
+                  <div style={{
+                    flex: 1, height: 40, backgroundColor: 'rgba(255,255,255,0.08)',
+                    borderRadius: 8, overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      width: `${pct}%`, height: '100%',
+                      background: isRecord
+                        ? `linear-gradient(90deg, ${T.gold}, ${T.goldDim})`
+                        : i === 0
+                        ? `linear-gradient(90deg, ${T.green}, ${T.greenDim})`
+                        : `linear-gradient(90deg, ${T.green}, ${T.greenDim})`,
+                      borderRadius: 8,
+                      display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                      paddingRight: 14,
                     }}>
-                      {s.streak} {s.streak === 1 ? 'night' : 'nights'}
-                    </span>
+                      <span style={{
+                        fontSize: 20, fontWeight: 'bold', color: isRecord ? '#1a1a1a' : '#fff',
+                        textShadow: isRecord ? 'none' : '0 1px 2px rgba(0,0,0,0.3)',
+                      }}>
+                        {s.streak} {s.streak === 1 ? 'night' : 'nights'}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );
