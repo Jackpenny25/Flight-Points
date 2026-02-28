@@ -1188,6 +1188,82 @@ app.get('/api/leaderboards', async (req, res) => {
   }
 });
 
+// ========== ATTENDANCE BULK ENDPOINTS ==========
+
+// GET /api/attendance/bulks — list recent bulk sessions
+app.get('/api/attendance/bulks', requireAuth, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM attendance_bulks ORDER BY created_at DESC LIMIT 30');
+    res.json(result.rows.map(row => ({
+      id: row.id,
+      date: row.date,
+      flightFilter: row.flight_filter,
+      totalRecords: Number(row.total_records),
+      totalPresent: Number(row.total_present),
+      submittedBy: row.submitted_by,
+      createdAt: row.created_at,
+    })));
+  } catch (error) {
+    console.error('Error in GET /api/attendance/bulks:', error);
+    res.status(500).json({ error: 'Failed to fetch bulk attendance sessions' });
+  }
+});
+
+// POST /api/attendance/bulk — create a bulk attendance session with individual records
+app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'pointgiver']), async (req, res) => {
+  try {
+    const { entries, date, flightFilter } = req.body;
+    if (!entries || !Array.isArray(entries) || entries.length === 0) {
+      return res.status(400).json({ error: 'entries array is required' });
+    }
+
+    const user = (req as any).user;
+    const submittedBy = user?.name || 'unknown';
+    const totalPresent = entries.filter((e: any) => e.status === 'present').length;
+
+    // Create the bulk session record
+    const bulkId = crypto.randomUUID();
+    await query(
+      `INSERT INTO attendance_bulks (id, date, flight_filter, total_records, total_present, submitted_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      [bulkId, date || new Date().toISOString(), flightFilter || 'all', entries.length, totalPresent, submittedBy]
+    );
+
+    // Insert all individual attendance records linked to this bulk
+    for (const entry of entries) {
+      const recordId = crypto.randomUUID();
+      await query(
+        `INSERT INTO attendance (id, cadet_name, date, flight, status, submitted_by, bulk_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+        [recordId, entry.cadetName, entry.date || date, entry.flight, entry.status || 'absent', submittedBy, bulkId]
+      );
+    }
+
+    res.status(201).json({
+      id: bulkId,
+      totalRecords: entries.length,
+      totalPresent,
+      message: `Saved ${entries.length} attendance records`,
+    });
+  } catch (error) {
+    console.error('Error in POST /api/attendance/bulk:', error);
+    res.status(500).json({ error: 'Failed to save bulk attendance' });
+  }
+});
+
+// DELETE /api/attendance/bulk/:id — delete a bulk session and its records
+app.delete('/api/attendance/bulk/:id', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    await query('DELETE FROM attendance WHERE bulk_id = $1', [id]);
+    await query('DELETE FROM attendance_bulks WHERE id = $1', [id]);
+    res.json({ message: 'Bulk attendance session deleted' });
+  } catch (error) {
+    console.error('Error in DELETE /api/attendance/bulk/:id:', error);
+    res.status(500).json({ error: 'Failed to delete bulk attendance session' });
+  }
+});
+
 // Attendance reports
 app.get('/api/attendance/reports', async (req, res) => {
   try {

@@ -58,7 +58,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
       return;
     }
     const ids = cadets
-      .filter(c => flightFilter === 'all' || c.flight === flightFilter)
+      .filter(c => c.flight && c.flight.toLowerCase() !== 'hq' && (flightFilter === 'all' || c.flight === flightFilter))
       .map(c => c.id);
     setSelectedIds(new Set(ids));
     setSelectAll(true);
@@ -69,7 +69,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelectedIds(next);
-    const visibleCount = cadets.filter(c => flightFilter === 'all' || c.flight === flightFilter).length;
+    const visibleCount = cadets.filter(c => c.flight && c.flight.toLowerCase() !== 'hq' && (flightFilter === 'all' || c.flight === flightFilter)).length;
     setSelectAll(next.size === visibleCount && visibleCount > 0);
   };
 
@@ -86,7 +86,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   };
 
   const saveAttendanceBulk = async () => {
-    const targets = cadets.filter(c => (selectedIds.size ? selectedIds.has(c.id) : true) && (flightFilter === 'all' || c.flight === flightFilter));
+    const targets = cadets.filter(c => c.flight && c.flight.toLowerCase() !== 'hq' && (selectedIds.size ? selectedIds.has(c.id) : true) && (flightFilter === 'all' || c.flight === flightFilter));
     if (targets.length === 0) {
       toast.error('No cadets selected for bulk save');
       return;
@@ -106,23 +106,21 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
         submittedBy: userName,
       }));
 
-      // Submit as a single bulk request to avoid many parallel calls
+      // Submit as a single bulk request
       try {
-        const res = await api.createBulkAttendance
-          ? await api.createBulkAttendance({ entries, date: new Date(selectedDate).toISOString(), flightFilter })
-          : await Promise.all(entries.map(entry => api.createAttendance(entry)));
+        const res = await api.createBulkAttendance({ entries, date: new Date(selectedDate).toISOString(), flightFilter });
 
         if (res && res.error) {
           setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: res.error || 'Failed' })));
           setBulkFailedEntries(entries);
-          toast.error(`Saved 0 succeeded, ${entries.length} failed`);
+          toast.error(`Failed: ${res.error}`);
         } else {
-          toast.success(`Saved ${entries.length} attendance records`);
+          toast.success(`Saved ${res.totalRecords || entries.length} attendance records (${res.totalPresent || 0} present)`);
         }
       } catch (err: any) {
         setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: String(err) })));
         setBulkFailedEntries(entries);
-        toast.error(`Saved 0 succeeded, ${entries.length} failed`);
+        toast.error(`Failed to save attendance`);
       }
 
       setSelectedIds(new Set());
@@ -155,8 +153,8 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
 
   const fetchBulkAttendance = async () => {
     try {
-      const data = await api.getAttendanceReports ? await api.getAttendanceReports() : {};
-      const bulksData = Array.isArray(data) ? data : (data.bulks || []);
+      const data = await api.getAttendanceBulks();
+      const bulksData = Array.isArray(data) ? data : [];
       setBulkEvents(bulksData);
     } catch (error) {
       console.error('Error fetching bulk attendance:', error);
@@ -184,7 +182,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const handleDeleteBulk = async (bulkId: string) => {
     if (!confirm('Delete this bulk attendance session and its attendance records? This is irreversible.')) return;
     try {
-      const res = await api.deleteAttendance ? await api.deleteAttendance(bulkId) : null;
+      const res = await api.deleteAttendanceBulk(bulkId);
       if (res && res.error) {
         toast.error(res.error || 'Failed to delete bulk attendance session');
       } else {
@@ -200,8 +198,9 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
 
   const canDelete = userRole === 'snco';
 
-  const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
-  const visibleCadets = cadets.filter(c => flightFilter === 'all' || c.flight === flightFilter);
+  const nonHqCadets = cadets.filter(c => c.flight && c.flight.toLowerCase() !== 'hq');
+  const flights = Array.from(new Set(nonHqCadets.map(c => c.flight))).sort();
+  const visibleCadets = nonHqCadets.filter(c => flightFilter === 'all' || c.flight === flightFilter);
   const presentCount = visibleCadets.filter(c => attendanceStatuses[c.id] === 'present').length;
   const selectedCount = selectedIds.size;
 
