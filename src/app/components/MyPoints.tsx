@@ -34,9 +34,7 @@ export function MyPoints({ accessToken, cadetName }: MyPointsProps) {
   const fetchMyPoints = async () => {
     try {
       setLoading(true);
-      console.log('Fetching my points for:', cadetName);
       const data = await api.getMyPoints(cadetName);
-      console.log('Received points data:', data);
       setPoints(data.points || []);
       setTotal(data.total || 0);
     } catch (error) {

@@ -89,7 +89,6 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     setLoading(true);
     try {
       const data = await api.getPoints();
-      console.log('Fetched points:', data);
       setPoints(Array.isArray(data) ? data : []);
     } catch (error: any) {
       if (error?.status === 401) {
@@ -107,7 +106,6 @@ export function PointsManager({ userRole }: PointsManagerProps) {
   const fetchCadets = async () => {
     try {
       const data = await api.getCadets();
-      console.log('Fetched cadets:', data);
       setCadets(Array.isArray(data) ? data : []);
     } catch (error) {
       toast.error('Failed to fetch cadets');
@@ -121,15 +119,10 @@ export function PointsManager({ userRole }: PointsManagerProps) {
 
   // Smart name matching: allows partial last names, handles siblings
   const matchCadetByPartialName = (input: string): { cadet: any; ambiguous: boolean } | null => {
-    if (cadets.length === 0) {
-      console.log('matchCadetByPartialName: No cadets available');
-      return null;
-    }
+    if (cadets.length === 0) return null;
     const inputLower = input.trim().toLowerCase();
-    console.log('Matching input:', inputLower, 'against', cadets.length, 'cadets');
     const exactMatch = cadets.find(c => c.name.toLowerCase() === inputLower);
     if (exactMatch) {
-      console.log('Exact match found:', exactMatch.name);
       return { cadet: exactMatch, ambiguous: false };
     }
     const inputParts = inputLower.split(/\s+/);
@@ -139,7 +132,6 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       const cadetNameLower = c.name.toLowerCase();
       return cadetNameLower.startsWith(inputLastName);
     });
-    console.log('Partial matches found:', matches.length);
     if (matches.length === 0) return null;
     if (matches.length === 1) return { cadet: matches[0], ambiguous: false };
     if (inputFirstInitial) {

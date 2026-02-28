@@ -34,7 +34,6 @@ export function Presentation() {
           cadetList = response.cadets;
         }
         
-        console.log('Loaded cadets:', cadetList);
         setCadets(cadetList);
         setError(null);
       } catch (err) {
