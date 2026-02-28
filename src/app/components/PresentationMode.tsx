@@ -147,7 +147,7 @@ function monthLabel(ym: string): string {
 /* ═══════════════════════════════════════════════════════════════
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════════ */
-export function PresentationMode({ onClose, slideDurations = [15000, 15000, 20000, 15000, 15000, 15000, 15000, 15000, 15000] }: { onClose: () => void; slideDurations?: number[] }) {
+export function PresentationMode({ onClose, slideDurations = [15000, 15000, 20000, 15000, 15000, 15000, 15000, 15000, 15000], leaderboardScrollMultiplier = 1 }: { onClose: () => void; slideDurations?: number[]; leaderboardScrollMultiplier?: number }) {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [stats, setStats] = useState<PresentationStats | null>(null);
@@ -193,13 +193,13 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
       if (cadets > 12) {
         // ~2 seconds per 10 cadets for slow viewing, but advance at 85% to avoid blank screen
         const fullDuration = Math.max(30000, Math.ceil((cadets / 10) * 20000));
-        duration = Math.round(fullDuration * 0.85);
+        duration = Math.round(fullDuration * leaderboardScrollMultiplier * 0.85);
       }
     }
     
     const id = setTimeout(() => setSlide(s => (s + 1) % SLIDE_COUNT), duration);
     return () => clearTimeout(id);
-  }, [paused, loading, slideDurations, slide, data]);
+  }, [paused, loading, slideDurations, slide, data, leaderboardScrollMultiplier]);
 
   /* ── Keyboard ── */
   useEffect(() => {
@@ -266,7 +266,7 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
   const slides = [
     <SlideFlightPoints key="fp" data={data} />,
     <SlidePodiumAndMonth key="pm" data={data} stats={stats} />,
-    <SlideLeaderboard key="lb" data={data} />,
+    <SlideLeaderboard key="lb" data={data} leaderboardScrollMultiplier={leaderboardScrollMultiplier} />,
     <SlideRisingStars key="rs" stats={stats} />,
     <SlideFlightRace key="fr" data={data} />,
     <SlideWeeklyComparison key="wc" stats={stats} />,
@@ -586,7 +586,7 @@ function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; st
    SLIDE 3 — Complete Leaderboard
    Single table by default; splits if > 20 cadets.
    ═══════════════════════════════════════════════════════════════ */
-function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
+function SlideLeaderboard({ data, leaderboardScrollMultiplier = 1 }: { data: LeaderboardData | null; leaderboardScrollMultiplier?: number }) {
   if (!data) return null;
 
   const entries: LeaderboardEntry[] = data.detailedLeaderboard && data.detailedLeaderboard.length > 0
@@ -650,7 +650,8 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
 
   const fontSize = entries.length > 15 ? 17 : 20;
   // Estimate scroll duration: ~2 seconds per 10 rows for slow viewing
-  const scrollDuration = Math.max(30, Math.ceil((entries.length / 10) * 20));
+  // Apply multiplier: 0.5x = 2x faster, 2x = 2x slower
+  const scrollDuration = Math.max(30, Math.ceil((entries.length / 10) * 20 * leaderboardScrollMultiplier));
 
   return (
     <div style={{ ...S.slide, backgroundColor: T.darkBg, padding: '40px 80px 60px' }}>

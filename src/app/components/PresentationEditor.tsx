@@ -24,6 +24,7 @@ const SLIDE_NAMES = [
 export function PresentationEditor() {
   const [showPresentation, setShowPresentation] = useState(false);
   const [slideDurations, setSlideDurations] = useState<number[]>([15, 15, 20, 15, 15, 15, 15, 15, 15]); // seconds per slide
+  const [leaderboardScrollMultiplier, setLeaderboardScrollMultiplier] = useState(1); // 0.5 to 2.0
 
   const setDuration = (slideIndex: number, duration: number) => {
     setSlideDurations(prev => {
@@ -38,7 +39,7 @@ export function PresentationEditor() {
   };
 
   if (showPresentation) {
-    return <PresentationMode onClose={() => setShowPresentation(false)} slideDurations={slideDurations.map(d => d * 1000)} />;
+    return <PresentationMode onClose={() => setShowPresentation(false)} slideDurations={slideDurations.map(d => d * 1000)} leaderboardScrollMultiplier={leaderboardScrollMultiplier} />;
   }
 
   return (
@@ -113,6 +114,34 @@ export function PresentationEditor() {
             </div>
             <p className="text-xs text-muted-foreground/70">
               Note: Leaderboard auto-adjusts based on cadet count (typically 20-40 seconds)
+            </p>
+          </div>
+
+          {/* Leaderboard Scroll Speed */}
+          <div className="space-y-3 p-4 bg-muted/50 rounded-lg border border-border">
+            <div className="flex items-center gap-2">
+              <Settings className="w-4 h-4 text-muted-foreground" />
+              <label className="text-sm font-medium">Leaderboard Scroll Speed</label>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-xs font-mono bg-background px-2 py-1 rounded min-w-fit w-10 text-center">
+                {leaderboardScrollMultiplier.toFixed(1)}x
+              </div>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={leaderboardScrollMultiplier}
+                onChange={(e) => setLeaderboardScrollMultiplier(Number(e.target.value))}
+                className="flex-1"
+              />
+              <div className="text-xs text-muted-foreground min-w-fit">
+                {leaderboardScrollMultiplier < 1 ? 'Faster' : leaderboardScrollMultiplier > 1 ? 'Slower' : 'Normal'}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground/70">
+              Adjusts the table scroll speed: 0.5x = twice as fast, 2x = twice as slow
             </p>
           </div>
 
