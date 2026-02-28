@@ -146,3 +146,17 @@ LATEST PROJECT NOTES (2026-02-27 - presentation mode rebuild):
 - Rewards slide shows 24px font for table text.
 - PPTable non-compact padding increased to 14px 18px for better spacing.
 - `Presentation.tsx` (old static data view) still exists but is no longer imported/used in Dashboard.
+
+LATEST PROJECT NOTES (2026-02-28 - presentation role & slide tweaks):
+- New role: `presentation` — user sees ONLY the Presentation tab (no leaderboards, points, cadets, etc.).
+- Role permissions updated:
+  - presentation: presentation tab only. No admin, no points, no attendance, no cadets.
+  - snco (Flight Point Lead): keeps full access including presentation tab (in admin-unlocked mode).
+- TopNav shows a single "Presentation" pill for presentation-role users.
+- Dashboard defaults to `presentation` tab for presentation-role users.
+- "Presentation" role added to both role dropdowns in AdminSignups: create account and existing account role editor.
+- Cadets who already have an account are automatically excluded from the "Select Cadet" dropdown when creating a new account (existing behaviour, now documented).
+- Server `/api/presentation-stats` now also returns `risingCadets` (top 10 earners this calendar month) alongside `risingStars` (weekly).
+- Slide 4 renamed from "Rising Stars" to "Rising Cadets", now shows monthly top earners. 4th+ place bars changed from green to cornflower blue (#6495ED).
+- Slide 1 (Flight Points): tables scaled up — title 64px, section headings 40px, table text 34px, max-width 1500px, content starts from top.
+- Slide 2 (Top Cadets): podium moved up and enlarged — 1st=340px, 2nd=260px, 3rd=210px, medals 96px, names 28px, podium columns 190px wide.

@@ -19,16 +19,43 @@ type Props = {
   canGivePoints?: boolean
   canMarkAttendance?: boolean
   canManageCadets?: boolean
+  isPresentationRole?: boolean
   adminPendingCount?: number
   ticketsCount?: number
   accessToken?: string | null
 }
 
-export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canMarkAttendance, canManageCadets, adminPendingCount, ticketsCount, accessToken }: Props) {
+export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canMarkAttendance, canManageCadets, isPresentationRole, adminPendingCount, ticketsCount, accessToken }: Props) {
   const handleClick = (key: string) => {
     // prefer prop handler, but keep event dispatch for backward compatibility
     if (onSelect) onSelect(key)
     window.dispatchEvent(new CustomEvent('navigateTab', { detail: { tab: key } }))
+  }
+
+  // Presentation-only role: show only the presentation tab
+  if (isPresentationRole) {
+    const presItem = { key: 'presentation', label: 'Presentation', icon: Presentation }
+    return (
+      <nav className="w-full bg-transparent px-4 py-3">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex justify-center">
+            <div className="w-full max-w-3xl">
+              <div className="flex flex-wrap justify-center items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-full p-1 shadow-sm">
+                <button
+                  onClick={() => handleClick(presItem.key)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-xs sm:text-sm font-medium transition min-w-0 bg-primary text-primary-foreground shadow-sm flex-shrink-0`}
+                  aria-label={presItem.label}
+                  aria-pressed={true}
+                >
+                  <Presentation className="w-4 h-4 opacity-100" />
+                  <span className="inline-block max-w-[6rem] sm:max-w-[8rem] truncate">{presItem.label}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    )
   }
 
   // Filter items based on permissions and add badge counts

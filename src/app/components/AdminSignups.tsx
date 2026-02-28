@@ -339,6 +339,7 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
                     <SelectItem value="pointgiver">Point Giver</SelectItem>
                     <SelectItem value="staff">Staff</SelectItem>
                     <SelectItem value="snco">Flight Point Lead</SelectItem>
+                    <SelectItem value="presentation">Presentation</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -544,6 +545,7 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
                               <SelectItem value="pointgiver">Point Giver</SelectItem>
                               <SelectItem value="staff">Staff</SelectItem>
                               <SelectItem value="snco">Flight Point Lead</SelectItem>
+                              <SelectItem value="presentation">Presentation</SelectItem>
                             </SelectContent>
                           </Select>
                         </TableCell>

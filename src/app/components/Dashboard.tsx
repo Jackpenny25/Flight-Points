@@ -42,7 +42,9 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       ? 'Point Giver'
       : userRole === 'staff'
         ? 'Staff'
-        : (userRole.charAt(0).toUpperCase() + userRole.slice(1));
+        : userRole === 'presentation'
+          ? 'Presentation'
+          : (userRole.charAt(0).toUpperCase() + userRole.slice(1));
   const cadetName = user?.user_metadata?.cadetName;
   const suggestedName = user?.user_metadata?.suggestedName;
   const requireNameChange = user?.user_metadata?.requireNameChange === true;
@@ -53,7 +55,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
 
   // tabCount not currently used; remove to avoid premature reference
 
-  const [activeTab, setActiveTab] = useState<string>('leaderboards');
+  const [activeTab, setActiveTab] = useState<string>(userRole === 'presentation' ? 'presentation' : 'leaderboards');
   const [adminPendingCount, setAdminPendingCount] = useState<number>(0);
   const [ticketsCount, setTicketsCount] = useState<number>(0);
   
@@ -247,6 +249,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
             canGivePoints={canGivePoints}
             canMarkAttendance={canMarkAttendance}
             canManageCadets={canManageCadets}
+            isPresentationRole={userRole === 'presentation'}
             adminPendingCount={adminUnlocked && canManageCadets ? adminPendingCount : 0}
             ticketsCount={canManageCadets ? ticketsCount : 0}
             accessToken={accessToken}
@@ -370,6 +373,13 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 <PresentationEditor />
               </TabsContent>
             </>
+          )}
+
+          {/* Presentation-only role */}
+          {userRole === 'presentation' && (
+            <TabsContent value="presentation">
+              <PresentationEditor />
+            </TabsContent>
           )}
 
           {/* bottom tab triggers removed; use TopNav above */}
