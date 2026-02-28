@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { Play, Monitor, Keyboard, Clock } from 'lucide-react';
+import { Play, Monitor, Keyboard, Clock, Settings } from 'lucide-react';
 import { PresentationMode } from './PresentationMode';
 
 /**
@@ -11,9 +11,10 @@ import { PresentationMode } from './PresentationMode';
  */
 export function PresentationEditor() {
   const [showPresentation, setShowPresentation] = useState(false);
+  const [slideDuration, setSlideDuration] = useState(15); // seconds
 
   if (showPresentation) {
-    return <PresentationMode onClose={() => setShowPresentation(false)} />;
+    return <PresentationMode onClose={() => setShowPresentation(false)} slideDuration={slideDuration * 1000} />;
   }
 
   return (
@@ -29,7 +30,32 @@ export function PresentationEditor() {
             Full-screen slideshow for hall display. Data refreshes automatically.
           </CardDescription>
         </CardHeader>
-        <CardContent className="pb-8">
+        <CardContent className="pb-8 space-y-4">
+          {/* Duration Settings */}
+          <div className="space-y-3 p-4 bg-muted/50 rounded-lg border border-border">
+            <div className="flex items-center gap-2">
+              <Settings className="w-4 h-4 text-muted-foreground" />
+              <label className="text-sm font-medium">Slide Duration</label>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="5"
+                max="60"
+                step="1"
+                value={slideDuration}
+                onChange={(e) => setSlideDuration(Number(e.target.value))}
+                className="flex-1"
+              />
+              <div className="text-sm font-mono bg-background px-3 py-1 rounded min-w-fit">
+                {slideDuration}s
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Each slide will display for {slideDuration} second{slideDuration !== 1 ? 's' : ''} before auto-advancing
+            </p>
+          </div>
+
           <Button
             size="lg"
             className="w-full h-14 text-lg gap-3 font-semibold"
@@ -64,7 +90,7 @@ export function PresentationEditor() {
               <li>Rewards</li>
             </ol>
             <p className="text-xs text-muted-foreground/60 mt-3">
-              Auto-advances every 15 seconds &middot; Data refreshes every 30 seconds
+              Auto-advances based on configured duration &middot; Data refreshes every 30 seconds
             </p>
           </CardContent>
         </Card>

@@ -147,7 +147,7 @@ function monthLabel(ym: string): string {
 /* ═══════════════════════════════════════════════════════════════
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════════ */
-export function PresentationMode({ onClose }: { onClose: () => void; settings?: unknown }) {
+export function PresentationMode({ onClose, slideDuration = 15000 }: { onClose: () => void; slideDuration?: number }) {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [stats, setStats] = useState<PresentationStats | null>(null);
@@ -184,9 +184,9 @@ export function PresentationMode({ onClose }: { onClose: () => void; settings?: 
   /* ── Auto-advance ── */
   useEffect(() => {
     if (paused || loading) return;
-    const id = setInterval(() => setSlide(s => (s + 1) % SLIDE_COUNT), AUTO_ADVANCE_MS);
+    const id = setInterval(() => setSlide(s => (s + 1) % SLIDE_COUNT), slideDuration);
     return () => clearInterval(id);
-  }, [paused, loading]);
+  }, [paused, loading, slideDuration]);
 
   /* ── Keyboard ── */
   useEffect(() => {
@@ -407,7 +407,7 @@ function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; st
 
   entries.sort((a, b) => (b.totalPoints ?? b.points) - (a.totalPoints ?? a.points));
 
-  // Group cadets by tied points to find medal positions (handling joint winners)
+  // Group cadets by tied points to find medal positions (handling joint winners, max 5 per position)
   const podiumGroups: Array<{ medal: number; cadets: typeof entries; points: number }> = [];
   let currentIdx = 0;
   let medalsAssigned = 0;
@@ -415,7 +415,8 @@ function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; st
     const currentPoints = entries[currentIdx].totalPoints ?? entries[currentIdx].points;
     const tiedCadets: typeof entries = [];
     let tempIdx = currentIdx;
-    while (tempIdx < entries.length && (entries[tempIdx].totalPoints ?? entries[tempIdx].points) === currentPoints) {
+    // Collect all with same points, but max 5
+    while (tempIdx < entries.length && (entries[tempIdx].totalPoints ?? entries[tempIdx].points) === currentPoints && tiedCadets.length < 5) {
       tiedCadets.push(entries[tempIdx]);
       tempIdx++;
     }
@@ -465,25 +466,23 @@ function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; st
                   fontSize: 34, fontWeight: 'bold', color: '#1a1a1a',
                   fontFamily: FONT,
                   boxShadow: `0 4px 24px ${color}88`,
-                  position: 'relative' as const,
                 }}>
                   {medalLabels[idx]}
-                  {isJointWinner && (
-                    <div style={{
-                      position: 'absolute', top: 4, right: 6,
-                      fontSize: 14, fontWeight: 'bold', color: '#1a1a1a',
-                    }}>
-                      ×{group.cadets.length}
-                    </div>
-                  )}
                 </div>
-                {/* Names — all joint winners */}
+                {/* Names — all joint winners (display vertically if many) */}
                 <div style={{
-                  fontSize: isJointWinner ? 20 : 28, fontWeight: 'bold', color: T.white,
+                  fontSize: group.cadets.length > 2 ? 18 : group.cadets.length > 1 ? 20 : 28,
+                  fontWeight: 'bold', color: T.white,
                   fontFamily: FONT, textAlign: 'center' as const, maxWidth: 240,
                   lineHeight: 1.3,
                 }}>
-                  {group.cadets.map(c => c.name).join(', ')}
+                  {group.cadets.length <= 2
+                    ? group.cadets.map(c => c.name).join(', ')
+                    : group.cadets.map((c, ci) => (
+                      <div key={ci} style={{ whiteSpace: 'normal' as const }}>
+                        {c.name}
+                      </div>
+                    ))}
                 </div>
                 {/* Points */}
                 <div style={{
@@ -619,14 +618,16 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
         }}>
           <div style={{
             borderRadius: 8, overflow: 'hidden',
-            maxHeight: 'calc(100vh - 180px)', overflowY: 'auto',
+            maxHeight: 'calc(100vh - 180px)',
+            animation: 'slideScroll 45s linear infinite',
           }}>
             <PPTable headers={headers} rows={toRows(left, 1)} aligns={aligns} fontSize={fontSize} compact />
           </div>
           {right.length > 0 && (
             <div style={{
               borderRadius: 8, overflow: 'hidden',
-              maxHeight: 'calc(100vh - 180px)', overflowY: 'auto',
+              maxHeight: 'calc(100vh - 180px)',
+              animation: 'slideScroll 45s linear infinite',
             }}>
               <PPTable headers={headers} rows={toRows(right, half + 1)} aligns={aligns} fontSize={fontSize} compact />
             </div>
@@ -649,7 +650,8 @@ function SlideLeaderboard({ data }: { data: LeaderboardData | null }) {
       <div style={{
         borderRadius: 8, overflow: 'hidden',
         maxWidth: 960, width: '100%', margin: '0 auto',
-        maxHeight: 'calc(100vh - 180px)', overflowY: 'auto',
+        maxHeight: 'calc(100vh - 180px)',
+        animation: 'slideScroll 45s linear infinite',
       }}>
         <PPTable headers={headers} rows={toRows(entries, 1)} aligns={aligns} fontSize={fontSize} />
       </div>
@@ -956,28 +958,28 @@ function SlideAttendanceStreaks({ stats }: { stats: PresentationStats | null }) 
             <div style={{
               backgroundColor: 'rgba(255,215,0,0.12)',
               border: `2px solid ${T.gold}`,
-              borderRadius: 16,
-              padding: '28px 32px',
-              marginBottom: 36,
+              borderRadius: 12,
+              padding: '16px 20px',
+              marginBottom: 24,
               textAlign: 'center' as const,
             }}>
               <div style={{
-                fontSize: 20, color: T.gold, fontFamily: FONT,
-                textTransform: 'uppercase' as const, letterSpacing: 1.5,
-                marginBottom: 12, fontWeight: 'bold',
+                fontSize: 16, color: T.gold, fontFamily: FONT,
+                textTransform: 'uppercase' as const, letterSpacing: 1,
+                marginBottom: 8, fontWeight: 'bold',
               }}>
                 🏆 Record Holder{recordHolders.length > 1 ? 's' : ''}
               </div>
               <div style={{
-                fontSize: 32, fontWeight: 'bold', color: T.white,
-                fontFamily: FONT, marginBottom: 8,
+                fontSize: 22, fontWeight: 'bold', color: T.white,
+                fontFamily: FONT, marginBottom: 4, lineHeight: 1.4,
               }}>
                 {recordHolders.map(h => h.name).join(', ')}
               </div>
               <div style={{
-                fontSize: 28, color: T.gold, fontFamily: FONT, fontWeight: 'bold',
+                fontSize: 18, color: T.gold, fontFamily: FONT, fontWeight: 'bold',
               }}>
-                {recordStreak} {recordStreak === 1 ? 'night' : 'nights'} consecutive
+                {recordStreak} {recordStreak === 1 ? 'night' : 'nights'}
               </div>
             </div>
           )}
@@ -1309,5 +1311,11 @@ const animations = `
   }
   @keyframes pres-spin {
     to { transform: rotate(360deg); }
+  }
+  @keyframes slideScroll {
+    from { transform: translateY(0); }
+    50% { transform: translateY(-100%); }
+    50.1% { transform: translateY(100%); }
+    to { transform: translateY(0); }
   }
 `;
