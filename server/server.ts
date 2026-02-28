@@ -1232,99 +1232,448 @@ app.get('/api/attendance/reports', async (req, res) => {
   }
 });
 
-// Integrity checks
+// ========== COMPREHENSIVE INTEGRITY CHECKS ==========
 app.get('/api/integrity-check', async (req, res) => {
   try {
-    const [invalidPointsResult, invalidAttendanceResult, pointsTotalResult, duplicateCadetsResult, orphanedAttendancePointsResult, cadetsWithoutFlightResult] = await Promise.all([
-      query(
-        `SELECT p.id, p.cadet_name
-         FROM points p
-         LEFT JOIN cadets c ON LOWER(c.name) = LOWER(p.cadet_name)
-         WHERE c.id IS NULL`
-      ),
-      query(
-        `SELECT a.id, a.cadet_name
-         FROM attendance a
-         LEFT JOIN cadets c ON LOWER(c.name) = LOWER(a.cadet_name)
-         WHERE c.id IS NULL`
-      ),
-      query(`SELECT COALESCE(SUM(points), 0) AS total_points FROM points`),
-      query(
-        `SELECT LOWER(name) AS name, COUNT(*) AS count
-         FROM cadets
-         GROUP BY LOWER(name)
-         HAVING COUNT(*) > 1`
-      ),
-      query(
-        `SELECT p.id, p.cadet_name, p.date
-         FROM points p
-         LEFT JOIN attendance a
-           ON LOWER(a.cadet_name) = LOWER(p.cadet_name)
-          AND a.date = p.date
-         WHERE p.type = 'attendance' AND a.id IS NULL`
-      ),
-      query(
-        `SELECT COUNT(*) AS count
-         FROM cadets
-         WHERE flight IS NULL OR TRIM(flight) = ''`
-      ),
+    const checks: Array<{ name: string; category: string; status: string; message: string; details?: string }> = [];
+
+    // Helper to add a check result
+    const add = (category: string, name: string, status: 'pass' | 'warning' | 'fail', message: string, details?: string) => {
+      checks.push({ category, name, status, message, ...(details ? { details } : {}) });
+    };
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 1: REFERENTIAL INTEGRITY
+    // ═══════════════════════════════════════════════════
+
+    const [
+      invalidPointsCadets,
+      invalidAttendanceCadets,
+      invalidAttendanceBulkIds,
+      invalidRewardWinners,
+      invalidUserCadetLinks,
+      invalidVoteSuggestionLinks,
+    ] = await Promise.all([
+      query(`SELECT p.id, p.cadet_name FROM points p LEFT JOIN cadets c ON LOWER(c.name) = LOWER(p.cadet_name) WHERE c.id IS NULL`),
+      query(`SELECT a.id, a.cadet_name FROM attendance a LEFT JOIN cadets c ON LOWER(c.name) = LOWER(a.cadet_name) WHERE c.id IS NULL`),
+      query(`SELECT a.id, a.bulk_id FROM attendance a WHERE a.bulk_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM attendance_bulks b WHERE b.id = a.bulk_id)`),
+      query(`SELECT r.id, r.title, r.winner_name FROM rewards r WHERE r.winner_name IS NOT NULL AND r.winner_name != '' AND NOT EXISTS (SELECT 1 FROM cadets c WHERE LOWER(c.name) = LOWER(r.winner_name))`).catch(() => ({ rows: [] })),
+      query(`SELECT u.id, u.name, u.cadet_id FROM app_users u WHERE u.cadet_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM cadets c WHERE c.id = u.cadet_id)`).catch(() => ({ rows: [] })),
+      query(`SELECT rv.id, rv.suggestion_id FROM reward_votes rv WHERE NOT EXISTS (SELECT 1 FROM reward_suggestions rs WHERE rs.id = rv.suggestion_id)`).catch(() => ({ rows: [] })),
     ]);
 
-    const invalidPoints = invalidPointsResult.rows;
-    const invalidAttendance = invalidAttendanceResult.rows;
-    const totalPointsGiven = Number(pointsTotalResult.rows[0]?.total_points || 0);
-    const duplicates = duplicateCadetsResult.rows;
-    const orphanedPoints = orphanedAttendancePointsResult.rows;
-    const cadetsWithoutFlight = Number(cadetsWithoutFlightResult.rows[0]?.count || 0);
+    add('Referential Integrity', 'Points → Cadets',
+      invalidPointsCadets.rows.length === 0 ? 'pass' : 'fail',
+      invalidPointsCadets.rows.length === 0 ? 'All point records reference valid cadets' : `${invalidPointsCadets.rows.length} point(s) reference non-existent cadets`,
+      invalidPointsCadets.rows.length > 0 ? invalidPointsCadets.rows.slice(0, 10).map((r: any) => r.cadet_name).join(', ') : undefined
+    );
 
-    const checks = [
-      {
-        name: 'Points Reference Valid Cadets',
-        status: invalidPoints.length === 0 ? 'pass' : 'fail',
-        message: invalidPoints.length === 0
-          ? `All point records reference valid cadets`
-          : `${invalidPoints.length} point record(s) reference non-existent cadets`,
-      },
-      {
-        name: 'Attendance References Valid Cadets',
-        status: invalidAttendance.length === 0 ? 'pass' : 'fail',
-        message: invalidAttendance.length === 0
-          ? `All attendance records reference valid cadets`
-          : `${invalidAttendance.length} attendance record(s) reference non-existent cadets`,
-      },
-      {
-        name: 'Points Total Consistency',
-        status: 'pass',
-        message: `Points totals match: ${totalPointsGiven} points`,
-      },
-      {
-        name: 'Unique Cadet Names',
-        status: duplicates.length === 0 ? 'pass' : 'warning',
-        message: duplicates.length === 0
-          ? 'All cadet names are unique'
-          : `${duplicates.length} duplicate cadet name(s) found`,
-      },
-      {
-        name: 'Attendance Points Have Records',
-        status: orphanedPoints.length === 0 ? 'pass' : 'warning',
-        message: orphanedPoints.length === 0
-          ? 'All attendance points have corresponding records'
-          : `${orphanedPoints.length} attendance point(s) without records`,
-      },
-      {
-        name: 'All Cadets Assigned to Flight',
-        status: cadetsWithoutFlight === 0 ? 'pass' : 'fail',
-        message: cadetsWithoutFlight === 0
-          ? 'All cadets are assigned to a flight'
-          : `${cadetsWithoutFlight} cadet(s) not assigned to a flight`,
-      },
-    ];
+    add('Referential Integrity', 'Attendance → Cadets',
+      invalidAttendanceCadets.rows.length === 0 ? 'pass' : 'fail',
+      invalidAttendanceCadets.rows.length === 0 ? 'All attendance records reference valid cadets' : `${invalidAttendanceCadets.rows.length} attendance record(s) reference non-existent cadets`,
+      invalidAttendanceCadets.rows.length > 0 ? invalidAttendanceCadets.rows.slice(0, 10).map((r: any) => r.cadet_name).join(', ') : undefined
+    );
+
+    add('Referential Integrity', 'Attendance → Bulk Records',
+      invalidAttendanceBulkIds.rows.length === 0 ? 'pass' : 'warning',
+      invalidAttendanceBulkIds.rows.length === 0 ? 'All attendance bulk_id references are valid' : `${invalidAttendanceBulkIds.rows.length} attendance record(s) reference missing bulk records`
+    );
+
+    add('Referential Integrity', 'Reward Winners → Cadets',
+      invalidRewardWinners.rows.length === 0 ? 'pass' : 'warning',
+      invalidRewardWinners.rows.length === 0 ? 'All reward winners are valid cadets' : `${invalidRewardWinners.rows.length} reward(s) have winners not in cadets table`,
+      invalidRewardWinners.rows.length > 0 ? invalidRewardWinners.rows.slice(0, 5).map((r: any) => `"${r.title}" → ${r.winner_name}`).join(', ') : undefined
+    );
+
+    add('Referential Integrity', 'User Accounts → Cadets',
+      invalidUserCadetLinks.rows.length === 0 ? 'pass' : 'fail',
+      invalidUserCadetLinks.rows.length === 0 ? 'All user account cadet links are valid' : `${invalidUserCadetLinks.rows.length} user(s) linked to non-existent cadets`,
+      invalidUserCadetLinks.rows.length > 0 ? invalidUserCadetLinks.rows.slice(0, 5).map((r: any) => r.name).join(', ') : undefined
+    );
+
+    add('Referential Integrity', 'Votes → Suggestions',
+      invalidVoteSuggestionLinks.rows.length === 0 ? 'pass' : 'warning',
+      invalidVoteSuggestionLinks.rows.length === 0 ? 'All votes reference valid suggestions' : `${invalidVoteSuggestionLinks.rows.length} orphaned vote(s) found`
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 2: DUPLICATES & UNIQUENESS
+    // ═══════════════════════════════════════════════════
+
+    const [
+      duplicateCadets,
+      duplicateUserEmails,
+      duplicatePointRecords,
+      duplicateAttendanceSameDay,
+    ] = await Promise.all([
+      query(`SELECT LOWER(name) AS name, COUNT(*) AS count FROM cadets GROUP BY LOWER(name) HAVING COUNT(*) > 1`),
+      query(`SELECT LOWER(email) AS email, COUNT(*) AS count FROM app_users GROUP BY LOWER(email) HAVING COUNT(*) > 1`).catch(() => ({ rows: [] })),
+      query(`SELECT cadet_name, date, flight, reason, points, COUNT(*) AS count FROM points GROUP BY cadet_name, date, flight, reason, points HAVING COUNT(*) > 1`),
+      query(`SELECT cadet_name, date, COUNT(*) AS count FROM attendance GROUP BY cadet_name, date HAVING COUNT(*) > 1`),
+    ]);
+
+    add('Duplicates', 'Unique Cadet Names',
+      duplicateCadets.rows.length === 0 ? 'pass' : 'warning',
+      duplicateCadets.rows.length === 0 ? 'All cadet names are unique' : `${duplicateCadets.rows.length} duplicate cadet name(s) found`,
+      duplicateCadets.rows.length > 0 ? duplicateCadets.rows.map((r: any) => `${r.name} (×${r.count})`).join(', ') : undefined
+    );
+
+    add('Duplicates', 'Unique User Emails',
+      duplicateUserEmails.rows.length === 0 ? 'pass' : 'fail',
+      duplicateUserEmails.rows.length === 0 ? 'All user emails are unique' : `${duplicateUserEmails.rows.length} duplicate email(s) found`,
+      duplicateUserEmails.rows.length > 0 ? duplicateUserEmails.rows.map((r: any) => r.email).join(', ') : undefined
+    );
+
+    add('Duplicates', 'Possible Duplicate Points',
+      duplicatePointRecords.rows.length === 0 ? 'pass' : 'warning',
+      duplicatePointRecords.rows.length === 0 ? 'No exact duplicate point records found' : `${duplicatePointRecords.rows.length} set(s) of identical point records detected`,
+      duplicatePointRecords.rows.length > 0 ? duplicatePointRecords.rows.slice(0, 5).map((r: any) => `${r.cadet_name} on ${r.date ? new Date(r.date).toLocaleDateString('en-GB') : 'unknown'} (×${r.count})`).join(', ') : undefined
+    );
+
+    add('Duplicates', 'Single Attendance Per Day',
+      duplicateAttendanceSameDay.rows.length === 0 ? 'pass' : 'warning',
+      duplicateAttendanceSameDay.rows.length === 0 ? 'No duplicate attendance records for same cadet/date' : `${duplicateAttendanceSameDay.rows.length} cadet(s) with multiple attendance records on same date`,
+      duplicateAttendanceSameDay.rows.length > 0 ? duplicateAttendanceSameDay.rows.slice(0, 5).map((r: any) => `${r.cadet_name} (×${r.count})`).join(', ') : undefined
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 3: DATA QUALITY
+    // ═══════════════════════════════════════════════════
+
+    const [
+      cadetsNoFlight,
+      cadetsEmptyName,
+      pointsNoDate,
+      pointsZeroValue,
+      pointsNoReason,
+      pointsNoGivenBy,
+      attendanceInvalidStatus,
+      rewardsNoTitle,
+      rewardsExpiredStillActive,
+      negativePoints,
+      futurePoints,
+      futureAttendance,
+      pointsFlightMismatch,
+    ] = await Promise.all([
+      query(`SELECT COUNT(*)::int AS count FROM cadets WHERE flight IS NULL OR TRIM(flight) = ''`),
+      query(`SELECT COUNT(*)::int AS count FROM cadets WHERE name IS NULL OR TRIM(name) = ''`),
+      query(`SELECT COUNT(*)::int AS count FROM points WHERE date IS NULL`),
+      query(`SELECT COUNT(*)::int AS count FROM points WHERE points = 0`),
+      query(`SELECT COUNT(*)::int AS count FROM points WHERE reason IS NULL OR TRIM(reason) = ''`),
+      query(`SELECT COUNT(*)::int AS count FROM points WHERE given_by IS NULL OR TRIM(given_by) = ''`),
+      query(`SELECT COUNT(*)::int AS count FROM attendance WHERE status IS NULL`),
+      query(`SELECT COUNT(*)::int AS count FROM rewards WHERE title IS NULL OR TRIM(title) = ''`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*)::int AS count FROM rewards WHERE ends_at < NOW() AND (status IS NULL OR status = 'active')`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*)::int AS count FROM points WHERE points < 0`),
+      query(`SELECT COUNT(*)::int AS count FROM points WHERE date > NOW() + INTERVAL '1 day'`),
+      query(`SELECT COUNT(*)::int AS count FROM attendance WHERE date > NOW() + INTERVAL '1 day'`),
+      query(`SELECT p.id, p.cadet_name, p.flight AS point_flight, c.flight AS cadet_flight FROM points p INNER JOIN cadets c ON LOWER(c.name) = LOWER(p.cadet_name) WHERE p.flight IS NOT NULL AND c.flight IS NOT NULL AND LOWER(p.flight) != LOWER(c.flight)`),
+    ]);
+
+    const noFlightCount = Number(cadetsNoFlight.rows[0]?.count || 0);
+    add('Data Quality', 'All Cadets Have Flight',
+      noFlightCount === 0 ? 'pass' : 'fail',
+      noFlightCount === 0 ? 'All cadets assigned to a flight' : `${noFlightCount} cadet(s) missing flight assignment`
+    );
+
+    const emptyNameCount = Number(cadetsEmptyName.rows[0]?.count || 0);
+    add('Data Quality', 'No Empty Cadet Names',
+      emptyNameCount === 0 ? 'pass' : 'fail',
+      emptyNameCount === 0 ? 'All cadets have names' : `${emptyNameCount} cadet(s) with empty names`
+    );
+
+    const noDateCount = Number(pointsNoDate.rows[0]?.count || 0);
+    add('Data Quality', 'All Points Have Dates',
+      noDateCount === 0 ? 'pass' : 'warning',
+      noDateCount === 0 ? 'All point records have dates' : `${noDateCount} point(s) missing date`
+    );
+
+    const zeroCount = Number(pointsZeroValue.rows[0]?.count || 0);
+    add('Data Quality', 'No Zero-Value Points',
+      zeroCount === 0 ? 'pass' : 'warning',
+      zeroCount === 0 ? 'No zero-value point records' : `${zeroCount} point(s) with zero value`
+    );
+
+    const noReasonCount = Number(pointsNoReason.rows[0]?.count || 0);
+    add('Data Quality', 'All Points Have Reasons',
+      noReasonCount === 0 ? 'pass' : 'warning',
+      noReasonCount === 0 ? 'All point records have reasons' : `${noReasonCount} point(s) without a reason`
+    );
+
+    const noGivenByCount = Number(pointsNoGivenBy.rows[0]?.count || 0);
+    add('Data Quality', 'All Points Have Given By',
+      noGivenByCount === 0 ? 'pass' : 'warning',
+      noGivenByCount === 0 ? 'All points recorded who gave them' : `${noGivenByCount} point(s) missing given_by`
+    );
+
+    const invalidStatusCount = Number(attendanceInvalidStatus.rows[0]?.count || 0);
+    add('Data Quality', 'Valid Attendance Status',
+      invalidStatusCount === 0 ? 'pass' : 'fail',
+      invalidStatusCount === 0 ? 'All attendance records have valid status' : `${invalidStatusCount} attendance record(s) with null status`
+    );
+
+    const noTitleCount = Number(rewardsNoTitle.rows[0]?.count || 0);
+    add('Data Quality', 'All Rewards Have Titles',
+      noTitleCount === 0 ? 'pass' : 'fail',
+      noTitleCount === 0 ? 'All rewards have titles' : `${noTitleCount} reward(s) missing title`
+    );
+
+    const expiredActiveCount = Number(rewardsExpiredStillActive.rows[0]?.count || 0);
+    add('Data Quality', 'Expired Rewards Not Active',
+      expiredActiveCount === 0 ? 'pass' : 'warning',
+      expiredActiveCount === 0 ? 'No expired rewards still marked active' : `${expiredActiveCount} reward(s) past end date but still marked active`
+    );
+
+    const negCount = Number(negativePoints.rows[0]?.count || 0);
+    add('Data Quality', 'No Negative Points',
+      negCount === 0 ? 'pass' : 'warning',
+      negCount === 0 ? 'No negative point values' : `${negCount} point record(s) with negative values`
+    );
+
+    const futurePointsCount = Number(futurePoints.rows[0]?.count || 0);
+    add('Data Quality', 'No Future-Dated Points',
+      futurePointsCount === 0 ? 'pass' : 'warning',
+      futurePointsCount === 0 ? 'No points dated in the future' : `${futurePointsCount} point(s) dated in the future`
+    );
+
+    const futureAttCount = Number(futureAttendance.rows[0]?.count || 0);
+    add('Data Quality', 'No Future-Dated Attendance',
+      futureAttCount === 0 ? 'pass' : 'warning',
+      futureAttCount === 0 ? 'No attendance records dated in the future' : `${futureAttCount} attendance record(s) dated in the future`
+    );
+
+    add('Data Quality', 'Points Flight Matches Cadet Flight',
+      pointsFlightMismatch.rows.length === 0 ? 'pass' : 'warning',
+      pointsFlightMismatch.rows.length === 0 ? 'All points have correct flight for cadet' : `${pointsFlightMismatch.rows.length} point(s) where flight doesn't match cadet's current flight`,
+      pointsFlightMismatch.rows.length > 0 ? pointsFlightMismatch.rows.slice(0, 5).map((r: any) => `${r.cadet_name}: point says ${r.point_flight}, cadet is ${r.cadet_flight}`).join('; ') : undefined
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 4: ACCOUNT & AUTH INTEGRITY
+    // ═══════════════════════════════════════════════════
+
+    const [
+      usersWithoutCadet,
+      cadetsWithoutAccount,
+      usersInvalidRole,
+      usersNoPassword,
+      usersInvalidEmail,
+      multipleAccountsSameCadet,
+      ncoWithNonCadetAccount,
+    ] = await Promise.all([
+      query(`SELECT u.id, u.name, u.role FROM app_users u WHERE u.cadet_id IS NULL AND u.role NOT IN ('snco', 'admin', 'staff')`).catch(() => ({ rows: [] })),
+      query(`SELECT c.id, c.name, c.flight FROM cadets c WHERE c.flight != 'hq' AND c.is_nco = false AND NOT EXISTS (SELECT 1 FROM app_users u WHERE u.cadet_id = c.id)`).catch(() => ({ rows: [] })),
+      query(`SELECT id, name, role FROM app_users WHERE role NOT IN ('snco', 'admin', 'staff', 'pointgiver', 'cadet', 'presentation')`).catch(() => ({ rows: [] })),
+      query(`SELECT id, name FROM app_users WHERE password_hash IS NULL OR TRIM(password_hash) = ''`).catch(() => ({ rows: [] })),
+      query(`SELECT id, name, email FROM app_users WHERE email IS NULL OR TRIM(email) = '' OR email NOT LIKE '%@%'`).catch(() => ({ rows: [] })),
+      query(`SELECT cadet_id, COUNT(*)::int AS count FROM app_users WHERE cadet_id IS NOT NULL GROUP BY cadet_id HAVING COUNT(*) > 1`).catch(() => ({ rows: [] })),
+      query(`SELECT u.id, u.name, u.role, c.is_nco FROM app_users u INNER JOIN cadets c ON u.cadet_id = c.id WHERE c.is_nco = true AND u.role = 'cadet'`).catch(() => ({ rows: [] })),
+    ]);
+
+    add('Accounts', 'Cadet/Pointgiver Accounts Linked',
+      usersWithoutCadet.rows.length === 0 ? 'pass' : 'warning',
+      usersWithoutCadet.rows.length === 0 ? 'All cadet/pointgiver accounts are linked to a cadet record' : `${usersWithoutCadet.rows.length} non-admin account(s) without cadet link`,
+      usersWithoutCadet.rows.length > 0 ? usersWithoutCadet.rows.slice(0, 5).map((r: any) => `${r.name} (${r.role})`).join(', ') : undefined
+    );
+
+    add('Accounts', 'All Cadets Have Accounts',
+      cadetsWithoutAccount.rows.length === 0 ? 'pass' : 'warning',
+      cadetsWithoutAccount.rows.length === 0 ? 'All eligible cadets have user accounts' : `${cadetsWithoutAccount.rows.length} cadet(s) without accounts`,
+      cadetsWithoutAccount.rows.length > 0 ? cadetsWithoutAccount.rows.slice(0, 8).map((r: any) => r.name).join(', ') : undefined
+    );
+
+    add('Accounts', 'Valid User Roles',
+      usersInvalidRole.rows.length === 0 ? 'pass' : 'fail',
+      usersInvalidRole.rows.length === 0 ? 'All users have valid roles' : `${usersInvalidRole.rows.length} user(s) with invalid roles`,
+      usersInvalidRole.rows.length > 0 ? usersInvalidRole.rows.slice(0, 5).map((r: any) => `${r.name}: "${r.role}"`).join(', ') : undefined
+    );
+
+    add('Accounts', 'All Users Have Passwords',
+      usersNoPassword.rows.length === 0 ? 'pass' : 'fail',
+      usersNoPassword.rows.length === 0 ? 'All users have password hashes' : `${usersNoPassword.rows.length} user(s) without password hash`
+    );
+
+    add('Accounts', 'Valid Email Format',
+      usersInvalidEmail.rows.length === 0 ? 'pass' : 'fail',
+      usersInvalidEmail.rows.length === 0 ? 'All user emails have valid format' : `${usersInvalidEmail.rows.length} user(s) with invalid email`,
+      usersInvalidEmail.rows.length > 0 ? usersInvalidEmail.rows.slice(0, 5).map((r: any) => r.name).join(', ') : undefined
+    );
+
+    add('Accounts', 'No Duplicate Cadet Links',
+      multipleAccountsSameCadet.rows.length === 0 ? 'pass' : 'fail',
+      multipleAccountsSameCadet.rows.length === 0 ? 'Each cadet has at most one account' : `${multipleAccountsSameCadet.rows.length} cadet(s) linked to multiple accounts`
+    );
+
+    add('Accounts', 'NCO Role Consistency',
+      ncoWithNonCadetAccount.rows.length === 0 ? 'pass' : 'warning',
+      ncoWithNonCadetAccount.rows.length === 0 ? 'No NCOs with "cadet" role accounts' : `${ncoWithNonCadetAccount.rows.length} NCO(s) have "cadet" role — should they be pointgiver?`,
+      ncoWithNonCadetAccount.rows.length > 0 ? ncoWithNonCadetAccount.rows.slice(0, 5).map((r: any) => r.name).join(', ') : undefined
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 5: POINTS BUSINESS RULES
+    // ═══════════════════════════════════════════════════
+
+    const [
+      ncoWithPoints,
+      hqWithPoints,
+      orphanedAttendancePoints,
+    ] = await Promise.all([
+      query(`SELECT p.id, p.cadet_name, p.points FROM points p INNER JOIN cadets c ON LOWER(c.name) = LOWER(p.cadet_name) WHERE c.is_nco = true`).catch(() => ({ rows: [] })),
+      query(`SELECT p.id, p.cadet_name, p.points FROM points p INNER JOIN cadets c ON LOWER(c.name) = LOWER(p.cadet_name) WHERE LOWER(c.flight) = 'hq'`).catch(() => ({ rows: [] })),
+      query(`SELECT p.id, p.cadet_name, p.date FROM points p LEFT JOIN attendance a ON LOWER(a.cadet_name) = LOWER(p.cadet_name) AND a.date = p.date WHERE p.type = 'attendance' AND a.id IS NULL`),
+    ]);
+
+    add('Business Rules', 'NCOs Have No Points',
+      ncoWithPoints.rows.length === 0 ? 'pass' : 'warning',
+      ncoWithPoints.rows.length === 0 ? 'No NCOs have points (correct — NCOs cannot receive points)' : `${ncoWithPoints.rows.length} point record(s) exist for NCOs (may be pre-NCO status)`,
+      ncoWithPoints.rows.length > 0 ? ncoWithPoints.rows.slice(0, 5).map((r: any) => r.cadet_name).join(', ') : undefined
+    );
+
+    add('Business Rules', 'HQ/Staff Have No Points',
+      hqWithPoints.rows.length === 0 ? 'pass' : 'warning',
+      hqWithPoints.rows.length === 0 ? 'No HQ/Staff cadets have points (correct)' : `${hqWithPoints.rows.length} point record(s) exist for HQ/Staff members`,
+      hqWithPoints.rows.length > 0 ? hqWithPoints.rows.slice(0, 5).map((r: any) => r.cadet_name).join(', ') : undefined
+    );
+
+    add('Business Rules', 'Attendance Points Have Records',
+      orphanedAttendancePoints.rows.length === 0 ? 'pass' : 'warning',
+      orphanedAttendancePoints.rows.length === 0 ? 'All attendance-type points have matching attendance records' : `${orphanedAttendancePoints.rows.length} attendance point(s) with no matching attendance record`
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 6: REWARDS INTEGRITY
+    // ═══════════════════════════════════════════════════
+
+    const [
+      claimedNoWinner,
+      winnerNotClaimed,
+      rewardsDuplicateTitle,
+    ] = await Promise.all([
+      query(`SELECT id, title FROM rewards WHERE status = 'claimed' AND (winner_name IS NULL OR TRIM(winner_name) = '')`).catch(() => ({ rows: [] })),
+      query(`SELECT id, title, winner_name FROM rewards WHERE winner_name IS NOT NULL AND TRIM(winner_name) != '' AND (status IS NULL OR status != 'claimed')`).catch(() => ({ rows: [] })),
+      query(`SELECT LOWER(title) AS title, COUNT(*)::int AS count FROM rewards WHERE status = 'active' OR status IS NULL GROUP BY LOWER(title) HAVING COUNT(*) > 1`).catch(() => ({ rows: [] })),
+    ]);
+
+    add('Rewards', 'Claimed Rewards Have Winners',
+      claimedNoWinner.rows.length === 0 ? 'pass' : 'fail',
+      claimedNoWinner.rows.length === 0 ? 'All claimed rewards have a winner set' : `${claimedNoWinner.rows.length} claimed reward(s) without a winner`,
+      claimedNoWinner.rows.length > 0 ? claimedNoWinner.rows.slice(0, 5).map((r: any) => r.title).join(', ') : undefined
+    );
+
+    add('Rewards', 'Winners Marked as Claimed',
+      winnerNotClaimed.rows.length === 0 ? 'pass' : 'warning',
+      winnerNotClaimed.rows.length === 0 ? 'All rewards with winners are marked claimed' : `${winnerNotClaimed.rows.length} reward(s) have winners but aren't marked claimed`,
+      winnerNotClaimed.rows.length > 0 ? winnerNotClaimed.rows.slice(0, 5).map((r: any) => `"${r.title}" → ${r.winner_name}`).join(', ') : undefined
+    );
+
+    add('Rewards', 'No Duplicate Active Rewards',
+      rewardsDuplicateTitle.rows.length === 0 ? 'pass' : 'warning',
+      rewardsDuplicateTitle.rows.length === 0 ? 'No duplicate active reward titles' : `${rewardsDuplicateTitle.rows.length} duplicate active reward title(s)`
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 7: ATTENDANCE INTEGRITY
+    // ═══════════════════════════════════════════════════
+
+    const [
+      attendanceFlightMismatch,
+      bulkTotalMismatch,
+      attendanceNoDate,
+    ] = await Promise.all([
+      query(`SELECT a.id, a.cadet_name, a.flight AS att_flight, c.flight AS cadet_flight FROM attendance a INNER JOIN cadets c ON LOWER(c.name) = LOWER(a.cadet_name) WHERE a.flight IS NOT NULL AND c.flight IS NOT NULL AND LOWER(a.flight) != LOWER(c.flight)`),
+      query(`SELECT b.id, b.total_records AS expected, (SELECT COUNT(*)::int FROM attendance a WHERE a.bulk_id = b.id) AS actual FROM attendance_bulks b WHERE b.total_records IS NOT NULL AND b.total_records != (SELECT COUNT(*)::int FROM attendance a WHERE a.bulk_id = b.id)`),
+      query(`SELECT COUNT(*)::int AS count FROM attendance WHERE date IS NULL`),
+    ]);
+
+    add('Attendance', 'Flight Matches Cadet',
+      attendanceFlightMismatch.rows.length === 0 ? 'pass' : 'warning',
+      attendanceFlightMismatch.rows.length === 0 ? 'All attendance flights match cadet\'s current flight' : `${attendanceFlightMismatch.rows.length} attendance record(s) with mismatched flight`,
+      attendanceFlightMismatch.rows.length > 0 ? attendanceFlightMismatch.rows.slice(0, 5).map((r: any) => `${r.cadet_name}: att=${r.att_flight}, cadet=${r.cadet_flight}`).join('; ') : undefined
+    );
+
+    add('Attendance', 'Bulk Record Counts Match',
+      bulkTotalMismatch.rows.length === 0 ? 'pass' : 'warning',
+      bulkTotalMismatch.rows.length === 0 ? 'All bulk attendance record counts match actual records' : `${bulkTotalMismatch.rows.length} bulk event(s) with mismatched record counts`,
+      bulkTotalMismatch.rows.length > 0 ? bulkTotalMismatch.rows.slice(0, 5).map((r: any) => `Bulk ${r.id.slice(0,8)}: expected ${r.expected}, found ${r.actual}`).join('; ') : undefined
+    );
+
+    const noDateAttCount = Number(attendanceNoDate.rows[0]?.count || 0);
+    add('Attendance', 'All Attendance Has Dates',
+      noDateAttCount === 0 ? 'pass' : 'fail',
+      noDateAttCount === 0 ? 'All attendance records have dates' : `${noDateAttCount} attendance record(s) missing date`
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 8: DATABASE STATISTICS
+    // ═══════════════════════════════════════════════════
+
+    const [
+      totalCadets,
+      totalPoints,
+      totalAttendance,
+      totalBulks,
+      totalRewards,
+      totalUsers,
+      totalTickets,
+      totalSuggestions,
+      pointsSum,
+      flightDistribution,
+      roleDistribution,
+    ] = await Promise.all([
+      query(`SELECT COUNT(*)::int AS count FROM cadets`),
+      query(`SELECT COUNT(*)::int AS count FROM points`),
+      query(`SELECT COUNT(*)::int AS count FROM attendance`),
+      query(`SELECT COUNT(*)::int AS count FROM attendance_bulks`),
+      query(`SELECT COUNT(*)::int AS count FROM rewards`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*)::int AS count FROM app_users`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*)::int AS count FROM tickets`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*)::int AS count FROM reward_suggestions`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COALESCE(SUM(points), 0)::int AS total FROM points`),
+      query(`SELECT flight, COUNT(*)::int AS count FROM cadets GROUP BY flight ORDER BY flight`),
+      query(`SELECT role, COUNT(*)::int AS count FROM app_users GROUP BY role ORDER BY role`).catch(() => ({ rows: [] })),
+    ]);
+
+    const cadetCount = Number(totalCadets.rows[0]?.count || 0);
+    const pointCount = Number(totalPoints.rows[0]?.count || 0);
+    const attCount = Number(totalAttendance.rows[0]?.count || 0);
+    const bulkCount = Number(totalBulks.rows[0]?.count || 0);
+    const rewardCount = Number(totalRewards.rows[0]?.count || 0);
+    const userCount = Number(totalUsers.rows[0]?.count || 0);
+    const ticketCount = Number(totalTickets.rows[0]?.count || 0);
+    const suggestionCount = Number(totalSuggestions.rows[0]?.count || 0);
+    const pointTotal = Number(pointsSum.rows[0]?.total || 0);
+
+    add('Statistics', 'Record Counts',
+      'pass', 
+      `Cadets: ${cadetCount} | Points: ${pointCount} (${pointTotal} total) | Attendance: ${attCount} | Bulks: ${bulkCount} | Rewards: ${rewardCount} | Users: ${userCount} | Tickets: ${ticketCount} | Suggestions: ${suggestionCount}`
+    );
+
+    add('Statistics', 'Flights Distribution',
+      'pass',
+      flightDistribution.rows.map((r: any) => `${r.flight || '(none)'}: ${r.count}`).join(' | ') || 'No cadets'
+    );
+
+    add('Statistics', 'Roles Distribution',
+      'pass',
+      roleDistribution.rows.map((r: any) => `${r.role}: ${r.count}`).join(' | ') || 'No users'
+    );
+
+    add('Statistics', 'Data Populated',
+      cadetCount > 0 ? 'pass' : 'warning',
+      cadetCount > 0 ? 'Database has cadet records' : 'No cadets in database — system has no data'
+    );
+
+    // ═══════════════════════════════════════════════════
+    // BUILD SUMMARY
+    // ═══════════════════════════════════════════════════
 
     const summary = {
       totalChecks: checks.length,
       passed: checks.filter(c => c.status === 'pass').length,
       warnings: checks.filter(c => c.status === 'warning').length,
       failed: checks.filter(c => c.status === 'fail').length,
+      categories: [...new Set(checks.map(c => c.category))],
     };
 
     res.json({ checks, summary });
