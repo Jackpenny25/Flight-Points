@@ -147,7 +147,7 @@ function monthLabel(ym: string): string {
 /* ═══════════════════════════════════════════════════════════════
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════════ */
-export function PresentationMode({ onClose, slideDuration = 15000 }: { onClose: () => void; slideDuration?: number }) {
+export function PresentationMode({ onClose, slideDurations = [15000, 15000, 20000, 15000, 15000, 15000, 15000, 15000, 15000] }: { onClose: () => void; slideDurations?: number[] }) {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [stats, setStats] = useState<PresentationStats | null>(null);
@@ -186,18 +186,20 @@ export function PresentationMode({ onClose, slideDuration = 15000 }: { onClose: 
     if (paused || loading) return;
     
     // Calculate duration for this slide
-    // Slide 2 (leaderboard) has extended duration for table scrolling
-    let duration = slideDuration;
+    // Slide 2 (leaderboard) has extended duration for table scrolling (unless < 12 cadets)
+    let duration = slideDurations[slide] || slideDurations[0];
     if (slide === 2 && data?.cadetLeaderboard) {
-      // ~2 seconds per 10 cadets for slow viewing, but advance at 85% to avoid blank screen
       const cadets = data.detailedLeaderboard?.length || data.cadetLeaderboard?.length || 0;
-      const fullDuration = Math.max(30000, Math.ceil((cadets / 10) * 20000));
-      duration = Math.round(fullDuration * 0.85); // Advance when most content scrolled but last cadets still visible
+      if (cadets > 12) {
+        // ~2 seconds per 10 cadets for slow viewing, but advance at 85% to avoid blank screen
+        const fullDuration = Math.max(30000, Math.ceil((cadets / 10) * 20000));
+        duration = Math.round(fullDuration * 0.85);
+      }
     }
     
     const id = setTimeout(() => setSlide(s => (s + 1) % SLIDE_COUNT), duration);
     return () => clearTimeout(id);
-  }, [paused, loading, slideDuration, slide, data]);
+  }, [paused, loading, slideDurations, slide, data]);
 
   /* ── Keyboard ── */
   useEffect(() => {
@@ -1321,8 +1323,14 @@ const S: Record<string, CSSProperties> = {
 /* ─── Animations ─── */
 const animations = `
   @keyframes pres-fadeSlide {
-    from { opacity: 0; transform: translateY(12px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from { 
+      opacity: 0; 
+      transform: translateY(20px) scale(0.98);
+    }
+    to   { 
+      opacity: 1; 
+      transform: translateY(0) scale(1);
+    }
   }
   @keyframes pres-spin {
     to { transform: rotate(360deg); }
