@@ -258,7 +258,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       )}
 
       {/* Cadet navigation */}
-      {userRole === 'cadet' && cadetName && (
+      {userRole === 'cadet' && (
         <div className="mt-4 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex gap-2 bg-white p-2 rounded-lg shadow-sm border">
             <Button
@@ -279,15 +279,17 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               <Gift className="size-4 mr-2" />
               Rewards
             </Button>
-            <Button
-              variant={activeTab === 'mypoints' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setActiveTab('mypoints')}
-              className="flex-1"
-            >
-              <Award className="size-4 mr-2" />
-              My Points
-            </Button>
+            {cadetName && (
+              <Button
+                variant={activeTab === 'mypoints' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setActiveTab('mypoints')}
+                className="flex-1"
+              >
+                <Award className="size-4 mr-2" />
+                My Points
+              </Button>
+            )}
             <Button
               variant={activeTab === 'tickets' ? 'default' : 'ghost'}
               size="sm"
