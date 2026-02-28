@@ -17,6 +17,7 @@ import { api } from '../../utils/api';
 import { logout } from '../../utils/auth';
 import AdminSignups from './AdminSignups';
 import { MyPoints } from './MyPoints';
+import { MyAttendance } from './MyAttendance';
 import { NotificationCenter } from './NotificationCenter';
 import { Tickets } from './Tickets';
 import { TicketsAdmin } from './TicketsAdmin';
@@ -290,6 +291,17 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 My Points
               </Button>
             )}
+            {cadetName && (
+              <Button
+                variant={activeTab === 'myattendance' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setActiveTab('myattendance')}
+                className="flex-1"
+              >
+                <CalendarDays className="size-4 mr-2" />
+                My Attendance
+              </Button>
+            )}
             <Button
               variant={activeTab === 'tickets' ? 'default' : 'ghost'}
               size="sm"
@@ -307,7 +319,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v)} className="space-y-6">
           <TabsContent value="leaderboards">
-            <Leaderboards />
+            <Leaderboards userRole={userRole} />
           </TabsContent>
 
           <TabsContent value="rewards">
@@ -318,6 +330,13 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           {userRole === 'cadet' && cadetName && (
             <TabsContent value="mypoints">
               <MyPoints accessToken={accessToken} cadetName={cadetName} />
+            </TabsContent>
+          )}
+
+          {/* My Attendance for cadets */}
+          {userRole === 'cadet' && cadetName && (
+            <TabsContent value="myattendance">
+              <MyAttendance cadetName={cadetName} />
             </TabsContent>
           )}
 

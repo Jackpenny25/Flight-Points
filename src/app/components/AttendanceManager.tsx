@@ -115,7 +115,8 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
           setBulkFailedEntries(entries);
           toast.error(`Failed: ${res.error}`);
         } else {
-          toast.success(`Saved ${res.totalRecords || entries.length} attendance records (${res.totalPresent || 0} present)`);
+          const pointsMsg = res.pointsAwarded ? `, ${res.pointsAwarded} cadets awarded points` : '';
+          toast.success(`Saved ${res.totalRecords || entries.length} attendance records (${res.totalPresent || 0} present${pointsMsg})`);
         }
       } catch (err: any) {
         setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: String(err) })));

@@ -33,6 +33,10 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 dotenv.config({ path: path.join(projectRoot, '.env.local'), override: true });
 
+// ========== CONFIGURABLE CONSTANTS ==========
+// Points awarded to each cadet marked 'present' during attendance
+const ATTENDANCE_POINTS = 2;
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -746,6 +750,25 @@ app.get('/api/data/:type', async (req, res) => {
     }
 
     const { table, orderBy } = typeConfig[normalized];
+
+    // Cadets can only see their own attendance records
+    if (normalized === 'attendance') {
+      const authHeader = req.headers['authorization'];
+      if (authHeader) {
+        try {
+          const token = authHeader.replace('Bearer ', '');
+          const decoded = jwt.verify(token, JWT_SECRET) as any;
+          if (decoded.role === 'cadet' && decoded.name) {
+            const sql = `SELECT * FROM ${table} WHERE LOWER(cadet_name) = LOWER($1)${orderBy ? ` ORDER BY ${orderBy}` : ''}`;
+            const result = await query(sql, [decoded.name]);
+            return res.json(mapRowsToClient(normalized, result.rows));
+          }
+        } catch (e) {
+          // Token invalid or missing — fall through to full list (requires auth elsewhere)
+        }
+      }
+    }
+
     const sql = orderBy ? `SELECT * FROM ${table} ORDER BY ${orderBy}` : `SELECT * FROM ${table}`;
     const result = await query(sql);
     res.json(mapRowsToClient(normalized, result.rows));
@@ -1239,11 +1262,42 @@ app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'poi
       );
     }
 
+    // Award attendance points to present cadets (skip NCOs and HQ/Staff)
+    let pointsAwarded = 0;
+    if (ATTENDANCE_POINTS > 0) {
+      const presentEntries = entries.filter((e: any) => e.status === 'present');
+      for (const entry of presentEntries) {
+        try {
+          // Check if cadet is NCO or HQ — they can't receive points
+          const cadetCheck = await query(
+            'SELECT is_nco, flight FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
+            [entry.cadetName]
+          );
+          if (cadetCheck.rows.length > 0) {
+            const { is_nco, flight: cadetFlight } = cadetCheck.rows[0];
+            if (is_nco === true || (cadetFlight && cadetFlight.toLowerCase() === 'hq')) {
+              continue; // Skip NCOs and HQ cadets
+            }
+          }
+          const pointId = crypto.randomUUID();
+          await query(
+            `INSERT INTO points (id, cadet_name, date, flight, reason, points, type, given_by, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+            [pointId, entry.cadetName, entry.date || date, entry.flight, 'Attendance', ATTENDANCE_POINTS, 'attendance', submittedBy]
+          );
+          pointsAwarded++;
+        } catch (pointErr) {
+          console.error(`Failed to award attendance point to ${entry.cadetName}:`, pointErr);
+        }
+      }
+    }
+
     res.status(201).json({
       id: bulkId,
       totalRecords: entries.length,
       totalPresent,
-      message: `Saved ${entries.length} attendance records`,
+      pointsAwarded,
+      message: `Saved ${entries.length} attendance records, awarded ${pointsAwarded} x ${ATTENDANCE_POINTS}pt`,
     });
   } catch (error) {
     console.error('Error in POST /api/attendance/bulk:', error);
@@ -1265,8 +1319,16 @@ app.delete('/api/attendance/bulk/:id', requireAuth, requireRole(['snco', 'admin'
 });
 
 // Attendance reports
-app.get('/api/attendance/reports', async (req, res) => {
+app.get('/api/attendance/reports', requireAuth, async (req: AuthRequest, res) => {
   try {
+    const userRole = (req as any).user?.role;
+    const userName = (req as any).user?.name;
+
+    // Cadets should not access full attendance reports
+    if (userRole === 'cadet') {
+      return res.status(403).json({ error: 'Cadets cannot view full attendance reports' });
+    }
+
     const summaryResult = await query(
       `SELECT cadet_name,
               flight,
@@ -1978,14 +2040,146 @@ app.get('/api/my-points', requireAuth, async (req: AuthRequest, res: Response) =
   }
 });
 
-// Tickets endpoint
-app.get('/api/tickets', async (req, res) => {
+// ========== TICKETS ENDPOINTS ==========
+
+async function ensureTicketsSchema() {
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS type VARCHAR DEFAULT 'Request'`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category VARCHAR DEFAULT 'Other'`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS evidence_url TEXT`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS comments JSONB DEFAULT '[]'`).catch(() => {});
+}
+
+function mapTicket(row: any) {
+  return {
+    id: row.id,
+    type: row.type || 'Request',
+    category: row.category || row.title || 'Other',
+    description: row.description,
+    evidenceUrl: row.evidence_url,
+    createdBy: row.created_by,
+    status: row.status || 'open',
+    priority: row.priority || 'medium',
+    comments: Array.isArray(row.comments) ? row.comments : (row.comments ? JSON.parse(row.comments) : []),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// GET /api/tickets — admins see all, cadets see their own
+app.get('/api/tickets', requireAuth, async (req: AuthRequest, res) => {
   try {
-    // If you have a tickets table, query it. Otherwise return empty
-    const result = await query('SELECT * FROM tickets ORDER BY created_at DESC').catch(() => ({ rows: [] }));
-    res.json(result.rows || []);
+    await ensureTicketsSchema();
+    const user = req.user!;
+    let result;
+    if (user.role === 'cadet') {
+      result = await query('SELECT * FROM tickets WHERE created_by = $1 ORDER BY created_at DESC', [user.name]);
+    } else {
+      result = await query('SELECT * FROM tickets ORDER BY created_at DESC');
+    }
+    res.json({ tickets: result.rows.map(mapTicket) });
   } catch (error) {
-    res.json([]);
+    console.error('Error in GET /api/tickets:', error);
+    res.json({ tickets: [] });
+  }
+});
+
+// POST /api/tickets — any authenticated user can submit
+app.post('/api/tickets', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    await ensureTicketsSchema();
+    const user = req.user!;
+    const { type, category, description, evidenceUrl } = req.body || {};
+    if (!description?.trim()) {
+      return res.status(400).json({ error: 'Description is required' });
+    }
+    const id = crypto.randomUUID();
+    const result = await query(
+      `INSERT INTO tickets (id, title, description, type, category, evidence_url, created_by, status, priority, comments, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', 'medium', '[]', NOW(), NOW()) RETURNING *`,
+      [id, category || type || 'Ticket', description.trim(), type || 'Request', category || 'Other', evidenceUrl || null, user.name]
+    );
+    res.status(201).json({ ticket: mapTicket(result.rows[0]) });
+  } catch (error) {
+    console.error('Error in POST /api/tickets:', error);
+    res.status(500).json({ error: 'Failed to create ticket' });
+  }
+});
+
+// PUT /api/tickets/:id — approve / reject / comment
+app.put('/api/tickets/:id', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    await ensureTicketsSchema();
+    const user = req.user!;
+    const { id } = req.params;
+    const { action, points, reason, comment } = req.body || {};
+
+    const existing = await query('SELECT * FROM tickets WHERE id = $1', [id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Ticket not found' });
+    const ticket = existing.rows[0];
+
+    if (action === 'approve') {
+      if (!['snco', 'admin', 'staff'].includes(user.role)) {
+        return res.status(403).json({ error: 'Only admins can approve tickets' });
+      }
+      // Award points to the cadet if points provided
+      if (points && Number(points) > 0) {
+        const cadetResult = await query('SELECT flight FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1', [ticket.created_by]);
+        const flight = cadetResult.rows[0]?.flight || '';
+        const pointId = crypto.randomUUID();
+        await query(
+          `INSERT INTO points (id, cadet_name, date, flight, reason, points, type, given_by, created_at, updated_at)
+           VALUES ($1, $2, NOW(), $3, $4, $5, 'ticket', $6, NOW(), NOW())`,
+          [pointId, ticket.created_by, flight, reason || `Ticket: ${ticket.category}`, Number(points), user.name]
+        );
+      }
+      // Add a system comment
+      const existingComments = Array.isArray(ticket.comments) ? ticket.comments : (ticket.comments ? JSON.parse(ticket.comments) : []);
+      const newComment = { id: crypto.randomUUID(), author: user.name, text: `✅ Approved${points ? ` — ${points} points awarded` : ''}${reason ? `: ${reason}` : ''}`, createdAt: new Date().toISOString() };
+      const updatedComments = [...existingComments, newComment];
+      await query(
+        `UPDATE tickets SET status = 'approved', updated_at = NOW(), comments = $1 WHERE id = $2`,
+        [JSON.stringify(updatedComments), id]
+      );
+    } else if (action === 'reject') {
+      if (!['snco', 'admin', 'staff'].includes(user.role)) {
+        return res.status(403).json({ error: 'Only admins can reject tickets' });
+      }
+      const existingComments = Array.isArray(ticket.comments) ? ticket.comments : (ticket.comments ? JSON.parse(ticket.comments) : []);
+      const newComment = { id: crypto.randomUUID(), author: user.name, text: `❌ Rejected${reason ? `: ${reason}` : ''}`, createdAt: new Date().toISOString() };
+      const updatedComments = [...existingComments, newComment];
+      await query(
+        `UPDATE tickets SET status = 'rejected', updated_at = NOW(), comments = $1 WHERE id = $2`,
+        [JSON.stringify(updatedComments), id]
+      );
+    } else if (action === 'comment') {
+      if (!comment?.trim()) return res.status(400).json({ error: 'Comment text required' });
+      const existingComments = Array.isArray(ticket.comments) ? ticket.comments : (ticket.comments ? JSON.parse(ticket.comments) : []);
+      const newComment = { id: crypto.randomUUID(), author: user.name, text: comment.trim(), createdAt: new Date().toISOString() };
+      const updatedComments = [...existingComments, newComment];
+      await query(
+        `UPDATE tickets SET updated_at = NOW(), comments = $1 WHERE id = $2`,
+        [JSON.stringify(updatedComments), id]
+      );
+    } else {
+      return res.status(400).json({ error: 'Invalid action' });
+    }
+
+    const updated = await query('SELECT * FROM tickets WHERE id = $1', [id]);
+    res.json({ ticket: mapTicket(updated.rows[0]) });
+  } catch (error) {
+    console.error('Error in PUT /api/tickets/:id:', error);
+    res.status(500).json({ error: 'Failed to update ticket' });
+  }
+});
+
+// DELETE /api/tickets/:id
+app.delete('/api/tickets/:id', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
+  try {
+    await query('DELETE FROM tickets WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Ticket deleted' });
+  } catch (error) {
+    console.error('Error in DELETE /api/tickets/:id:', error);
+    res.status(500).json({ error: 'Failed to delete ticket' });
   }
 });
 
