@@ -10,7 +10,7 @@ import { formatFlight } from './ui/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
-import { Plus, Trash2, UserPlus, Edit2 } from 'lucide-react';
+import { Plus, Trash2, UserPlus, Edit2, Shield } from 'lucide-react';
 import { Checkbox } from './ui/checkbox';
 import { toast } from 'sonner';
 
@@ -18,6 +18,8 @@ interface Cadet {
   id: string;
   name: string;
   flight: string;
+  rank?: string;
+  isNco?: boolean;
   createdAt: string;
 }
 
@@ -38,6 +40,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   // Form state
   const [name, setName] = useState('');
   const [flight, setFlight] = useState('');
+  const [rank, setRank] = useState('');
   
 
   const csvInputRef = useRef<HTMLInputElement | null>(null);
@@ -63,6 +66,8 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   const [editingCadet, setEditingCadet] = useState<Cadet | null>(null);
   const [editName, setEditName] = useState('');
   const [editFlight, setEditFlight] = useState('');
+  const [editRank, setEditRank] = useState('');
+  const [editNco, setEditNco] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
 
   const ensureAdminPin = () => {
@@ -131,7 +136,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     fetchCadets();
     const id = setInterval(() => {
       fetchCadets();
-    }, 30000);
+    }, 120000);
     return () => clearInterval(id);
   }, []);
 
@@ -274,6 +279,8 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     setEditingCadet(cadet);
     setEditName(cadet.name);
     setEditFlight(cadet.flight);
+    setEditRank(cadet.rank || '');
+    setEditNco(!!cadet.isNco);
     setEditOpen(true);
   };
 
@@ -282,7 +289,9 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     if (!editingCadet) return;
     setEditSubmitting(true);
     try {
-      const res = await api.updateCadet(editingCadet.id, { name: editName, flight: editFlight });
+      const payload: any = { name: editName, flight: editFlight, isNco: editNco };
+      if (editFlight === 'hq') payload.rank = editRank;
+      const res = await api.updateCadet(editingCadet.id, payload);
       if (res && res.id) {
         const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
         const updated = (Array.isArray(existing) ? existing : []).map((c: Cadet) => c.id === res.id ? res : c);
@@ -301,6 +310,26 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
       setEditSubmitting(false);
     }
   };
+
+  const handleToggleNco = async (cadet: Cadet) => {
+    if (!ensureAdminPin()) return;
+    const newValue = !cadet.isNco;
+    try {
+      const res = await api.updateCadet(cadet.id, { isNco: newValue } as any);
+      if (res && res.id) {
+        const updated = cadets.map(c => c.id === cadet.id ? { ...c, isNco: newValue } : c);
+        setCadets(updated);
+        localStorage.setItem('cadets', JSON.stringify(updated));
+        toast.success(`${cadet.name} ${newValue ? 'marked as NCO — cannot receive points' : 'unmarked as NCO — can receive points again'}`);
+      } else {
+        toast.error(res?.error || 'Failed to update NCO status');
+      }
+    } catch (err) {
+      console.error('Toggle NCO failed', err);
+      toast.error('Failed to update NCO status');
+    }
+  };
+
   const confirmBulkRemove = async () => {
     if (!ensureAdminPin()) return;
     if (bulkRemoveConfirmText !== 'DELETE') {
@@ -357,9 +386,10 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     const [, drag] = useDrag(() => ({ type: ItemTypes.CADET, item: { id: cadet.id, flight: cadet.flight } }));
 
     const checked = selectedCadetIds.has(cadet.id);
+    const isHq = cadet.flight === 'hq';
 
     return (
-      <div ref={drag as any} className={`p-3 mb-2 bg-white rounded border flex justify-between items-center ${checked ? 'ring-2 ring-red-200' : ''}`}>
+      <div ref={isHq ? undefined : drag as any} className={`p-3 mb-2 bg-white rounded border flex justify-between items-center ${checked ? 'ring-2 ring-red-200' : ''} ${cadet.isNco ? 'border-amber-300 bg-amber-50' : ''}`}>
         <div className="flex items-center gap-3">
           <Checkbox checked={checked} onCheckedChange={() => {
             const next = new Set(selectedCadetIds);
@@ -368,12 +398,20 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             setSelectedCadetIds(next);
           }} />
           <div className="flex-1 min-w-0">
-            <div className="font-medium truncate max-w-[220px]">{formatDisplayName(cadet.name)}</div>
-            <div className="text-sm text-gray-500">{formatFlight(cadet.flight)}</div>
+            <div className="font-medium truncate max-w-[220px] flex items-center gap-1">
+              {isHq && cadet.rank ? <span className="text-blue-700 mr-1">{cadet.rank}</span> : null}
+              {formatDisplayName(cadet.name)}
+              {cadet.isNco && (
+                <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-700 bg-amber-200 px-1.5 py-0.5 rounded ml-1" title="NCO — cannot receive points">
+                  <Shield className="h-3 w-3" />NCO
+                </span>
+              )}
+            </div>
+            {!isHq && <div className="text-sm text-gray-500">{formatFlight(cadet.flight)}</div>}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="ghost" onClick={() => { setEditingCadet(cadet); setEditName(cadet.name); setEditFlight(cadet.flight); setEditOpen(true); }}><Edit2 size={14} /></Button>
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="ghost" onClick={() => openEditCadet(cadet)}><Edit2 size={14} /></Button>
           <Button size="sm" variant="destructive" onClick={() => handleDeleteCadet(cadet.id, cadet.name)}><Trash2 size={14} /></Button>
         </div>
       </div>
@@ -406,15 +444,18 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await api.createCadet({ name, flight });
+      const payload: any = { name, flight };
+      if (flight === 'hq' && rank) payload.rank = rank;
+      const res = await api.createCadet(payload);
       if (res && res.id) {
         const existing = JSON.parse(localStorage.getItem('cadets') || '[]');
         const merged = Array.isArray(existing) ? existing.concat(res) : [res];
         localStorage.setItem('cadets', JSON.stringify(merged));
         setCadets(merged);
-        toast.success('Cadet added successfully!');
+        toast.success(flight === 'hq' ? 'Staff member added!' : 'Cadet added successfully!');
         setName('');
         setFlight('');
+        setRank('');
         setOpen(false);
       } else {
         toast.error(res?.error || 'Failed to add cadet');
@@ -455,8 +496,8 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     }
   };
 
-  // Group cadets by flight
-  const cadetsByFlight = cadets.reduce((acc, cadet) => {
+  // Group cadets by flight (exclude hq) and sort alphabetically
+  const cadetsByFlight = cadets.filter(c => c.flight !== 'hq').reduce((acc, cadet) => {
     if (!acc[cadet.flight]) {
       acc[cadet.flight] = [];
     }
@@ -464,13 +505,21 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     return acc;
   }, {} as Record<string, Cadet[]>);
 
+  // Sort each flight group alphabetically
+  for (const key of Object.keys(cadetsByFlight)) {
+    cadetsByFlight[key].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // HQ / Staff members (sorted alphabetically)
+  const hqMembers = cadets.filter(c => c.flight === 'hq').sort((a, b) => a.name.localeCompare(b.name));
+
   // Ensure we always show at least three flight headings (1,2,3)
   const defaultFlights = ['1', '2', '3'];
   for (const f of defaultFlights) {
     if (!cadetsByFlight[f]) cadetsByFlight[f] = [];
   }
 
-  // Build sorted flights array (numeric sort)
+  // Build sorted flights array (numeric sort, excluding hq)
   const flights = Object.keys(cadetsByFlight).sort((a, b) => Number(a) - Number(b));
 
   return (
@@ -492,12 +541,38 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
               <DialogContent>
                 <form onSubmit={handleAddCadet}>
                   <DialogHeader>
-                    <DialogTitle>Add New Cadet</DialogTitle>
+                    <DialogTitle>Add New Member</DialogTitle>
                     <DialogDescription>
-                      Enter the cadet's information below
+                      Enter the member's information below
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="cadet-flight">Flight</Label>
+                      <Select value={flight} onValueChange={(v: any) => { setFlight(v); if (v !== 'hq') setRank(''); }}>
+                        <SelectTrigger id="cadet-flight">
+                          <SelectValue placeholder="Select flight" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">{formatFlight('1')}</SelectItem>
+                          <SelectItem value="2">{formatFlight('2')}</SelectItem>
+                          <SelectItem value="3">{formatFlight('3')}</SelectItem>
+                          <SelectItem value="4">{formatFlight('4')}</SelectItem>
+                          <SelectItem value="hq">Staff / HQ Flight</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {flight === 'hq' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="cadet-rank">Rank</Label>
+                        <Input
+                          id="cadet-rank"
+                          placeholder="e.g. Fg Off, Flt Lt, Sqn Ldr"
+                          value={rank}
+                          onChange={(e) => setRank(e.target.value)}
+                        />
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label htmlFor="cadet-name">Full Name</Label>
                       <Input
@@ -508,21 +583,6 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                         required
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cadet-flight">Flight</Label>
-                      <Select value={flight} onValueChange={(v: any) => setFlight(v)}>
-                        <SelectTrigger id="cadet-flight">
-                          <SelectValue placeholder="Select flight" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1">{formatFlight('1')}</SelectItem>
-                          <SelectItem value="2">{formatFlight('2')}</SelectItem>
-                          <SelectItem value="3">{formatFlight('3')}</SelectItem>
-                          <SelectItem value="4">{formatFlight('4')}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
                   </div>
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>
@@ -530,7 +590,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                     </Button>
                     <Button type="submit" disabled={submitting}>
                       <UserPlus className="size-4 mr-2" />
-                      {submitting ? 'Adding...' : 'Add Cadet'}
+                      {submitting ? 'Adding...' : flight === 'hq' ? 'Add Staff Member' : 'Add Cadet'}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -607,18 +667,14 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Edit Cadet</DialogTitle>
-              <DialogDescription>Edit cadet name and flight</DialogDescription>
+              <DialogTitle>Edit {editFlight === 'hq' ? 'Staff Member' : 'Cadet'}</DialogTitle>
+              <DialogDescription>Edit name, rank and flight</DialogDescription>
             </DialogHeader>
             <form onSubmit={(e) => { e.preventDefault(); submitEditCadet(); }}>
               <div className="space-y-3 py-2">
                 <div className="space-y-2">
-                  <Label>Full Name</Label>
-                  <Input value={editName} onChange={(e) => setEditName(e.target.value)} required />
-                </div>
-                <div className="space-y-2">
                   <Label>Flight</Label>
-                  <Select value={editFlight} onValueChange={(v: any) => setEditFlight(v)}>
+                  <Select value={editFlight} onValueChange={(v: any) => { setEditFlight(v); if (v !== 'hq') setEditRank(''); }}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select flight" />
                     </SelectTrigger>
@@ -627,8 +683,37 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                       <SelectItem value="2">{formatFlight('2')}</SelectItem>
                       <SelectItem value="3">{formatFlight('3')}</SelectItem>
                       <SelectItem value="4">{formatFlight('4')}</SelectItem>
+                      <SelectItem value="hq">Staff / HQ Flight</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                {editFlight === 'hq' && (
+                  <div className="space-y-2">
+                    <Label>Rank</Label>
+                    <Input placeholder="e.g. Fg Off, Flt Lt, Sqn Ldr" value={editRank} onChange={(e) => setEditRank(e.target.value)} />
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label>Full Name</Label>
+                  <Input value={editName} onChange={(e) => setEditName(e.target.value)} required />
+                </div>
+                <div className="flex items-center justify-between rounded-md border p-3">
+                  <div>
+                    <div className="flex items-center gap-1.5 font-medium text-sm">
+                      <Shield size={14} className={editNco ? 'text-amber-600' : 'text-muted-foreground'} />
+                      NCO Status
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">NCOs cannot receive points</p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={editNco ? 'default' : 'outline'}
+                    className={editNco ? 'bg-amber-600 hover:bg-amber-700' : ''}
+                    onClick={() => setEditNco(!editNco)}
+                  >
+                    {editNco ? 'NCO ✓' : 'Mark NCO'}
+                  </Button>
                 </div>
               </div>
               <DialogFooter>
@@ -648,21 +733,36 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
               <p className="text-sm">Click "Add Cadet" to get started</p>
             </div>
           ) : (
-            <div className="flex gap-4">
-              <div className="flex-1 overflow-x-auto">
-                <DndProvider backend={HTML5Backend}>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-cols-min">
-                    {flights.map((flight) => (
-                      <div key={flight} className="min-w-[220px]">
-                        <FlightColumn flight={flight} items={cadetsByFlight[flight] || []} />
+            <DndProvider backend={HTML5Backend}>
+              <div className="space-y-6">
+                {/* Numbered flights */}
+                {flights.length > 0 && (
+                  <div className="flex gap-4">
+                    <div className="flex-1 overflow-x-auto">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-cols-min">
+                        {flights.map((flight) => (
+                          <div key={flight} className="min-w-[220px]">
+                            <FlightColumn flight={flight} items={cadetsByFlight[flight] || []} />
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </DndProvider>
-              </div>
+                )}
 
-              {/* CSV import moved to admin-only card below */}
-            </div>
+                {/* Staff / HQ Flight */}
+                {hqMembers.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-2">Staff / HQ Flight ({hqMembers.length})</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {hqMembers.map(m => (
+                        <CadetCard key={m.id} cadet={m} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DndProvider>
           )}
         </CardContent>
       </Card>

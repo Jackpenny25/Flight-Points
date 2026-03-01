@@ -52,7 +52,10 @@ export async function login(email: string, password: string): Promise<User> {
         user_metadata: {
           name: payload.name,
           role: payload.role,
-          cadetName: payload.cadetName
+          // cadetName: if the account is linked to a cadet, user.name IS the cadet name
+          cadetName: payload.cadetName || (payload.cadetId ? payload.name : undefined),
+          cadetId: payload.cadetId,
+          flight: payload.flight,
         }
       };
       localStorage.setItem('user', JSON.stringify(user));

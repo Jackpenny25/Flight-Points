@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { CheckCircle, XCircle, AlertTriangle, Shield } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Shield, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { Button } from './ui/button';
 
 interface DataIntegrityProps {
   accessToken: string;
@@ -12,6 +13,7 @@ interface DataIntegrityProps {
 
 interface IntegrityCheck {
   name: string;
+  category: string;
   status: 'pass' | 'warning' | 'fail';
   message: string;
   details?: string;
@@ -20,6 +22,7 @@ interface IntegrityCheck {
 export function DataIntegrity({ accessToken }: DataIntegrityProps) {
   const [checks, setChecks] = useState<IntegrityCheck[]>([]);
   const [loading, setLoading] = useState(true);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [summary, setSummary] = useState({
     totalChecks: 0,
     passed: 0,
@@ -29,8 +32,7 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
 
   useEffect(() => {
     performIntegrityChecks();
-    // Refresh every 30 seconds
-    const interval = setInterval(performIntegrityChecks, 30000);
+    const interval = setInterval(performIntegrityChecks, 120000);
     return () => clearInterval(interval);
   }, [accessToken]);
 
@@ -38,8 +40,6 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
     setLoading(true);
     try {
       const data = await api.runIntegrityCheck();
-      
-      // Process server response to match UI expectations
       const runChecks: IntegrityCheck[] = data.checks || [];
       const summaryCounts = {
         totalChecks: runChecks.length,
@@ -47,7 +47,6 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
         warnings: runChecks.filter(c => c.status === 'warning').length,
         failed: runChecks.filter(c => c.status === 'fail').length,
       };
-      
       setChecks(runChecks);
       setSummary(summaryCounts);
     } catch (error) {
@@ -55,6 +54,7 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
       toast.error('Failed to perform integrity checks');
       setChecks([{
         name: 'API Error',
+        category: 'System',
         status: 'fail',
         message: 'Failed to connect to server for integrity checks'
       }]);
@@ -64,36 +64,66 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
     }
   };
 
+  const toggleCategory = (category: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pass':
-        return <CheckCircle className="size-5 text-green-600" />;
-      case 'warning':
-        return <AlertTriangle className="size-5 text-yellow-600" />;
-      case 'fail':
-        return <XCircle className="size-5 text-red-600" />;
-      default:
-        return null;
+      case 'pass': return <CheckCircle className="size-5 text-green-600 shrink-0" />;
+      case 'warning': return <AlertTriangle className="size-5 text-yellow-600 shrink-0" />;
+      case 'fail': return <XCircle className="size-5 text-red-600 shrink-0" />;
+      default: return null;
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pass':
-        return 'bg-green-50 border-green-200';
-      case 'warning':
-        return 'bg-yellow-50 border-yellow-200';
-      case 'fail':
-        return 'bg-red-50 border-red-200';
-      default:
-        return 'bg-gray-50';
+      case 'pass': return 'bg-green-50 border-green-200';
+      case 'warning': return 'bg-yellow-50 border-yellow-200';
+      case 'fail': return 'bg-red-50 border-red-200';
+      default: return 'bg-gray-50';
     }
   };
+
+  const getCategoryStatusColor = (categoryChecks: IntegrityCheck[]) => {
+    if (categoryChecks.some(c => c.status === 'fail')) return 'border-l-red-500';
+    if (categoryChecks.some(c => c.status === 'warning')) return 'border-l-yellow-500';
+    return 'border-l-green-500';
+  };
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'Referential Integrity': return '🔗';
+      case 'Duplicates': return '📋';
+      case 'Data Quality': return '✅';
+      case 'Accounts': return '👤';
+      case 'Business Rules': return '📏';
+      case 'Rewards': return '🏆';
+      case 'Attendance': return '📅';
+      case 'Statistics': return '📊';
+      default: return '🔍';
+    }
+  };
+
+  // Group checks by category
+  const categories = checks.reduce<Record<string, IntegrityCheck[]>>((acc, check) => {
+    const cat = check.category || 'General';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(check);
+    return acc;
+  }, {});
 
   if (loading) {
     return (
       <div className="text-center py-12">
-        <div className="text-gray-600">Running integrity checks...</div>
+        <RefreshCw className="size-8 text-blue-600 animate-spin mx-auto mb-3" />
+        <div className="text-gray-600">Running {summary.totalChecks > 0 ? summary.totalChecks : ''} integrity checks...</div>
       </div>
     );
   }
@@ -157,7 +187,7 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
           <CheckCircle className="size-4 text-green-600" />
           <AlertTitle className="text-green-900">All Systems Operational</AlertTitle>
           <AlertDescription className="text-green-700">
-            All data integrity checks passed successfully. Your system is healthy.
+            All {summary.totalChecks} data integrity checks passed successfully. Your system is healthy.
           </AlertDescription>
         </Alert>
       )}
@@ -172,51 +202,91 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
         </Alert>
       )}
 
-      {/* Detailed Checks */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Detailed Integrity Checks</CardTitle>
-          <CardDescription>Comprehensive validation of all system data</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {checks.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">No checks performed yet</div>
-          ) : (
-            <div className="space-y-3">
-              {checks.map((check, index) => (
-                <div
-                  key={index}
-                  className={`p-4 border rounded-lg ${getStatusColor(check.status)}`}
-                >
-                  <div className="flex items-start gap-3">
-                    {getStatusIcon(check.status)}
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-medium">{check.name}</h4>
-                        <Badge
-                          variant={
-                            check.status === 'pass' ? 'default' :
-                            check.status === 'warning' ? 'secondary' :
-                            'destructive'
-                          }
-                        >
-                          {check.status.toUpperCase()}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-gray-700">{check.message}</p>
-                      {check.details && (
-                        <p className="text-xs text-gray-600 mt-2 font-mono bg-white/50 p-2 rounded">
-                          {check.details}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+      {summary.warnings > 0 && summary.failed === 0 && (
+        <Alert className="bg-yellow-50 border-yellow-200">
+          <AlertTriangle className="size-4 text-yellow-600" />
+          <AlertTitle className="text-yellow-900">Warnings Found</AlertTitle>
+          <AlertDescription className="text-yellow-700">
+            {summary.warnings} warning{summary.warnings > 1 ? 's' : ''} detected. These may not require immediate action but should be reviewed.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Refresh Button */}
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={performIntegrityChecks} disabled={loading}>
+          <RefreshCw className={`size-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Re-run Checks
+        </Button>
+      </div>
+
+      {/* Categorised Checks */}
+      {Object.entries(categories).map(([category, categoryChecks]) => {
+        const isCollapsed = collapsedCategories.has(category);
+        const catFails = categoryChecks.filter(c => c.status === 'fail').length;
+        const catWarnings = categoryChecks.filter(c => c.status === 'warning').length;
+        const catPasses = categoryChecks.filter(c => c.status === 'pass').length;
+
+        return (
+          <Card key={category} className={`border-l-4 ${getCategoryStatusColor(categoryChecks)}`}>
+            <CardHeader
+              className="cursor-pointer select-none hover:bg-gray-50/50 transition-colors"
+              onClick={() => toggleCategory(category)}
+            >
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <span>{getCategoryIcon(category)}</span>
+                  {category}
+                  <span className="text-sm font-normal text-gray-500">({categoryChecks.length} check{categoryChecks.length !== 1 ? 's' : ''})</span>
+                </CardTitle>
+                <div className="flex items-center gap-3">
+                  {catFails > 0 && <Badge variant="destructive">{catFails} fail{catFails > 1 ? 's' : ''}</Badge>}
+                  {catWarnings > 0 && <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">{catWarnings} warning{catWarnings > 1 ? 's' : ''}</Badge>}
+                  {catPasses > 0 && <Badge className="bg-green-100 text-green-800">{catPasses} pass{catPasses > 1 ? 'ed' : ''}</Badge>}
+                  {isCollapsed ? <ChevronRight className="size-5 text-gray-400" /> : <ChevronDown className="size-5 text-gray-400" />}
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              </div>
+            </CardHeader>
+            {!isCollapsed && (
+              <CardContent>
+                <div className="space-y-2">
+                  {categoryChecks.map((check, index) => (
+                    <div
+                      key={index}
+                      className={`p-3 border rounded-lg ${getStatusColor(check.status)}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {getStatusIcon(check.status)}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-0.5">
+                            <h4 className="font-medium text-sm">{check.name}</h4>
+                            <Badge
+                              variant={
+                                check.status === 'pass' ? 'default' :
+                                check.status === 'warning' ? 'secondary' :
+                                'destructive'
+                              }
+                              className="shrink-0"
+                            >
+                              {check.status.toUpperCase()}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-700">{check.message}</p>
+                          {check.details && (
+                            <p className="text-xs text-gray-600 mt-1.5 font-mono bg-white/50 p-2 rounded break-all">
+                              {check.details}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        );
+      })}
     </div>
   );
 }

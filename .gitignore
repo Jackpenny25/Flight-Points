@@ -4,6 +4,9 @@ dist/
 outputs/
 docs/assets/
 
+# Auto-deploy logs
+auto-deploy.log
+
 # Environment variables - NEVER commit these
 .env
 .env.local

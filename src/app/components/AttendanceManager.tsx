@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
-import { getToken } from '../../utils/auth';
+import { getToken, getUser } from '../../utils/auth';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Checkbox } from './ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { formatFlight } from './ui/utils';
-import { UserCheck, Trash2 } from 'lucide-react';
+import { UserCheck, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface AttendanceRecord {
@@ -41,6 +40,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const [flightFilter, setFlightFilter] = useState<string>('all');
   const [bulkErrors, setBulkErrors] = useState<Array<{ cadetName: string; reason?: string }>>([]);
   const [bulkFailedEntries, setBulkFailedEntries] = useState<Array<any>>([]);
+  const [collapsedFlights, setCollapsedFlights] = useState<Set<string>>(new Set());
 
   // Form state
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -58,7 +58,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
       return;
     }
     const ids = cadets
-      .filter(c => flightFilter === 'all' || c.flight === flightFilter)
+      .filter(c => c.flight && c.flight.toLowerCase() !== 'hq' && (flightFilter === 'all' || c.flight === flightFilter))
       .map(c => c.id);
     setSelectedIds(new Set(ids));
     setSelectAll(true);
@@ -69,7 +69,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelectedIds(next);
-    const visibleCount = cadets.filter(c => flightFilter === 'all' || c.flight === flightFilter).length;
+    const visibleCount = cadets.filter(c => c.flight && c.flight.toLowerCase() !== 'hq' && (flightFilter === 'all' || c.flight === flightFilter)).length;
     setSelectAll(next.size === visibleCount && visibleCount > 0);
   };
 
@@ -86,7 +86,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   };
 
   const saveAttendanceBulk = async () => {
-    const targets = cadets.filter(c => (selectedIds.size ? selectedIds.has(c.id) : true) && (flightFilter === 'all' || c.flight === flightFilter));
+    const targets = cadets.filter(c => c.flight && c.flight.toLowerCase() !== 'hq' && (selectedIds.size ? selectedIds.has(c.id) : true) && (flightFilter === 'all' || c.flight === flightFilter));
     if (targets.length === 0) {
       toast.error('No cadets selected for bulk save');
       return;
@@ -96,31 +96,38 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
     setBulkErrors([]);
 
     try {
+      const currentUser = getUser();
+      const userName = currentUser?.name || 'unknown';
       const entries = targets.map(c => ({
         cadetName: c.name,
         flight: c.flight,
         date: new Date(selectedDate).toISOString(),
         status: attendanceStatuses[c.id] || 'absent',
-        submittedBy: getToken() || 'unknown',
+        submittedBy: userName,
       }));
 
-      // Submit as a single bulk request to avoid many parallel calls
+      // Submit as a single bulk request
       try {
-        const res = await api.createBulkAttendance
-          ? await api.createBulkAttendance({ entries, date: new Date(selectedDate).toISOString(), flightFilter })
-          : await Promise.all(entries.map(entry => api.createAttendance(entry)));
+        const res = await api.createBulkAttendance({ entries, date: new Date(selectedDate).toISOString(), flightFilter });
 
         if (res && res.error) {
           setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: res.error || 'Failed' })));
           setBulkFailedEntries(entries);
-          toast.error(`Saved 0 succeeded, ${entries.length} failed`);
+          toast.error(`Failed: ${res.error}`);
         } else {
-          toast.success(`Saved ${entries.length} attendance records`);
+          const pointsMsg = res.pointsAwarded > 0
+            ? `, ${res.pointsAwarded} cadets awarded ${res.pointsAwarded} pts`
+            : (res.totalPresent > 0 ? `, 0 attendance points awarded` : '');
+          toast.success(`Saved ${res.totalRecords || entries.length} attendance records (${res.totalPresent || 0} present${pointsMsg})`);
+          if (res.pointErrors && res.pointErrors.length > 0) {
+            console.error('Point award errors:', res.pointErrors);
+            toast.error(`Points failed for ${res.pointErrors.length} cadet(s) — check browser console for details`);
+          }
         }
       } catch (err: any) {
         setBulkErrors(entries.map(e => ({ cadetName: e.cadetName, reason: String(err) })));
         setBulkFailedEntries(entries);
-        toast.error(`Saved 0 succeeded, ${entries.length} failed`);
+        toast.error(`Failed to save attendance`);
       }
 
       setSelectedIds(new Set());
@@ -138,7 +145,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const fetchAttendance = async () => {
     try {
       const data = await api.getAttendance();
-      const attendanceData = data.attendance || [];
+      const attendanceData = Array.isArray(data) ? data : (data.attendance || data || []);
       setAttendance(attendanceData);
       try { localStorage.setItem('attendance', JSON.stringify(attendanceData)); } catch (e) { }
     } catch (error) {
@@ -153,8 +160,9 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
 
   const fetchBulkAttendance = async () => {
     try {
-      const data = await api.getAttendanceReports ? await api.getAttendanceReports() : {};
-      setBulkEvents(data.bulks || []);
+      const data = await api.getAttendanceBulks();
+      const bulksData = Array.isArray(data) ? data : [];
+      setBulkEvents(bulksData);
     } catch (error) {
       console.error('Error fetching bulk attendance:', error);
     }
@@ -163,7 +171,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const fetchCadets = async () => {
     try {
       const data = await api.getCadets();
-      const cadetList = data.cadets || [];
+      const cadetList = Array.isArray(data) ? data : (data.cadets || []);
       setCadets(cadetList);
       setAttendanceStatuses(prev => {
         const next = { ...prev };
@@ -181,7 +189,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const handleDeleteBulk = async (bulkId: string) => {
     if (!confirm('Delete this bulk attendance session and its attendance records? This is irreversible.')) return;
     try {
-      const res = await api.deleteAttendance ? await api.deleteAttendance(bulkId) : null;
+      const res = await api.deleteAttendanceBulk(bulkId);
       if (res && res.error) {
         toast.error(res.error || 'Failed to delete bulk attendance session');
       } else {
@@ -195,17 +203,36 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
     }
   };
 
-  const canDelete = userRole === 'staff' || userRole === 'snco';
+  const canDelete = userRole === 'snco';
 
-  const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
-  const visibleCadets = cadets.filter(c => flightFilter === 'all' || c.flight === flightFilter);
+  const nonHqCadets = cadets.filter(c => c.flight && c.flight.toLowerCase() !== 'hq');
+  const flights = Array.from(new Set(nonHqCadets.map(c => c.flight))).sort();
+  const visibleCadets = nonHqCadets.filter(c => flightFilter === 'all' || c.flight === flightFilter);
   const presentCount = visibleCadets.filter(c => attendanceStatuses[c.id] === 'present').length;
   const selectedCount = selectedIds.size;
 
-  return (
-    <div className={`space-y-6 ${(userRole === 'snco' || userRole === 'staff') ? 'grid gap-6 md:grid-cols-3' : ''}`}>
+  // Group visible cadets by flight, sorted alphabetically within each flight
+  const flightGroups: Record<string, any[]> = {};
+  visibleCadets.forEach(c => {
+    if (!flightGroups[c.flight]) flightGroups[c.flight] = [];
+    flightGroups[c.flight].push(c);
+  });
+  Object.values(flightGroups).forEach(group => group.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '')));
+  const sortedFlightKeys = Object.keys(flightGroups).sort();
 
-      <Card className={(userRole === 'snco' || userRole === 'staff') ? 'md:col-span-2' : 'max-w-4xl mx-auto'}>
+  const toggleFlightCollapse = (flight: string) => {
+    setCollapsedFlights(prev => {
+      const next = new Set(prev);
+      if (next.has(flight)) next.delete(flight);
+      else next.add(flight);
+      return next;
+    });
+  };
+
+  return (
+    <div className={`space-y-6 ${userRole === 'snco' ? 'grid gap-6 md:grid-cols-3' : ''}`}>
+
+      <Card className={userRole === 'snco' ? 'md:col-span-2' : 'max-w-4xl mx-auto'}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UserCheck className="size-5" />
@@ -249,35 +276,61 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
             </div>
 
             <div className="mt-4 border-t pt-4">
-              <Label>Mark Attendance (Manual)</Label>
-              <div className="mt-3 grid gap-2 max-h-80 overflow-y-auto">
-                {visibleCadets.length === 0 ? (
-                  <div className="text-sm text-gray-500">No cadets for the selected flight.</div>
-                ) : (
-                  visibleCadets.map((c) => (
-                    <label key={c.id} className="flex items-center justify-between p-2 border rounded">
-                      <div className="flex items-center gap-3">
-                        <Checkbox
-                          checked={attendanceStatuses[c.id] === 'present'}
-                          onCheckedChange={(v) => {
-                            const isPresent = Boolean(v);
-                            setAttendanceStatuses(prev => ({ ...prev, [c.id]: isPresent ? 'present' : 'absent' }));
-                            const ids = new Set(selectedIds);
-                            if (isPresent) ids.add(c.id); else ids.delete(c.id);
-                            setSelectedIds(ids);
-                            setSelectAll(ids.size === visibleCadets.length && visibleCadets.length > 0);
-                          }}
-                        />
-                        <div>
-                          <div className="font-medium">{c.name}</div>
-                          <div className="text-xs text-gray-500">{formatFlight(c.flight)}</div>
-                        </div>
+              {visibleCadets.length === 0 ? (
+                <div className="text-sm text-gray-500 py-4">No cadets for the selected flight.</div>
+              ) : (
+                <div className="space-y-3">
+                  {sortedFlightKeys.map(flight => {
+                    const group = flightGroups[flight];
+                    const isCollapsed = collapsedFlights.has(flight);
+                    const flightPresent = group.filter((c: any) => attendanceStatuses[c.id] === 'present').length;
+
+                    return (
+                      <div key={flight} className="border rounded-lg overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => toggleFlightCollapse(flight)}
+                          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            {isCollapsed ? <ChevronRight className="size-4 text-gray-500" /> : <ChevronDown className="size-4 text-gray-500" />}
+                            <span className="font-semibold text-sm">{formatFlight(flight)}</span>
+                            <Badge variant="outline" className="text-xs">{group.length} cadet{group.length !== 1 ? 's' : ''}</Badge>
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {flightPresent}/{group.length} present
+                          </div>
+                        </button>
+                        {!isCollapsed && (
+                          <div className="divide-y">
+                            {group.map((c: any) => (
+                              <label key={c.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 cursor-pointer">
+                                <div className="flex items-center gap-3">
+                                  <Checkbox
+                                    checked={attendanceStatuses[c.id] === 'present'}
+                                    onCheckedChange={(v) => {
+                                      const isPresent = Boolean(v);
+                                      setAttendanceStatuses(prev => ({ ...prev, [c.id]: isPresent ? 'present' : 'absent' }));
+                                      const ids = new Set(selectedIds);
+                                      if (isPresent) ids.add(c.id); else ids.delete(c.id);
+                                      setSelectedIds(ids);
+                                      setSelectAll(ids.size === visibleCadets.length && visibleCadets.length > 0);
+                                    }}
+                                  />
+                                  <span className="font-medium text-sm">{c.name}</span>
+                                </div>
+                                <span className={`text-xs font-medium ${attendanceStatuses[c.id] === 'present' ? 'text-green-600' : 'text-gray-400'}`}>
+                                  {attendanceStatuses[c.id] === 'present' ? 'Present' : 'Absent'}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <div className="text-xs text-gray-500">{attendanceStatuses[c.id] === 'present' ? 'Present' : 'Absent'}</div>
-                    </label>
-                  ))
-                )}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {bulkErrors.length > 0 && (
@@ -338,7 +391,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
         </CardContent>
       </Card>
 
-      {(userRole === 'snco' || userRole === 'staff') && (
+      {userRole === 'snco' && (
         <Card>
           <CardHeader>
             <CardTitle>Recent Attendance</CardTitle>

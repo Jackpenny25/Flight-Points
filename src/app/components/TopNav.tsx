@@ -1,6 +1,5 @@
 import React from 'react'
-import DownloadCsvButton from './DownloadCsvButton'
-import { ArrowUpRight, Award, Calendar, Users, FileText, Shield, FileSpreadsheet, Gift, Presentation } from 'lucide-react'
+import { ArrowUpRight, Award, Calendar, Users, FileText, Shield, Gift, Presentation } from 'lucide-react'
 
 const items = [
   { key: 'leaderboards', label: 'Leaderboards', icon: ArrowUpRight },
@@ -18,17 +17,45 @@ type Props = {
   onSelect?: (tab: string) => void
   showAdmin?: boolean
   canGivePoints?: boolean
+  canMarkAttendance?: boolean
   canManageCadets?: boolean
+  isPresentationRole?: boolean
   adminPendingCount?: number
   ticketsCount?: number
   accessToken?: string | null
 }
 
-export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canManageCadets, adminPendingCount, ticketsCount, accessToken }: Props) {
+export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canMarkAttendance, canManageCadets, isPresentationRole, adminPendingCount, ticketsCount, accessToken }: Props) {
   const handleClick = (key: string) => {
     // prefer prop handler, but keep event dispatch for backward compatibility
     if (onSelect) onSelect(key)
     window.dispatchEvent(new CustomEvent('navigateTab', { detail: { tab: key } }))
+  }
+
+  // Presentation-only role: show only the presentation tab
+  if (isPresentationRole) {
+    const presItem = { key: 'presentation', label: 'Presentation', icon: Presentation }
+    return (
+      <nav className="w-full bg-transparent px-4 py-3">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex justify-center">
+            <div className="w-full max-w-3xl">
+              <div className="flex flex-wrap justify-center items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-full p-1 shadow-sm">
+                <button
+                  onClick={() => handleClick(presItem.key)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-xs sm:text-sm font-medium transition min-w-0 bg-primary text-primary-foreground shadow-sm flex-shrink-0`}
+                  aria-label={presItem.label}
+                  aria-pressed={true}
+                >
+                  <Presentation className="w-4 h-4 opacity-100" />
+                  <span className="inline-block max-w-[6rem] sm:max-w-[8rem] truncate">{presItem.label}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    )
   }
 
   // Filter items based on permissions and add badge counts
@@ -37,8 +64,9 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
     if (item.key === 'leaderboards') return true
     // Rewards is always visible
     if (item.key === 'rewards') return true
-    // Points and Attendance require canGivePoints
-    if (item.key === 'points' || item.key === 'attendance') return canGivePoints
+    // Points visible if canGivePoints; Attendance only if canMarkAttendance
+    if (item.key === 'points') return canGivePoints
+    if (item.key === 'attendance') return canMarkAttendance
     // Tickets and Reports should be placed into the admin group when admin UI is shown
     if (item.key === 'tickets' || item.key === 'reports') return canManageCadets && !showAdmin
     // Cadets and Integrity require canManageCadets
@@ -51,7 +79,7 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
     return item
   })
 
-  // Add admin group if unlocked (include tickets, reports and download)
+  // Add admin group if unlocked (include tickets, reports and presentation)
   const allItems = showAdmin 
     ? [
         ...visibleItems, 
@@ -59,10 +87,9 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
         { key: 'tickets', label: 'Tickets', icon: FileText },
         { key: 'reports', label: 'Reports', icon: FileText },
         { key: 'presentation', label: 'Presentation', icon: Presentation },
-        { key: 'download', label: 'Download CSVs', icon: FileSpreadsheet },
         ...(adminPendingCount && adminPendingCount > 0 
-          ? [{ key: 'signups', label: 'Signups', icon: Users, badgeCount: adminPendingCount }]
-          : [{ key: 'signups', label: 'Signups', icon: Users }]
+          ? [{ key: 'signups', label: 'Accounts', icon: Users, badgeCount: adminPendingCount }]
+          : [{ key: 'signups', label: 'Accounts', icon: Users }]
         )
       ] 
     : visibleItems

@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../../utils/api';
-import { getToken } from '../../utils/auth';
+import { getToken, getUser } from '../../utils/auth';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -11,7 +11,7 @@ import { Textarea } from './ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { formatFlight } from './ui/utils';
-import { Trash2, Plus, AlertCircle } from 'lucide-react';
+import { Trash2, Plus, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from './ui/alert';
 
@@ -60,7 +60,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
 
   const ensureAdminPin = () => {
     if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
-    if (userRole === 'staff' || userRole === 'snco') {
+    if (userRole === 'snco') {
       sessionStorage.setItem('adminPinVerified', 'true');
       setAdminUnlocked(true);
       return true;
@@ -89,7 +89,6 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     setLoading(true);
     try {
       const data = await api.getPoints();
-      console.log('Fetched points:', data);
       setPoints(Array.isArray(data) ? data : []);
     } catch (error: any) {
       if (error?.status === 401) {
@@ -107,7 +106,6 @@ export function PointsManager({ userRole }: PointsManagerProps) {
   const fetchCadets = async () => {
     try {
       const data = await api.getCadets();
-      console.log('Fetched cadets:', data);
       setCadets(Array.isArray(data) ? data : []);
     } catch (error) {
       toast.error('Failed to fetch cadets');
@@ -121,15 +119,10 @@ export function PointsManager({ userRole }: PointsManagerProps) {
 
   // Smart name matching: allows partial last names, handles siblings
   const matchCadetByPartialName = (input: string): { cadet: any; ambiguous: boolean } | null => {
-    if (cadets.length === 0) {
-      console.log('matchCadetByPartialName: No cadets available');
-      return null;
-    }
+    if (cadets.length === 0) return null;
     const inputLower = input.trim().toLowerCase();
-    console.log('Matching input:', inputLower, 'against', cadets.length, 'cadets');
     const exactMatch = cadets.find(c => c.name.toLowerCase() === inputLower);
     if (exactMatch) {
-      console.log('Exact match found:', exactMatch.name);
       return { cadet: exactMatch, ambiguous: false };
     }
     const inputParts = inputLower.split(/\s+/);
@@ -139,7 +132,6 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       const cadetNameLower = c.name.toLowerCase();
       return cadetNameLower.startsWith(inputLastName);
     });
-    console.log('Partial matches found:', matches.length);
     if (matches.length === 0) return null;
     if (matches.length === 1) return { cadet: matches[0], ambiguous: false };
     if (inputFirstInitial) {
@@ -155,10 +147,29 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     return { cadet: matches[0], ambiguous: true };
   };
 
+  // Get user's flight for restriction
+  const currentUser = getUser();
+  const userFlight = currentUser?.user_metadata?.flight || null;
+  const isPointGiver = userRole === 'pointgiver';
+  const canGiveToAnyFlight = userRole === 'snco' || userRole === 'staff';
+
+  // Resolved names with match status
+  interface ResolvedName {
+    input: string;
+    cadet: any | null;
+    ambiguous: boolean;
+    restrictedFlight: boolean; // true if pointgiver tries to give to another flight
+    isNco: boolean; // true if cadet is an NCO or HQ (cannot receive points)
+    isHq: boolean; // true if cadet is Staff/HQ flight
+  }
+
+  const [resolvedEntries, setResolvedEntries] = useState<ResolvedName[]>([]);
+
   const validateNames = (namesInput: string) => {
     if (!namesInput.trim()) {
       setDuplicateWarning([]);
       setInvalidNames([]);
+      setResolvedEntries([]);
       return;
     }
     const names = namesInput
@@ -169,20 +180,51 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     setDuplicateWarning(Array.from(new Set(duplicates)));
     const invalid: string[] = [];
     const ambiguous: string[] = [];
+    const resolved: ResolvedName[] = [];
+
     names.forEach(name => {
       const match = matchCadetByPartialName(name);
       if (!match) {
         invalid.push(name);
+        resolved.push({ input: name, cadet: null, ambiguous: false, restrictedFlight: false, isNco: false, isHq: false });
       } else if (match.ambiguous) {
         const inputLower = name.trim().toLowerCase();
         const inputParts = inputLower.split(/\s+/);
         const inputLastName = inputParts[0];
         const siblings = cadets.filter(c => c.name.toLowerCase().startsWith(inputLastName));
         ambiguous.push(`${name} (could be: ${siblings.map(s => s.name).join(', ')} - add first initial)`);
+        resolved.push({ input: name, cadet: match.cadet, ambiguous: true, restrictedFlight: false, isNco: false, isHq: false });
+      } else {
+        const isNco = !!match.cadet.isNco;
+        const isHq = match.cadet.flight === 'hq';
+        const restrictedFlight = isPointGiver && userFlight && match.cadet.flight !== userFlight;
+        resolved.push({ input: name, cadet: match.cadet, ambiguous: false, restrictedFlight: !!restrictedFlight, isNco: isNco || isHq, isHq });
+        if (isNco) {
+          invalid.push(`${name} (NCO — cannot receive points)`);
+        } else if (isHq) {
+          invalid.push(`${name} (Staff/HQ — cannot receive points)`);
+        } else if (restrictedFlight) {
+          invalid.push(`${name} (${formatFlight(match.cadet.flight)} — not your flight)`);
+        }
       }
     });
+
     setInvalidNames([...invalid, ...ambiguous]);
+    setResolvedEntries(resolved);
   };
+
+  // Auto-detect flights from resolved entries
+  const detectedFlights = useMemo(() => {
+    const flights = new Set<string>();
+    resolvedEntries.forEach(entry => {
+      if (entry.cadet && !entry.ambiguous && !entry.restrictedFlight && !entry.isNco) {
+        flights.add(entry.cadet.flight);
+      }
+    });
+    return Array.from(flights).sort();
+  }, [resolvedEntries]);
+
+  const isMultiFlight = detectedFlights.length > 1;
 
 
   useEffect(() => {
@@ -199,37 +241,37 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       toast.error('Invalid or ambiguous names - please fix before submitting');
       return;
     }
-    if (!selectedFlight) {
-      toast.error('Please select a flight');
+    // Need at least one detected flight (from valid matched names) OR a manual selection
+    const hasAutoFlight = detectedFlights.length > 0;
+    const hasFlight = hasAutoFlight || selectedFlight;
+    if (!hasFlight) {
+      toast.error('No flight could be determined — select at least one valid cadet');
       return;
     }
     setSubmitting(true);
     try {
-      const names = multipleNames
-        .split(/[\,\n]/)
-        .map(name => name.trim())
-        .filter(name => name.length > 0);
-      const resolvedNames = names.map(name => {
-        const match = matchCadetByPartialName(name);
-        return match ? match.cadet.name : name;
-      });
-      const user = getToken();
-      const promises = resolvedNames.map(async (name) => {
+      const currentUser = getUser();
+      const userName = currentUser?.name || 'unknown';
+
+      // Use resolved entries to get each cadet's flight
+      const validEntries = resolvedEntries.filter(e => e.cadet && !e.ambiguous && !e.restrictedFlight && !e.isNco);
+      const promises = validEntries.map(async (entry) => {
+        const cadetFlight = entry.cadet.flight || selectedFlight || '';
         const data = {
-          cadetName: name,
-          flight: selectedFlight,
+          cadetName: entry.cadet.name,
+          flight: cadetFlight,
           points: parseFloat(pointValue),
           reason,
           type: pointType,
           date: new Date().toISOString(),
-          givenBy: user || 'unknown',
+          givenBy: userName,
         };
         const result = await api.createPoint(data);
         if (result.error) throw new Error(result.error);
         return result;
       });
       await Promise.all(promises);
-      toast.success(`Points added successfully for ${resolvedNames.length} cadet(s)!`);
+      toast.success(`Points added successfully for ${validEntries.length} cadet(s)!`);
       setMultipleNames('');
       setSelectedFlight('');
       setPointValue('');
@@ -237,13 +279,15 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       setPointType('general');
       setDuplicateWarning([]);
       setInvalidNames([]);
+      setResolvedEntries([]);
       fetchPoints();
     } catch (error: any) {
       if (error?.status === 401) {
         toast.error('Session expired. Please log in again.');
         window.location.href = '/login';
       } else {
-        toast.error('Failed to add points for some cadets');
+        const msg = error?.message || 'Failed to add points for some cadets';
+        toast.error(msg);
       }
     } finally {
       setSubmitting(false);
@@ -326,7 +370,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     }
   };
 
-  const canAdmin = userRole === 'staff' || userRole === 'snco';
+  const canAdmin = userRole === 'snco';
   const canDelete = canAdmin;
   const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
 
@@ -347,14 +391,18 @@ export function PointsManager({ userRole }: PointsManagerProps) {
 
   return (
     <div className="space-y-6">
-      <div className={`grid gap-6 ${(userRole === 'snco' || userRole === 'staff') ? 'md:grid-cols-2' : 'max-w-2xl mx-auto'}`}>
+      <div className={`grid gap-6 ${userRole === 'snco' ? 'md:grid-cols-2' : 'max-w-2xl mx-auto'}`}>
       {/* Add Points Form */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Add Points</CardTitle>
-              <CardDescription>Award or deduct points for cadets (supports multiple names)</CardDescription>
+              <CardDescription>
+                {isPointGiver
+                  ? `Award or deduct points for cadets in your flight (${formatFlight(userFlight || '')})`
+                  : 'Award or deduct points for any cadet across all flights'}
+              </CardDescription>
             </div>
             {/* Admin controls removed; use header logo as unlock indicator */}
           </div>
@@ -362,19 +410,63 @@ export function PointsManager({ userRole }: PointsManagerProps) {
         <CardContent>
           <form onSubmit={handleAddPoints} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="names">Cadet Name(s)</Label>
+              <Label htmlFor="names">Step 1: Enter Cadet Name(s)</Label>
               <Textarea
                 id="names"
-                placeholder="Enter one or more names (separated by commas or new lines)&#10;e.g., John Smith, Jane Doe&#10;or one name per line"
+                placeholder={isPointGiver
+                  ? `Enter names from your flight (${formatFlight(userFlight || '')})\ne.g., John Smith, Jane Doe`
+                  : 'Enter one or more names (separated by commas or new lines)\ne.g., John Smith, Jane Doe'}
                 value={multipleNames}
                 onChange={(e) => setMultipleNames(e.target.value)}
                 required
                 rows={4}
               />
               <p className="text-xs text-gray-500">
-                Tip: Enter multiple names separated by commas or line breaks
+                Separate multiple names with commas or line breaks. Names are matched automatically.
               </p>
             </div>
+
+            {/* Name confirmation list */}
+            {resolvedEntries.length > 0 && (
+              <div className="space-y-1 rounded-md border p-3 bg-muted/30">
+                <div className="text-xs font-medium text-muted-foreground mb-1">Matched cadets:</div>
+                {resolvedEntries.map((entry, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-sm">
+                    {entry.cadet && !entry.ambiguous && !entry.restrictedFlight && !entry.isNco ? (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                        <span className="text-green-700 dark:text-green-400 font-medium">{entry.cadet.name}</span>
+                        <Badge variant="outline" className="text-xs ml-auto">{formatFlight(entry.cadet.flight)}</Badge>
+                      </>
+                    ) : entry.isNco ? (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                        <span className="text-red-600">{entry.cadet?.name || entry.input}</span>
+                        <span className="text-xs text-red-500 ml-auto">{entry.isHq ? 'Staff/HQ' : 'NCO'} — cannot receive points</span>
+                      </>
+                    ) : entry.restrictedFlight ? (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                        <span className="text-red-600">{entry.cadet?.name || entry.input}</span>
+                        <span className="text-xs text-red-500 ml-auto">Not your flight</span>
+                      </>
+                    ) : entry.ambiguous ? (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                        <span className="text-amber-600">{entry.input}</span>
+                        <span className="text-xs text-amber-500 ml-auto">Ambiguous — add first initial</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                        <span className="text-red-600">{entry.input}</span>
+                        <span className="text-xs text-red-500 ml-auto">Not found</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {duplicateWarning.length > 0 && (
               <Alert variant="destructive">
@@ -385,33 +477,46 @@ export function PointsManager({ userRole }: PointsManagerProps) {
               </Alert>
             )}
 
-            {invalidNames.length > 0 && (
-              <Alert variant="destructive">
-                <AlertCircle className="size-4" />
-                <AlertDescription>
-                  Names not found in system: {invalidNames.join(', ')}
-                </AlertDescription>
-              </Alert>
-            )}
-
+            {/* Flight display — auto-detected from names */}
             <div className="space-y-2">
-              <Label htmlFor="flight">Flight</Label>
-              <Select value={selectedFlight} onValueChange={setSelectedFlight}>
-                <SelectTrigger id="flight">
-                  <SelectValue placeholder="Select flight" />
-                </SelectTrigger>
-                <SelectContent>
-                  {flights.map((flight) => (
-                    <SelectItem key={flight} value={flight}>
-                      {formatFlight(flight)}
-                    </SelectItem>
+              <Label>Step 2: Flight {detectedFlights.length > 0 ? '(auto-detected)' : ''}</Label>
+              {detectedFlights.length === 0 ? (
+                <Select value={selectedFlight} onValueChange={setSelectedFlight}>
+                  <SelectTrigger id="flight">
+                    <SelectValue placeholder="Enter names above to auto-detect flight" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {flights.map((flight) => (
+                      <SelectItem key={flight} value={flight}>
+                        {formatFlight(flight)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : detectedFlights.length === 1 ? (
+                <div className="flex items-center gap-2 h-10 px-3 rounded-md border bg-muted/50">
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <span className="font-medium">{formatFlight(detectedFlights[0])}</span>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2 min-h-[2.5rem] px-3 py-2 rounded-md border bg-muted/50">
+                  <span className="text-sm text-muted-foreground mr-1">Multiple flights:</span>
+                  {detectedFlights.map(f => (
+                    <Badge key={f} variant="secondary" className="text-sm">
+                      {formatFlight(f)}
+                    </Badge>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              )}
+              {isMultiFlight && (
+                <p className="text-xs text-muted-foreground">
+                  Each cadet will receive points under their own flight automatically.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="type">Type</Label>
+              <Label htmlFor="type">Step 3: Type</Label>
               <Select value={pointType} onValueChange={setPointType}>
                 <SelectTrigger id="type">
                   <SelectValue />
@@ -425,7 +530,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="points">Points</Label>
+              <Label htmlFor="points">Step 4: Points</Label>
               <Input
                 id="points"
                 type="number"
@@ -438,7 +543,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="reason">Reason</Label>
+              <Label htmlFor="reason">Step 5: Reason</Label>
               <Textarea
                 id="reason"
                 placeholder="Describe why points are being awarded/deducted"
@@ -462,7 +567,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       </Card>
 
       {/* Recent Points - Flight Point Leads/Staff only */}
-      {(userRole === 'snco' || userRole === 'staff') && (
+      {userRole === 'snco' && (
       <Card>
         <CardHeader>
           <CardTitle>Recent Points</CardTitle>

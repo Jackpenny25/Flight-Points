@@ -19,14 +19,18 @@ interface LeaderboardsData {
   winnersFlights?: Array<{ flight: string; points: number }>;
 }
 
-export function Leaderboards() {
+interface LeaderboardsProps {
+  userRole?: string;
+}
+
+export function Leaderboards({ userRole }: LeaderboardsProps) {
   const [data, setData] = useState<LeaderboardsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchLeaderboards();
     // Refresh every 30 seconds
-    const interval = setInterval(fetchLeaderboards, 30000);
+    const interval = setInterval(fetchLeaderboards, 120000);
     return () => clearInterval(interval);
   }, []);
 
@@ -60,9 +64,9 @@ export function Leaderboards() {
 
   return (
     <Tabs defaultValue="points" className="space-y-6">
-      <TabsList className="grid w-full grid-cols-2">
+      <TabsList className={`grid w-full ${userRole === 'cadet' ? 'grid-cols-1' : 'grid-cols-2'}`}>
         <TabsTrigger value="points">Points Leaderboards</TabsTrigger>
-        <TabsTrigger value="attendance">Attendance Reports</TabsTrigger>
+        {userRole !== 'cadet' && <TabsTrigger value="attendance">Attendance Reports</TabsTrigger>}
       </TabsList>
       <TabsContent value="points" className="space-y-6">
         {/* Winners Cards */}
@@ -246,9 +250,11 @@ export function Leaderboards() {
           </CardContent>
         </Card>
       </TabsContent>
-      <TabsContent value="attendance">
-        <AttendanceReports />
-      </TabsContent>
+      {userRole !== 'cadet' && (
+        <TabsContent value="attendance">
+          <AttendanceReports />
+        </TabsContent>
+      )}
     </Tabs>
   );
 }

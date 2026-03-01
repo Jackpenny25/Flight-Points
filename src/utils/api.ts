@@ -40,13 +40,16 @@ export const api = {
 
   // Points
   getPoints: () => fetchWithAuth('/data/points', { method: 'GET' }).then(r => r.json()),
-  createPoint: (data: Partial<Point>) => fetchWithAuth('/data/points', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+  createPoint: (data: Partial<Point>) => fetchWithAuth('/points', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
   updatePoint: (id: string, data: Partial<Point>) => fetchWithAuth(`/data/points/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => r.json()),
   deletePoint: (id: string) => fetchWithAuth(`/data/points/${id}`, { method: 'DELETE' }).then(r => r.json()),
 
   // Attendance
   getAttendance: () => fetchWithAuth('/data/attendance', { method: 'GET' }).then(r => r.json()),
   createAttendance: (data: Partial<Attendance>) => fetchWithAuth('/data/attendance', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+  createBulkAttendance: (data: { entries: any[]; date: string; flightFilter: string }) => fetchWithAuth('/attendance/bulk', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+  getAttendanceBulks: () => fetchWithAuth('/attendance/bulks', { method: 'GET' }).then(r => r.json()),
+  deleteAttendanceBulk: (id: string) => fetchWithAuth(`/attendance/bulk/${id}`, { method: 'DELETE' }).then(r => r.json()),
   updateAttendance: (id: string, data: Partial<Attendance>) => fetchWithAuth(`/data/attendance/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => r.json()),
   deleteAttendance: (id: string) => fetchWithAuth(`/data/attendance/${id}`, { method: 'DELETE' }).then(r => r.json()),
 
@@ -56,11 +59,18 @@ export const api = {
   updateReward: (id: string, data: any) => fetchWithAuth(`/data/rewards/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => r.json()),
   deleteReward: (id: string) => fetchWithAuth(`/data/rewards/${id}`, { method: 'DELETE' }).then(r => r.json()),
 
+  // Reward Suggestions
+  getRewardSuggestions: () => fetchWithAuth('/reward-suggestions', { method: 'GET' }).then(r => r.json()),
+  createRewardSuggestion: (data: { title: string; description?: string }) => fetchWithAuth('/reward-suggestions', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+  voteRewardSuggestion: (id: string) => fetchWithAuth(`/reward-suggestions/${id}/vote`, { method: 'POST' }).then(r => r.json()),
+  deleteRewardSuggestion: (id: string) => fetchWithAuth(`/reward-suggestions/${id}`, { method: 'DELETE' }).then(r => r.json()),
+
   // Other endpoints
   getLeaderboards: () => fetchWithAuth('/leaderboards', { method: 'GET' }).then(r => r.json()),
+  getPresentationStats: () => fetchWithAuth('/presentation-stats', { method: 'GET' }).then(r => r.json()),
   getReports: () => fetchWithAuth('/reports', { method: 'GET' }).then(r => r.json()),
   runIntegrityCheck: () => fetchWithAuth('/integrity-check', { method: 'GET' }).then(r => r.json()),
-  getAttendanceSummary: () => fetchWithAuth('/attendance-summary', { method: 'GET' }).then(r => r.json()),
+  getAttendanceSummary: () => fetchWithAuth('/attendance/reports', { method: 'GET' }).then(r => r.json()),
   
   // Admin Point Givers
   getPointGivers: () => fetchWithAuth('/admin/point-givers', { method: 'GET' }).then(r => r.json()),
@@ -85,7 +95,7 @@ export const api = {
   markAllNotificationsRead: () => fetchWithAuth('/notifications/read-all', { method: 'POST' }).then(r => r.json()),
   
   // User's own points
-  getMyPoints: (cadetName: string) => fetchWithAuth(`/data/my-points?name=${encodeURIComponent(cadetName)}`, { method: 'GET' }).then(r => r.json()),
+  getMyPoints: (cadetName: string) => fetchWithAuth(`/my-points?name=${encodeURIComponent(cadetName)}`, { method: 'GET' }).then(r => r.json()),
   
   // CSV Export
   exportCsv: (type: string) => fetchWithAuth(`/export/${type}`, { method: 'GET' }).then(r => r.blob()),
@@ -96,34 +106,19 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username }),
   }).then(r => r.json()),
-  
-  requestSignup: (data: { email: string; password: string; name: string; joinCode: string; flight: string }) => 
-    fetch(`${API_URL}/auth/request-signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).then(parseJsonSafe),
 
-  // Admin Signups
-  getPendingSignups: () => fetchWithAuth('/auth/requests', { method: 'GET' })
-    .then(parseJsonSafe)
-    .then((res) => ({ ...res, signups: res?.signups || res?.requests || [] })),
-  getJoinCode: () => fetchWithAuth('/admin/join-code', { method: 'GET' }).then(parseJsonSafe),
-  createJoinCode: (data: { durationSeconds: number }) =>
-    fetchWithAuth('/admin/join-code', { method: 'POST', body: JSON.stringify(data) }).then(parseJsonSafe),
+  // Admin Account Management
   getUsers: () => fetchWithAuth('/auth/users', { method: 'GET' }).then(parseJsonSafe),
-  approveUser: (userId: string, data: Record<string, any> = {}) =>
-    fetchWithAuth(`/auth/requests/${encodeURIComponent(userId)}/approve`, { method: 'POST', body: JSON.stringify(data) }).then(parseJsonSafe),
   updateUserRole: (userId: string, role: string) =>
     fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ role }) }).then(parseJsonSafe),
-  getPendingSignupsCount: () =>
-    fetchWithAuth('/auth/requests-count', { method: 'GET' })
-      .then(async (r) => {
-        const primary = await parseJsonSafe(r);
-        if (r.ok) return primary;
-        const fallback = await fetchWithAuth('/data/signups-count', { method: 'GET' });
-        return parseJsonSafe(fallback);
-      }),
+  updateUsername: (userId: string, username: string) =>
+    fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ username }) }).then(parseJsonSafe),
+  deleteUser: (userId: string) =>
+    fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'DELETE' }).then(parseJsonSafe),
+  createAccount: (data: { cadetId: string; role?: string }) =>
+    fetchWithAuth('/admin/create-account', { method: 'POST', body: JSON.stringify(data) }).then(parseJsonSafe),
+  resetAccountPassword: (userId: string) =>
+    fetchWithAuth('/admin/reset-account-password', { method: 'POST', body: JSON.stringify({ userId }) }).then(parseJsonSafe),
   
   // Cleanup retention
   cleanupRetention: () => fetchWithAuth('/admin/cleanup-retention', { method: 'POST' }).then(r => r.json()),

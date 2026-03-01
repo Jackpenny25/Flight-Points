@@ -33,6 +33,10 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 dotenv.config({ path: path.join(projectRoot, '.env.local'), override: true });
 
+// ========== CONFIGURABLE CONSTANTS ==========
+// Points awarded to each cadet marked 'present' during attendance
+const ATTENDANCE_POINTS = 2;
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -133,12 +137,34 @@ app.post('/api/auth/login', authLimiter, async (req: Request, res: Response) => 
     if (!valid) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
+
+    // Look up linked cadet to get flight info
+    let cadetId: string | null = null;
+    let userFlight: string | null = null;
+    try {
+      const cadetResult = await query(
+        `SELECT c.id, c.flight FROM cadets c
+         INNER JOIN app_users u ON u.cadet_id = c.id
+         WHERE u.id = $1`,
+        [user.id]
+      );
+      if (cadetResult.rows.length > 0) {
+        cadetId = cadetResult.rows[0].id;
+        userFlight = cadetResult.rows[0].flight;
+      }
+    } catch (e) {
+      // cadet_id column may not exist yet — skip
+    }
+
     // Create JWT
     const token = jwt.sign({
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role
+      role: user.role,
+      cadetId: cadetId || undefined,
+      cadetName: cadetId ? user.name : undefined,
+      flight: userFlight || undefined,
     }, JWT_SECRET, { expiresIn: '7d' });
     return res.json({ token });
   } catch (err) {
@@ -160,7 +186,7 @@ app.get('/api/auth/me', requireAuth, async (req: AuthRequest, res: Response) => 
 function hasSignupAdminRole(user?: UserJwtPayload) {
   if (!user) return false;
   const role = (user.role || '').toLowerCase();
-  return role === 'snco' || role === 'staff' || role === 'admin';
+  return role === 'snco' || role === 'admin';
 }
 
 function hasAdminPinRole(user?: UserJwtPayload) {
@@ -169,289 +195,111 @@ function hasAdminPinRole(user?: UserJwtPayload) {
   return role === 'snco' || role === 'flight point lead' || role === 'flight_point_lead';
 }
 
-let signupSchemaInitPromise: Promise<void> | null = null;
-async function ensureSignupSchema() {
-  if (!signupSchemaInitPromise) {
-    signupSchemaInitPromise = (async () => {
-      await query(`
-        CREATE TABLE IF NOT EXISTS signup_codes (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          code TEXT NOT NULL UNIQUE,
-          duration_seconds INTEGER NOT NULL CHECK (duration_seconds > 0),
-          expires_at TIMESTAMP NOT NULL,
-          is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-          created_by TEXT,
-          revoked_at TIMESTAMP,
-          revoked_by TEXT
-        )
-      `);
+// ========== ADMIN ACCOUNT CREATION HELPERS ==========
 
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS duration_seconds INTEGER');
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP');
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE');
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()');
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS created_by TEXT');
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP');
-      await query('ALTER TABLE signup_codes ADD COLUMN IF NOT EXISTS revoked_by TEXT');
+const PASSWORD_WORDS = [
+  'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel',
+  'India', 'Juliet', 'Kilo', 'Lima', 'Mike', 'November', 'Oscar', 'Papa',
+  'Quebec', 'Romeo', 'Sierra', 'Tango', 'Uniform', 'Victor', 'Whiskey',
+  'Xray', 'Yankee', 'Zulu', 'Eagle', 'Falcon', 'Hawk', 'Storm', 'Thunder',
+  'Phoenix', 'Viper', 'Cobra', 'Tiger', 'Mustang', 'Raptor', 'Shadow',
+  'Arrow', 'Blaze', 'Comet', 'Dagger', 'Flare', 'Granite', 'Horizon',
+  'Iron', 'Javelin', 'Knight', 'Lance', 'Meteor', 'Noble', 'Onyx',
+  'Patriot', 'Quartz', 'Rocket', 'Sabre', 'Titan', 'Unity', 'Valor',
+  'Warrior', 'Zenith', 'Bolt', 'Crest', 'Dawn', 'Ember', 'Frost',
+  'Gale', 'Haven', 'Ivory', 'Jade', 'Kindle', 'Lunar', 'Marvel',
+  'Nimbus', 'Orbit', 'Pulse', 'Ridge', 'Spark', 'Trail', 'Ultra',
+  'Venture', 'Willow', 'Apex', 'Bridge', 'Canyon', 'Drift', 'Fleet',
+  'Guard', 'Herald', 'Impact', 'Jetstream', 'Keystone', 'Legend', 'Mirage',
+  'Nexus', 'Outpost', 'Pinnacle', 'Quest', 'Ranger', 'Sentinel', 'Trident',
+];
 
-      await query("UPDATE signup_codes SET is_active = TRUE WHERE is_active IS NULL");
-      await query("UPDATE signup_codes SET created_at = NOW() WHERE created_at IS NULL");
-      await query("UPDATE signup_codes SET duration_seconds = 3600 WHERE duration_seconds IS NULL");
-      await query("UPDATE signup_codes SET expires_at = NOW() + INTERVAL '1 hour' WHERE expires_at IS NULL");
+function generatePassword(): string {
+  const w1 = PASSWORD_WORDS[Math.floor(Math.random() * PASSWORD_WORDS.length)];
+  let w2 = PASSWORD_WORDS[Math.floor(Math.random() * PASSWORD_WORDS.length)];
+  // Avoid same word twice
+  while (w2 === w1) {
+    w2 = PASSWORD_WORDS[Math.floor(Math.random() * PASSWORD_WORDS.length)];
+  }
+  const num = Math.floor(Math.random() * 90) + 10; // 10-99
+  return `${w1}-${w2}-${num}`;
+}
 
-      await query('ALTER TABLE signup_codes ALTER COLUMN duration_seconds SET DEFAULT 3600');
-      await query('ALTER TABLE signup_codes ALTER COLUMN is_active SET DEFAULT TRUE');
-      await query('ALTER TABLE signup_codes ALTER COLUMN created_at SET DEFAULT NOW()');
+function generateUsername(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s.-]/g, '') // strip special chars
+    .replace(/\s+/g, '.')          // spaces to dots
+    .replace(/\.{2,}/g, '.')       // collapse dots
+    .replace(/^\.+|\.+$/g, '')     // trim dots
+    .slice(0, 30);                 // max 30 chars
+}
 
-      await query(`
-        CREATE TABLE IF NOT EXISTS signup_requests (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          email TEXT NOT NULL,
-          name TEXT NOT NULL,
-          password TEXT NOT NULL,
-          flight TEXT,
-          status TEXT NOT NULL DEFAULT 'pending',
-          created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-      `);
-
-      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS email TEXT');
-      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS name TEXT');
-      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS password TEXT');
-      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS flight TEXT');
-      await query("ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'");
-      await query('ALTER TABLE signup_requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()');
-
-      await query("UPDATE signup_requests SET status = 'pending' WHERE status IS NULL");
-      await query("UPDATE signup_requests SET created_at = NOW() WHERE created_at IS NULL");
-
-      await query('CREATE INDEX IF NOT EXISTS idx_signup_codes_active ON signup_codes (is_active)');
-      await query('CREATE INDEX IF NOT EXISTS idx_signup_codes_expires_at ON signup_codes (expires_at)');
-      await query('CREATE INDEX IF NOT EXISTS idx_signup_requests_email ON signup_requests (email)');
-      await query('CREATE INDEX IF NOT EXISTS idx_signup_requests_created_at ON signup_requests (created_at)');
+// Ensure admin account columns exist
+let adminSchemaInitPromise: Promise<void> | null = null;
+async function ensureAdminAccountSchema() {
+  if (!adminSchemaInitPromise) {
+    adminSchemaInitPromise = (async () => {
+      await query('ALTER TABLE app_users ADD COLUMN IF NOT EXISTS created_by TEXT');
+      await query('ALTER TABLE app_users ADD COLUMN IF NOT EXISTS cadet_id UUID REFERENCES cadets(id) ON DELETE SET NULL');
+      await query('CREATE INDEX IF NOT EXISTS idx_app_users_cadet_id ON app_users (cadet_id)');
     })().catch((error) => {
-      signupSchemaInitPromise = null;
+      adminSchemaInitPromise = null;
       throw error;
     });
   }
-
-  return signupSchemaInitPromise;
+  return adminSchemaInitPromise;
 }
 
-// Public count endpoint used by dashboard widgets
-app.get('/api/auth/requests-count', async (req, res) => {
+// POST /api/auth/lookup-email — resolve username to email for login
+app.post('/api/auth/lookup-email', async (req: Request, res: Response) => {
   try {
-    await ensureSignupSchema();
-    const result = await query('SELECT COUNT(*)::int AS count FROM signup_requests');
-    return res.json({ count: Number(result.rows[0]?.count || 0) });
-  } catch (error) {
-    console.error('Error in GET /api/auth/requests-count:', error);
-    return res.status(500).json({ error: 'Failed to fetch signup request count' });
-  }
-});
-
-// Legacy-compatible public count endpoint
-app.get('/api/data/signups-count', async (req, res) => {
-  try {
-    await ensureSignupSchema();
-    const result = await query('SELECT COUNT(*)::int AS count FROM signup_requests');
-    return res.json({ count: Number(result.rows[0]?.count || 0) });
-  } catch (error) {
-    console.error('Error in GET /api/data/signups-count:', error);
-    return res.status(500).json({ error: 'Failed to fetch signup request count' });
-  }
-});
-
-// Public signup request route
-app.post('/api/auth/request-signup', async (req, res) => {
-  try {
-    await ensureSignupSchema();
-    const { email, password, name, joinCode, flight } = req.body || {};
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: 'Name, email and password are required' });
+    const { username } = req.body || {};
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
     }
+    const usernameStr = String(username).trim().toLowerCase();
 
-    let flightNorm: string | null = null;
-    if (flight != null && String(flight).trim() !== '') {
-      const candidate = String(flight).trim();
-      if (!['1', '2', '3', '4'].includes(candidate)) {
-        return res.status(400).json({ error: 'Invalid flight. Choose 1, 2, 3 or 4.' });
-      }
-      flightNorm = candidate;
-    }
-
-    const codeResult = await query(
-      `SELECT code, expires_at
-       FROM signup_codes
-       WHERE is_active = true
-       ORDER BY created_at DESC
-       LIMIT 1`
-    );
-    const activeCode = codeResult.rows[0];
-    if (!activeCode) {
-      return res.status(403).json({ error: 'Signup is currently closed. Ask a Flight Point Lead for the join code.' });
-    }
-    const expiresAt = new Date(activeCode.expires_at).getTime();
-    if (Date.now() > expiresAt) {
-      return res.status(403).json({ error: 'Join code expired.' });
-    }
-    if (!joinCode || String(joinCode).trim().toUpperCase() !== String(activeCode.code).trim().toUpperCase()) {
-      return res.status(403).json({ error: 'Invalid join code.' });
-    }
-
-    const throttleResult = await query(
-      `SELECT COUNT(*)::int AS count
-       FROM signup_requests
-       WHERE LOWER(email) = LOWER($1)
-         AND created_at >= NOW() - INTERVAL '1 hour'`,
-      [String(email)]
-    );
-    const recentCount = Number(throttleResult.rows[0]?.count || 0);
-    if (recentCount >= 5) {
-      return res.status(429).json({ error: 'Too many signup attempts. Try again later.' });
-    }
-
-    const insertResult = await query(
-      `INSERT INTO signup_requests (email, name, password, flight, status)
-       VALUES (LOWER($1), $2, $3, $4, 'pending')
-       RETURNING id, email, name, flight, status, created_at`,
-      [String(email), String(name).trim(), String(password), flightNorm]
-    );
-
-    return res.status(201).json({ request: insertResult.rows[0] });
-  } catch (error) {
-    console.error('Error in POST /api/auth/request-signup:', error);
-    return res.status(500).json({ error: 'Failed to create signup request' });
-  }
-});
-
-// Admin: get active join code
-app.get('/api/admin/join-code', requireAuth, async (req: AuthRequest, res: Response) => {
-  if (!hasSignupAdminRole(req.user)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  try {
-    await ensureSignupSchema();
+    // Try matching by email prefix (username@flightpoints.local) or exact email or name
     const result = await query(
-      `SELECT code, expires_at, duration_seconds
-       FROM signup_codes
-       WHERE is_active = true
-       ORDER BY created_at DESC
-       LIMIT 1`
-    );
-    const row = result.rows[0];
-    return res.json({
-      joinCode: row?.code || null,
-      expiresAt: row?.expires_at || null,
-      durationSeconds: row?.duration_seconds || null,
-    });
-  } catch (error) {
-    console.error('Error in GET /api/admin/join-code:', error);
-    return res.status(500).json({ error: 'Failed to fetch join code' });
-  }
-});
-
-// Admin: rotate join code
-app.post('/api/admin/join-code', requireAuth, async (req: AuthRequest, res: Response) => {
-  if (!hasSignupAdminRole(req.user)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  try {
-    await ensureSignupSchema();
-    const durationSeconds = Math.max(60, Number(req.body?.durationSeconds || 3600));
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-      code += alphabet[Math.floor(Math.random() * alphabet.length)];
-    }
-    const expiresAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
-    const actor = req.user?.name || req.user?.email || 'system';
-
-    await query(
-      `UPDATE signup_codes
-       SET is_active = false,
-           revoked_at = NOW(),
-           revoked_by = $1
-       WHERE is_active = true`,
-      [actor]
+      `SELECT email FROM app_users
+       WHERE LOWER(SPLIT_PART(email, '@', 1)) = $1
+          OR LOWER(email) = $1
+          OR LOWER(name) = $1
+       LIMIT 1`,
+      [usernameStr]
     );
 
-    await query(
-      `INSERT INTO signup_codes (code, duration_seconds, expires_at, is_active, created_by)
-       VALUES ($1, $2, $3, true, $4)`,
-      [code, durationSeconds, expiresAt, actor]
-    );
-
-    return res.json({ joinCode: code, expiresAt, durationSeconds });
-  } catch (error) {
-    console.error('Error in POST /api/admin/join-code:', error);
-    return res.status(500).json({ error: 'Failed to create join code' });
-  }
-});
-
-// Admin: list pending signup requests
-app.get('/api/auth/requests', requireAuth, async (req: AuthRequest, res: Response) => {
-  if (!hasSignupAdminRole(req.user)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  try {
-    await ensureSignupSchema();
-    const [requestsResult, usersResult] = await Promise.all([
-      query('SELECT id, email, name, flight, status, created_at FROM signup_requests ORDER BY created_at DESC'),
-      query('SELECT id, email, name, role FROM app_users'),
-    ]);
-
-    const usersByEmail = new Map<string, any>();
-    for (const user of usersResult.rows) {
-      usersByEmail.set(String(user.email || '').toLowerCase(), user);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Username not found' });
     }
 
-    const requests = requestsResult.rows.map((r) => {
-      const matched = usersByEmail.get(String(r.email || '').toLowerCase());
-      return {
-        id: r.id,
-        email: r.email,
-        name: r.name,
-        flight: r.flight,
-        status: r.status,
-        createdAt: r.created_at,
-        existingAccounts: matched
-          ? [{
-              id: matched.id,
-              email: matched.email,
-              user_metadata: {
-                name: matched.name,
-                role: matched.role,
-              },
-              created_at: null,
-            }]
-          : [],
-      };
-    });
-
-    return res.json({ requests });
+    return res.json({ email: result.rows[0].email });
   } catch (error) {
-    console.error('Error in GET /api/auth/requests:', error);
-    return res.status(500).json({ error: 'Failed to fetch requests' });
+    console.error('Error in POST /api/auth/lookup-email:', error);
+    return res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Admin: list accounts for role management
+// Admin: list accounts for management
 app.get('/api/auth/users', requireAuth, async (req: AuthRequest, res: Response) => {
   if (!hasSignupAdminRole(req.user)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
-    const result = await query('SELECT id, email, name, role FROM app_users ORDER BY email ASC');
+    await ensureAdminAccountSchema();
+    const result = await query('SELECT id, email, name, role, cadet_id, created_by, created_at FROM app_users ORDER BY name ASC');
     const users = result.rows.map((u) => ({
       id: u.id,
       email: u.email,
-      user_metadata: {
-        name: u.name,
-        role: u.role,
-      },
-      created_at: null,
+      name: u.name,
+      role: u.role,
+      cadetId: u.cadet_id,
+      createdBy: u.created_by,
+      createdAt: u.created_at,
+      // Extract username (part before @)
+      username: u.email.includes('@') ? u.email.split('@')[0] : u.email,
     }));
     return res.json({ users });
   } catch (error) {
@@ -460,13 +308,13 @@ app.get('/api/auth/users', requireAuth, async (req: AuthRequest, res: Response) 
   }
 });
 
-// Admin: update account role/name
+// Admin: update account role
 app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   if (!hasSignupAdminRole(req.user)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
-    const { role, name } = req.body || {};
+    const { role, name, username } = req.body || {};
     const updates: string[] = [];
     const params: any[] = [];
 
@@ -477,6 +325,28 @@ app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Respon
     if (name !== undefined) {
       params.push(String(name));
       updates.push(`name = $${params.length}`);
+    }
+    if (username !== undefined) {
+      // Validate and check for collisions
+      const cleanUsername = String(username).trim().toLowerCase()
+        .replace(/[^a-z0-9.\-]/g, '')
+        .replace(/\.{2,}/g, '.')
+        .replace(/^\.+|\.+$/g, '')
+        .slice(0, 30);
+      if (!cleanUsername) {
+        return res.status(400).json({ error: 'Invalid username' });
+      }
+      const newEmail = `${cleanUsername}@flightpoints.local`;
+      // Check collision
+      const collision = await query(
+        'SELECT id FROM app_users WHERE LOWER(email) = LOWER($1) AND id != $2 LIMIT 1',
+        [newEmail, req.params.id]
+      );
+      if (collision.rows.length > 0) {
+        return res.status(409).json({ error: 'Username already taken' });
+      }
+      params.push(newEmail);
+      updates.push(`email = $${params.length}`);
     }
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No update fields provided' });
@@ -492,76 +362,151 @@ app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Respon
       return res.status(404).json({ error: 'User not found' });
     }
 
-    return res.json({ user: result.rows[0] });
+    const user = result.rows[0];
+    return res.json({
+      user: {
+        ...user,
+        username: user.email.includes('@') ? user.email.split('@')[0] : user.email,
+      },
+    });
   } catch (error) {
     console.error('Error in PUT /api/auth/users/:id:', error);
     return res.status(500).json({ error: 'Failed to update user' });
   }
 });
 
-// Admin: approve signup request into app_users
-app.post('/api/auth/requests/:id/approve', requireAuth, async (req: AuthRequest, res: Response) => {
+// Admin: delete account
+app.delete('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   if (!hasSignupAdminRole(req.user)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
-    await ensureSignupSchema();
-    const requestId = req.params.id;
-    const requestedRole = String(req.body?.role || 'cadet').toLowerCase();
-
-    const requestResult = await query(
-      'SELECT id, email, name, password, flight FROM signup_requests WHERE id = $1',
-      [requestId]
-    );
-    const rec = requestResult.rows[0];
-    if (!rec) {
-      return res.status(404).json({ error: 'Request not found' });
+    // Prevent deleting yourself
+    if (req.params.id === req.user?.id) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
     }
-
-    const passwordHash = await bcrypt.hash(String(rec.password), 10);
-    const existingResult = await query('SELECT id FROM app_users WHERE LOWER(email) = LOWER($1) LIMIT 1', [rec.email]);
-
-    let userId: string;
-    if (existingResult.rows.length > 0) {
-      userId = existingResult.rows[0].id;
-      await query(
-        `UPDATE app_users
-         SET name = $1, role = $2, password_hash = $3
-         WHERE id = $4`,
-        [rec.name, requestedRole, passwordHash, userId]
-      );
-    } else {
-      userId = crypto.randomUUID();
-      await query(
-        `INSERT INTO app_users (id, email, name, role, password_hash)
-         VALUES ($1, LOWER($2), $3, $4, $5)`,
-        [userId, rec.email, rec.name, requestedRole, passwordHash]
-      );
-    }
-
-    await query('DELETE FROM signup_requests WHERE id = $1', [requestId]);
-    return res.json({ user: { id: userId, email: rec.email, name: rec.name, role: requestedRole } });
-  } catch (error) {
-    console.error('Error in POST /api/auth/requests/:id/approve:', error);
-    return res.status(500).json({ error: 'Failed to approve request' });
-  }
-});
-
-// Admin: reject/delete signup request
-app.delete('/api/auth/requests/:id', requireAuth, async (req: AuthRequest, res: Response) => {
-  if (!hasSignupAdminRole(req.user)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  try {
-    await ensureSignupSchema();
-    const result = await query('DELETE FROM signup_requests WHERE id = $1 RETURNING id', [req.params.id]);
+    const result = await query('DELETE FROM app_users WHERE id = $1 RETURNING id', [req.params.id]);
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Request not found' });
+      return res.status(404).json({ error: 'User not found' });
     }
     return res.json({ success: true });
   } catch (error) {
-    console.error('Error in DELETE /api/auth/requests/:id:', error);
-    return res.status(500).json({ error: 'Failed to delete request' });
+    console.error('Error in DELETE /api/auth/users/:id:', error);
+    return res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+// Admin: create account for a cadet
+app.post('/api/admin/create-account', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    await ensureAdminAccountSchema();
+    const { cadetId, role: requestedRole } = req.body || {};
+    if (!cadetId) {
+      return res.status(400).json({ error: 'cadetId is required' });
+    }
+
+    // 1. Look up cadet
+    const cadetResult = await query('SELECT id, name, flight, rank FROM cadets WHERE id = $1', [cadetId]);
+    if (cadetResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Cadet not found' });
+    }
+    const cadet = cadetResult.rows[0];
+
+    // 2. Check if account already exists for this cadet
+    const existingResult = await query('SELECT id, email FROM app_users WHERE cadet_id = $1 LIMIT 1', [cadetId]);
+    if (existingResult.rows.length > 0) {
+      const existing = existingResult.rows[0];
+      const existingUsername = existing.email.includes('@') ? existing.email.split('@')[0] : existing.email;
+      return res.status(409).json({
+        error: 'This cadet already has an account',
+        username: existingUsername,
+      });
+    }
+
+    // 3. Generate username
+    let baseUsername = generateUsername(cadet.name);
+    if (!baseUsername) baseUsername = 'user';
+    let username = baseUsername;
+    let suffix = 2;
+
+    // Check for collisions
+    while (true) {
+      const collision = await query(
+        'SELECT id FROM app_users WHERE LOWER(email) = LOWER($1) LIMIT 1',
+        [`${username}@flightpoints.local`]
+      );
+      if (collision.rows.length === 0) break;
+      username = `${baseUsername}${suffix}`;
+      suffix++;
+      if (suffix > 100) {
+        return res.status(500).json({ error: 'Could not generate unique username' });
+      }
+    }
+
+    // 4. Generate password
+    const password = generatePassword();
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // 5. Determine role
+    const role = String(requestedRole || (cadet.flight === 'hq' ? 'staff' : 'cadet')).toLowerCase();
+
+    // 6. Insert into app_users
+    const userId = crypto.randomUUID();
+    const email = `${username}@flightpoints.local`;
+    const createdBy = req.user?.name || req.user?.email || 'admin';
+
+    await query(
+      `INSERT INTO app_users (id, email, name, role, password_hash, cadet_id, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, email, cadet.name, role, passwordHash, cadetId, createdBy]
+    );
+
+    return res.status(201).json({
+      account: {
+        id: userId,
+        username,
+        password,
+        name: cadet.name,
+        role,
+        flight: cadet.flight,
+      },
+    });
+  } catch (error) {
+    console.error('Error in POST /api/admin/create-account:', error);
+    return res.status(500).json({ error: 'Failed to create account' });
+  }
+});
+
+// Admin: reset account password
+app.post('/api/admin/reset-account-password', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const { userId } = req.body || {};
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const userResult = await query('SELECT id, email, name FROM app_users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+    const password = generatePassword();
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await query('UPDATE app_users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
+
+    const username = user.email.includes('@') ? user.email.split('@')[0] : user.email;
+    return res.json({ username, password, name: user.name });
+  } catch (error) {
+    console.error('Error in POST /api/admin/reset-account-password:', error);
+    return res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 
@@ -573,10 +518,12 @@ const typeConfig: Record<DataType, { table: string; columns: Record<string, stri
     columns: {
       name: 'name',
       flight: 'flight',
+      rank: 'rank',
+      isNco: 'is_nco',
       createdAt: 'created_at',
       updatedAt: 'updated_at',
     },
-    orderBy: 'created_at DESC NULLS LAST',
+    orderBy: 'name ASC',
     hasUpdatedAt: true,
   },
   points: {
@@ -627,6 +574,8 @@ const typeConfig: Record<DataType, { table: string; columns: Record<string, stri
       howToWin: 'how_to_win',
       prize: 'prize',
       endsAt: 'ends_at',
+      winnerName: 'winner_name',
+      status: 'status',
       createdBy: 'created_by',
       createdAt: 'created_at',
       updatedAt: 'updated_at',
@@ -760,7 +709,7 @@ app.post('/api/admin/change-pin', requireAuth, async (req: AuthRequest, res: Res
 });
 
 // POST /api/admin/reset-pin - Reset a user's PIN (admin only)
-app.post('/api/admin/reset-pin', requireAuth, requireRole(['admin', 'staff']), async (req: AuthRequest, res: Response) => {
+app.post('/api/admin/reset-pin', requireAuth, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
   try {
     res.status(400).json({
       error: 'Admin PIN is managed in .env.local. Set ADMIN_PIN (or VITE_ADMIN_PIN) to a 6-digit value and restart the server.',
@@ -796,7 +745,31 @@ app.get('/api/data/:type', async (req, res) => {
       return res.status(400).json({ error: 'Unsupported data type' });
     }
 
+    // Ensure rewards schema columns exist before reading
+    if (normalized === 'rewards') {
+      await ensureRewardsSchema();
+    }
+
     const { table, orderBy } = typeConfig[normalized];
+
+    // Cadets can only see their own attendance records
+    if (normalized === 'attendance') {
+      const authHeader = req.headers['authorization'];
+      if (authHeader) {
+        try {
+          const token = authHeader.replace('Bearer ', '');
+          const decoded = jwt.verify(token, JWT_SECRET) as any;
+          if (decoded.role === 'cadet' && decoded.name) {
+            const sql = `SELECT * FROM ${table} WHERE LOWER(cadet_name) = LOWER($1)${orderBy ? ` ORDER BY ${orderBy}` : ''}`;
+            const result = await query(sql, [decoded.name]);
+            return res.json(mapRowsToClient(normalized, result.rows));
+          }
+        } catch (e) {
+          // Token invalid or missing — fall through to full list (requires auth elsewhere)
+        }
+      }
+    }
+
     const sql = orderBy ? `SELECT * FROM ${table} ORDER BY ${orderBy}` : `SELECT * FROM ${table}`;
     const result = await query(sql);
     res.json(mapRowsToClient(normalized, result.rows));
@@ -825,11 +798,28 @@ app.get('/api/data/:type/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch item' });
   }
 });
-app.post('/api/data/:type', requireAuth, requireRole(['snco', 'staff', 'admin']), async (req, res) => {
+app.post('/api/data/:type', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
       return res.status(400).json({ error: 'Unsupported data type' });
+    }
+
+    // Block giving points to NCOs via the generic endpoint too
+    if (normalized === 'points') {
+      const cadetName = req.body?.cadetName || req.body?.cadet_name;
+      if (cadetName) {
+        const ncoCheck = await query(
+          'SELECT is_nco, flight FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
+          [cadetName]
+        );
+        if (ncoCheck.rows.length > 0 && ncoCheck.rows[0].is_nco === true) {
+          return res.status(403).json({ error: `${cadetName} is an NCO and cannot receive points` });
+        }
+        if (ncoCheck.rows.length > 0 && ncoCheck.rows[0].flight === 'hq') {
+          return res.status(403).json({ error: `${cadetName} is Staff/HQ and cannot receive points` });
+        }
+      }
     }
 
     const { table } = typeConfig[normalized];
@@ -853,11 +843,16 @@ app.post('/api/data/:type', requireAuth, requireRole(['snco', 'staff', 'admin'])
     res.status(500).json({ error: 'Failed to create data' });
   }
 });
-app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'staff', 'admin']), async (req, res) => {
+app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
       return res.status(400).json({ error: 'Unsupported data type' });
+    }
+
+    // Ensure rewards schema columns exist before updating
+    if (normalized === 'rewards') {
+      await ensureRewardsSchema();
     }
 
     const { table, hasUpdatedAt } = typeConfig[normalized];
@@ -891,7 +886,7 @@ app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'staff', 'admin
     res.status(500).json({ error: 'Failed to update data' });
   }
 });
-app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'staff', 'admin']), async (req, res) => {
+app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
@@ -909,6 +904,239 @@ app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'staff', 'ad
   } catch (error) {
     console.error('Error in DELETE /api/data/:type/:id:', error);
     res.status(500).json({ error: 'Failed to delete data' });
+  }
+});
+
+// ========== DEDICATED POINTS ENDPOINT (allows pointgiver/staff/snco) ==========
+app.post('/api/points', requireAuth, async (req: AuthRequest, res: Response) => {
+  const userRole = (req.user?.role || '').toLowerCase();
+  const allowedRoles = ['snco', 'admin', 'staff', 'pointgiver'];
+  if (!allowedRoles.includes(userRole)) {
+    return res.status(403).json({ error: 'You do not have permission to give points' });
+  }
+
+  try {
+    const { cadetName, flight, points: pointsValue, reason, type, date, givenBy } = req.body || {};
+    if (!cadetName || pointsValue === undefined || !reason) {
+      return res.status(400).json({ error: 'cadetName, points, and reason are required' });
+    }
+
+    // Block giving points to NCOs
+    const ncoCheck = await query(
+      'SELECT is_nco, flight FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
+      [cadetName]
+    );
+    if (ncoCheck.rows.length > 0 && ncoCheck.rows[0].is_nco === true) {
+      return res.status(403).json({ error: `${cadetName} is an NCO and cannot receive points` });
+    }
+    if (ncoCheck.rows.length > 0 && ncoCheck.rows[0].flight === 'hq') {
+      return res.status(403).json({ error: `${cadetName} is Staff/HQ and cannot receive points` });
+    }
+
+    // For pointgivers, enforce flight restriction
+    if (userRole === 'pointgiver') {
+      // Look up the user's flight via their cadet_id
+      let userFlight: string | null = null;
+      try {
+        const cadetResult = await query(
+          `SELECT c.flight FROM cadets c
+           INNER JOIN app_users u ON u.cadet_id = c.id
+           WHERE u.id = $1`,
+          [req.user!.id]
+        );
+        if (cadetResult.rows.length > 0) {
+          userFlight = cadetResult.rows[0].flight;
+        }
+      } catch (e) {
+        // If cadet_id column doesn't exist yet, skip restriction
+      }
+
+      if (userFlight) {
+        // Look up the target cadet's flight
+        const targetResult = await query(
+          'SELECT flight FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
+          [cadetName]
+        );
+        if (targetResult.rows.length > 0) {
+          const targetFlight = targetResult.rows[0].flight;
+          if (targetFlight !== userFlight) {
+            return res.status(403).json({
+              error: `You can only give points to cadets in your flight (${userFlight})`,
+            });
+          }
+        }
+      }
+    }
+
+    const id = crypto.randomUUID();
+    const result = await query(
+      `INSERT INTO points (id, cadet_name, date, flight, reason, points, type, given_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [
+        id,
+        cadetName,
+        date || new Date().toISOString(),
+        flight || '',
+        reason,
+        parseFloat(pointsValue),
+        type || 'general',
+        givenBy || req.user?.name || 'unknown',
+      ]
+    );
+
+    const row = result.rows[0];
+    res.status(201).json({
+      id: row.id,
+      cadetName: row.cadet_name,
+      date: row.date,
+      flight: row.flight,
+      reason: row.reason,
+      points: row.points,
+      type: row.type,
+      givenBy: row.given_by,
+    });
+  } catch (error) {
+    console.error('Error in POST /api/points:', error);
+    res.status(500).json({ error: 'Failed to create point' });
+  }
+});
+
+// Presentation stats — extra data for competitive slides
+app.get('/api/presentation-stats', async (req, res) => {
+  try {
+    // 1) Rising Stars — top gainers this week (last 7 days)
+    const risingResult = await query(
+      `SELECT cadet_name AS name,
+              COALESCE(
+                (SELECT c.flight FROM cadets c WHERE LOWER(TRIM(c.name)) = LOWER(TRIM(points.cadet_name)) LIMIT 1),
+                MAX(flight)
+              ) AS flight,
+              COALESCE(SUM(points), 0) AS week_points
+       FROM points
+       WHERE date >= NOW() - INTERVAL '7 days'
+         AND (type IS NULL OR type <> 'attendance')
+       GROUP BY cadet_name
+       ORDER BY week_points DESC
+       LIMIT 10`
+    );
+
+    // 1b) Rising Cadets — top earners this calendar month
+    const risingMonthResult = await query(
+      `SELECT cadet_name AS name,
+              COALESCE(
+                (SELECT c.flight FROM cadets c WHERE LOWER(TRIM(c.name)) = LOWER(TRIM(points.cadet_name)) LIMIT 1),
+                MAX(flight)
+              ) AS flight,
+              COALESCE(SUM(points), 0) AS month_points
+       FROM points
+       WHERE date >= DATE_TRUNC('month', NOW())
+         AND (type IS NULL OR type <> 'attendance')
+       GROUP BY cadet_name
+       ORDER BY month_points DESC
+       LIMIT 10`
+    );
+
+    // 2) Weekly comparison — flight totals this week vs last week
+    const thisWeekFlights = await query(
+      `SELECT flight, COALESCE(SUM(points), 0) AS points
+       FROM points
+       WHERE date >= NOW() - INTERVAL '7 days'
+         AND (type IS NULL OR type <> 'attendance')
+       GROUP BY flight`
+    );
+    const lastWeekFlights = await query(
+      `SELECT flight, COALESCE(SUM(points), 0) AS points
+       FROM points
+       WHERE date >= NOW() - INTERVAL '14 days'
+         AND date < NOW() - INTERVAL '7 days'
+         AND (type IS NULL OR type <> 'attendance')
+       GROUP BY flight`
+    );
+
+    // 3) Attendance streaks — consecutive 'present' records per cadet
+    const streakResult = await query(
+      `SELECT cadet_name, date, status
+       FROM attendance
+       ORDER BY cadet_name, date DESC`
+    );
+
+    // Build streaks from consecutive 'present' records
+    const streaks: { name: string; streak: number }[] = [];
+    let currentName = '';
+    let currentStreak = 0;
+    let streakBroken = false;
+    for (const row of streakResult.rows) {
+      if (row.cadet_name !== currentName) {
+        if (currentName && currentStreak > 0) {
+          streaks.push({ name: currentName, streak: currentStreak });
+        }
+        currentName = row.cadet_name;
+        currentStreak = 0;
+        streakBroken = false;
+      }
+      if (!streakBroken) {
+        if (row.status === 'present') {
+          currentStreak++;
+        } else {
+          streakBroken = true;
+        }
+      }
+    }
+    if (currentName && currentStreak > 0) {
+      streaks.push({ name: currentName, streak: currentStreak });
+    }
+    streaks.sort((a, b) => b.streak - a.streak);
+
+    // 4) Flight of the month — which flight had the most points each calendar month
+    const monthlyResult = await query(
+      `SELECT TO_CHAR(date, 'YYYY-MM') AS month,
+              flight,
+              COALESCE(SUM(points), 0) AS points
+       FROM points
+       WHERE date IS NOT NULL
+         AND (type IS NULL OR type <> 'attendance')
+       GROUP BY month, flight
+       ORDER BY month DESC, points DESC`
+    );
+    // Pick winner per month
+    const monthWinners: { month: string; flight: string; points: number }[] = [];
+    const seenMonths = new Set<string>();
+    for (const row of monthlyResult.rows) {
+      if (!seenMonths.has(row.month)) {
+        seenMonths.add(row.month);
+        monthWinners.push({
+          month: row.month,
+          flight: row.flight,
+          points: Number(row.points),
+        });
+      }
+    }
+
+    res.json({
+      risingStars: risingResult.rows.map(r => ({
+        name: r.name,
+        flight: r.flight || '',
+        weekPoints: Number(r.week_points),
+      })),
+      risingCadets: risingMonthResult.rows.map(r => ({
+        name: r.name,
+        flight: r.flight || '',
+        monthPoints: Number(r.month_points),
+      })),
+      thisWeekFlights: thisWeekFlights.rows.map(r => ({
+        flight: r.flight,
+        points: Number(r.points),
+      })),
+      lastWeekFlights: lastWeekFlights.rows.map(r => ({
+        flight: r.flight,
+        points: Number(r.points),
+      })),
+      attendanceStreaks: streaks.slice(0, 10),
+      flightOfTheMonth: monthWinners.slice(0, 6),
+    });
+  } catch (error) {
+    console.error('Error in GET /api/presentation-stats:', error);
+    res.status(500).json({ error: 'Failed to fetch presentation stats' });
   }
 });
 
@@ -936,9 +1164,32 @@ app.get('/api/leaderboards', async (req, res) => {
        LIMIT 20`
     );
 
+    // Detailed per-cadet breakdown: flight points vs attendance points
+    const detailedResult = await query(
+      `SELECT
+         cadet_name AS name,
+         COALESCE(
+           (SELECT c.flight FROM cadets c WHERE LOWER(TRIM(c.name)) = LOWER(TRIM(points.cadet_name)) LIMIT 1),
+           MAX(flight)
+         ) AS flight,
+         COALESCE(SUM(CASE WHEN type IS NULL OR type <> 'attendance' THEN points ELSE 0 END), 0) AS flight_points,
+         COALESCE(SUM(CASE WHEN type = 'attendance' THEN points ELSE 0 END), 0) AS attendance_points,
+         COALESCE(SUM(points), 0) AS total_points
+       FROM points
+       GROUP BY cadet_name
+       ORDER BY total_points DESC`
+    );
+
     const cadetLeaderboard = cadetResult.rows.map(r => ({ name: r.name, points: Number(r.points) }));
     const flightLeaderboard = flightResult.rows.map(r => ({ flight: r.flight, points: Number(r.points) }));
     const recentPoints = mapRowsToClient('points', recentResult.rows);
+    const detailedLeaderboard = detailedResult.rows.map(r => ({
+      name: r.name,
+      flight: r.flight || '',
+      flightPoints: Number(r.flight_points),
+      attendancePoints: Number(r.attendance_points),
+      totalPoints: Number(r.total_points),
+    }));
 
     const maxCadetPts = cadetLeaderboard.length ? cadetLeaderboard[0].points : null;
     const maxFlightPts = flightLeaderboard.length ? flightLeaderboard[0].points : null;
@@ -949,6 +1200,7 @@ app.get('/api/leaderboards', async (req, res) => {
       cadetLeaderboard,
       flightLeaderboard,
       recentPoints,
+      detailedLeaderboard,
       winningCadet: cadetLeaderboard[0] || null,
       winningFlight: flightLeaderboard[0] || null,
       winnersCadets,
@@ -960,9 +1212,128 @@ app.get('/api/leaderboards', async (req, res) => {
   }
 });
 
-// Attendance reports
-app.get('/api/attendance/reports', async (req, res) => {
+// ========== ATTENDANCE BULK ENDPOINTS ==========
+
+// GET /api/attendance/bulks — list recent bulk sessions
+app.get('/api/attendance/bulks', requireAuth, async (req, res) => {
   try {
+    const result = await query('SELECT * FROM attendance_bulks ORDER BY created_at DESC LIMIT 30');
+    res.json(result.rows.map(row => ({
+      id: row.id,
+      date: row.date,
+      flightFilter: row.flight_filter,
+      totalRecords: Number(row.total_records),
+      totalPresent: Number(row.total_present),
+      submittedBy: row.submitted_by,
+      createdAt: row.created_at,
+    })));
+  } catch (error) {
+    console.error('Error in GET /api/attendance/bulks:', error);
+    res.status(500).json({ error: 'Failed to fetch bulk attendance sessions' });
+  }
+});
+
+// POST /api/attendance/bulk — create a bulk attendance session with individual records
+app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'pointgiver']), async (req, res) => {
+  try {
+    const { entries, date, flightFilter } = req.body;
+    if (!entries || !Array.isArray(entries) || entries.length === 0) {
+      return res.status(400).json({ error: 'entries array is required' });
+    }
+
+    const user = (req as any).user;
+    const submittedBy = user?.name || 'unknown';
+    const totalPresent = entries.filter((e: any) => e.status === 'present').length;
+
+    // Create the bulk session record
+    const bulkId = crypto.randomUUID();
+    await query(
+      `INSERT INTO attendance_bulks (id, date, flight_filter, total_records, total_present, submitted_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      [bulkId, date || new Date().toISOString(), flightFilter || 'all', entries.length, totalPresent, submittedBy]
+    );
+
+    // Insert all individual attendance records linked to this bulk
+    for (const entry of entries) {
+      const recordId = crypto.randomUUID();
+      await query(
+        `INSERT INTO attendance (id, cadet_name, date, flight, status, submitted_by, bulk_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+        [recordId, entry.cadetName, entry.date || date, entry.flight, entry.status || 'absent', submittedBy, bulkId]
+      );
+    }
+
+    // Award attendance points to present cadets (skip NCOs and HQ/Staff)
+    let pointsAwarded = 0;
+    const pointErrors: string[] = [];
+    if (ATTENDANCE_POINTS > 0) {
+      const presentEntries = entries.filter((e: any) => e.status === 'present');
+      for (const entry of presentEntries) {
+        try {
+          // Check if cadet is NCO or HQ — they can't receive points
+          const cadetCheck = await query(
+            'SELECT is_nco, flight FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
+            [entry.cadetName]
+          );
+          if (cadetCheck.rows.length > 0) {
+            const { is_nco, flight: cadetFlight } = cadetCheck.rows[0];
+            if (is_nco || (cadetFlight && cadetFlight.toLowerCase() === 'hq')) {
+              continue; // Skip NCOs and HQ cadets
+            }
+          }
+          const pointId = crypto.randomUUID();
+          await query(
+            `INSERT INTO points (id, cadet_name, date, flight, reason, points, type, given_by, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+            [pointId, entry.cadetName, entry.date || date, entry.flight, 'Attendance', ATTENDANCE_POINTS, 'attendance', submittedBy]
+          );
+          pointsAwarded++;
+        } catch (pointErr: any) {
+          const errMsg = pointErr?.message || String(pointErr);
+          console.error(`Failed to award attendance point to ${entry.cadetName}:`, errMsg);
+          pointErrors.push(`${entry.cadetName}: ${errMsg}`);
+        }
+      }
+    }
+
+    res.status(201).json({
+      id: bulkId,
+      totalRecords: entries.length,
+      totalPresent,
+      pointsAwarded,
+      pointErrors: pointErrors.length > 0 ? pointErrors : undefined,
+      message: `Saved ${entries.length} attendance records, awarded ${pointsAwarded} x ${ATTENDANCE_POINTS}pt`,
+    });
+  } catch (error) {
+    console.error('Error in POST /api/attendance/bulk:', error);
+    res.status(500).json({ error: 'Failed to save bulk attendance' });
+  }
+});
+
+// DELETE /api/attendance/bulk/:id — delete a bulk session and its records
+app.delete('/api/attendance/bulk/:id', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    await query('DELETE FROM attendance WHERE bulk_id = $1', [id]);
+    await query('DELETE FROM attendance_bulks WHERE id = $1', [id]);
+    res.json({ message: 'Bulk attendance session deleted' });
+  } catch (error) {
+    console.error('Error in DELETE /api/attendance/bulk/:id:', error);
+    res.status(500).json({ error: 'Failed to delete bulk attendance session' });
+  }
+});
+
+// Attendance reports
+app.get('/api/attendance/reports', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const userRole = (req as any).user?.role;
+    const userName = (req as any).user?.name;
+
+    // Cadets should not access full attendance reports
+    if (userRole === 'cadet') {
+      return res.status(403).json({ error: 'Cadets cannot view full attendance reports' });
+    }
+
     const summaryResult = await query(
       `SELECT cadet_name,
               flight,
@@ -1004,99 +1375,440 @@ app.get('/api/attendance/reports', async (req, res) => {
   }
 });
 
-// Integrity checks
+// ========== COMPREHENSIVE INTEGRITY CHECKS ==========
 app.get('/api/integrity-check', async (req, res) => {
   try {
-    const [invalidPointsResult, invalidAttendanceResult, pointsTotalResult, duplicateCadetsResult, orphanedAttendancePointsResult, cadetsWithoutFlightResult] = await Promise.all([
-      query(
-        `SELECT p.id, p.cadet_name
-         FROM points p
-         LEFT JOIN cadets c ON LOWER(c.name) = LOWER(p.cadet_name)
-         WHERE c.id IS NULL`
-      ),
-      query(
-        `SELECT a.id, a.cadet_name
-         FROM attendance a
-         LEFT JOIN cadets c ON LOWER(c.name) = LOWER(a.cadet_name)
-         WHERE c.id IS NULL`
-      ),
-      query(`SELECT COALESCE(SUM(points), 0) AS total_points FROM points`),
-      query(
-        `SELECT LOWER(name) AS name, COUNT(*) AS count
-         FROM cadets
-         GROUP BY LOWER(name)
-         HAVING COUNT(*) > 1`
-      ),
-      query(
-        `SELECT p.id, p.cadet_name, p.date
-         FROM points p
-         LEFT JOIN attendance a
-           ON LOWER(a.cadet_name) = LOWER(p.cadet_name)
-          AND a.date = p.date
-         WHERE p.type = 'attendance' AND a.id IS NULL`
-      ),
-      query(
-        `SELECT COUNT(*) AS count
-         FROM cadets
-         WHERE flight IS NULL OR TRIM(flight) = ''`
-      ),
+    const checks: Array<{ name: string; category: string; status: string; message: string; details?: string }> = [];
+
+    // Helper to add a check result
+    const add = (category: string, name: string, status: 'pass' | 'warning' | 'fail', message: string, details?: string) => {
+      checks.push({ category, name, status, message, ...(details ? { details } : {}) });
+    };
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 1: REFERENTIAL INTEGRITY
+    // ═══════════════════════════════════════════════════
+
+    const [
+      invalidPointsCadets,
+      invalidAttendanceCadets,
+      invalidAttendanceBulkIds,
+      invalidRewardWinners,
+      invalidUserCadetLinks,
+      invalidVoteSuggestionLinks,
+    ] = await Promise.all([
+      query(`SELECT p.id, p.cadet_name FROM points p LEFT JOIN cadets c ON LOWER(c.name) = LOWER(p.cadet_name) WHERE c.id IS NULL`),
+      query(`SELECT a.id, a.cadet_name FROM attendance a LEFT JOIN cadets c ON LOWER(c.name) = LOWER(a.cadet_name) WHERE c.id IS NULL`),
+      query(`SELECT a.id, a.bulk_id FROM attendance a WHERE a.bulk_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM attendance_bulks b WHERE b.id = a.bulk_id)`),
+      query(`SELECT r.id, r.title, r.winner_name FROM rewards r WHERE r.winner_name IS NOT NULL AND r.winner_name != '' AND NOT EXISTS (SELECT 1 FROM cadets c WHERE LOWER(c.name) = LOWER(r.winner_name))`).catch(() => ({ rows: [] })),
+      query(`SELECT u.id, u.name, u.cadet_id FROM app_users u WHERE u.cadet_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM cadets c WHERE c.id = u.cadet_id)`).catch(() => ({ rows: [] })),
+      query(`SELECT rv.id, rv.suggestion_id FROM reward_votes rv WHERE NOT EXISTS (SELECT 1 FROM reward_suggestions rs WHERE rs.id = rv.suggestion_id)`).catch(() => ({ rows: [] })),
     ]);
 
-    const invalidPoints = invalidPointsResult.rows;
-    const invalidAttendance = invalidAttendanceResult.rows;
-    const totalPointsGiven = Number(pointsTotalResult.rows[0]?.total_points || 0);
-    const duplicates = duplicateCadetsResult.rows;
-    const orphanedPoints = orphanedAttendancePointsResult.rows;
-    const cadetsWithoutFlight = Number(cadetsWithoutFlightResult.rows[0]?.count || 0);
+    add('Referential Integrity', 'Points → Cadets',
+      invalidPointsCadets.rows.length === 0 ? 'pass' : 'fail',
+      invalidPointsCadets.rows.length === 0 ? 'All point records reference valid cadets' : `${invalidPointsCadets.rows.length} point(s) reference non-existent cadets`,
+      invalidPointsCadets.rows.length > 0 ? invalidPointsCadets.rows.slice(0, 10).map((r: any) => r.cadet_name).join(', ') : undefined
+    );
 
-    const checks = [
-      {
-        name: 'Points Reference Valid Cadets',
-        status: invalidPoints.length === 0 ? 'pass' : 'fail',
-        message: invalidPoints.length === 0
-          ? `All point records reference valid cadets`
-          : `${invalidPoints.length} point record(s) reference non-existent cadets`,
-      },
-      {
-        name: 'Attendance References Valid Cadets',
-        status: invalidAttendance.length === 0 ? 'pass' : 'fail',
-        message: invalidAttendance.length === 0
-          ? `All attendance records reference valid cadets`
-          : `${invalidAttendance.length} attendance record(s) reference non-existent cadets`,
-      },
-      {
-        name: 'Points Total Consistency',
-        status: 'pass',
-        message: `Points totals match: ${totalPointsGiven} points`,
-      },
-      {
-        name: 'Unique Cadet Names',
-        status: duplicates.length === 0 ? 'pass' : 'warning',
-        message: duplicates.length === 0
-          ? 'All cadet names are unique'
-          : `${duplicates.length} duplicate cadet name(s) found`,
-      },
-      {
-        name: 'Attendance Points Have Records',
-        status: orphanedPoints.length === 0 ? 'pass' : 'warning',
-        message: orphanedPoints.length === 0
-          ? 'All attendance points have corresponding records'
-          : `${orphanedPoints.length} attendance point(s) without records`,
-      },
-      {
-        name: 'All Cadets Assigned to Flight',
-        status: cadetsWithoutFlight === 0 ? 'pass' : 'fail',
-        message: cadetsWithoutFlight === 0
-          ? 'All cadets are assigned to a flight'
-          : `${cadetsWithoutFlight} cadet(s) not assigned to a flight`,
-      },
-    ];
+    add('Referential Integrity', 'Attendance → Cadets',
+      invalidAttendanceCadets.rows.length === 0 ? 'pass' : 'fail',
+      invalidAttendanceCadets.rows.length === 0 ? 'All attendance records reference valid cadets' : `${invalidAttendanceCadets.rows.length} attendance record(s) reference non-existent cadets`,
+      invalidAttendanceCadets.rows.length > 0 ? invalidAttendanceCadets.rows.slice(0, 10).map((r: any) => r.cadet_name).join(', ') : undefined
+    );
+
+    add('Referential Integrity', 'Attendance → Bulk Records',
+      invalidAttendanceBulkIds.rows.length === 0 ? 'pass' : 'warning',
+      invalidAttendanceBulkIds.rows.length === 0 ? 'All attendance bulk_id references are valid' : `${invalidAttendanceBulkIds.rows.length} attendance record(s) reference missing bulk records`
+    );
+
+    add('Referential Integrity', 'Reward Winners → Cadets',
+      invalidRewardWinners.rows.length === 0 ? 'pass' : 'warning',
+      invalidRewardWinners.rows.length === 0 ? 'All reward winners are valid cadets' : `${invalidRewardWinners.rows.length} reward(s) have winners not in cadets table`,
+      invalidRewardWinners.rows.length > 0 ? invalidRewardWinners.rows.slice(0, 5).map((r: any) => `"${r.title}" → ${r.winner_name}`).join(', ') : undefined
+    );
+
+    add('Referential Integrity', 'User Accounts → Cadets',
+      invalidUserCadetLinks.rows.length === 0 ? 'pass' : 'fail',
+      invalidUserCadetLinks.rows.length === 0 ? 'All user account cadet links are valid' : `${invalidUserCadetLinks.rows.length} user(s) linked to non-existent cadets`,
+      invalidUserCadetLinks.rows.length > 0 ? invalidUserCadetLinks.rows.slice(0, 5).map((r: any) => r.name).join(', ') : undefined
+    );
+
+    add('Referential Integrity', 'Votes → Suggestions',
+      invalidVoteSuggestionLinks.rows.length === 0 ? 'pass' : 'warning',
+      invalidVoteSuggestionLinks.rows.length === 0 ? 'All votes reference valid suggestions' : `${invalidVoteSuggestionLinks.rows.length} orphaned vote(s) found`
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 2: DUPLICATES & UNIQUENESS
+    // ═══════════════════════════════════════════════════
+
+    const [
+      duplicateCadets,
+      duplicateUserEmails,
+      duplicatePointRecords,
+      duplicateAttendanceSameDay,
+    ] = await Promise.all([
+      query(`SELECT LOWER(name) AS name, COUNT(*) AS count FROM cadets GROUP BY LOWER(name) HAVING COUNT(*) > 1`),
+      query(`SELECT LOWER(email) AS email, COUNT(*) AS count FROM app_users GROUP BY LOWER(email) HAVING COUNT(*) > 1`).catch(() => ({ rows: [] })),
+      query(`SELECT cadet_name, date, flight, reason, points, COUNT(*) AS count FROM points GROUP BY cadet_name, date, flight, reason, points HAVING COUNT(*) > 1`),
+      query(`SELECT cadet_name, date, COUNT(*) AS count FROM attendance GROUP BY cadet_name, date HAVING COUNT(*) > 1`),
+    ]);
+
+    add('Duplicates', 'Unique Cadet Names',
+      duplicateCadets.rows.length === 0 ? 'pass' : 'warning',
+      duplicateCadets.rows.length === 0 ? 'All cadet names are unique' : `${duplicateCadets.rows.length} duplicate cadet name(s) found`,
+      duplicateCadets.rows.length > 0 ? duplicateCadets.rows.map((r: any) => `${r.name} (×${r.count})`).join(', ') : undefined
+    );
+
+    add('Duplicates', 'Unique User Emails',
+      duplicateUserEmails.rows.length === 0 ? 'pass' : 'fail',
+      duplicateUserEmails.rows.length === 0 ? 'All user emails are unique' : `${duplicateUserEmails.rows.length} duplicate email(s) found`,
+      duplicateUserEmails.rows.length > 0 ? duplicateUserEmails.rows.map((r: any) => r.email).join(', ') : undefined
+    );
+
+    add('Duplicates', 'Possible Duplicate Points',
+      duplicatePointRecords.rows.length === 0 ? 'pass' : 'warning',
+      duplicatePointRecords.rows.length === 0 ? 'No exact duplicate point records found' : `${duplicatePointRecords.rows.length} set(s) of identical point records detected`,
+      duplicatePointRecords.rows.length > 0 ? duplicatePointRecords.rows.slice(0, 5).map((r: any) => `${r.cadet_name} on ${r.date ? new Date(r.date).toLocaleDateString('en-GB') : 'unknown'} (×${r.count})`).join(', ') : undefined
+    );
+
+    add('Duplicates', 'Single Attendance Per Day',
+      duplicateAttendanceSameDay.rows.length === 0 ? 'pass' : 'warning',
+      duplicateAttendanceSameDay.rows.length === 0 ? 'No duplicate attendance records for same cadet/date' : `${duplicateAttendanceSameDay.rows.length} cadet(s) with multiple attendance records on same date`,
+      duplicateAttendanceSameDay.rows.length > 0 ? duplicateAttendanceSameDay.rows.slice(0, 5).map((r: any) => `${r.cadet_name} (×${r.count})`).join(', ') : undefined
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 3: DATA QUALITY
+    // ═══════════════════════════════════════════════════
+
+    const [
+      cadetsNoFlight,
+      cadetsEmptyName,
+      pointsNoDate,
+      pointsZeroValue,
+      pointsNoReason,
+      pointsNoGivenBy,
+      attendanceInvalidStatus,
+      rewardsNoTitle,
+      rewardsExpiredStillActive,
+      negativePoints,
+      futurePoints,
+      futureAttendance,
+      pointsFlightMismatch,
+    ] = await Promise.all([
+      query(`SELECT COUNT(*)::int AS count FROM cadets WHERE flight IS NULL OR TRIM(flight) = ''`),
+      query(`SELECT COUNT(*)::int AS count FROM cadets WHERE name IS NULL OR TRIM(name) = ''`),
+      query(`SELECT COUNT(*)::int AS count FROM points WHERE date IS NULL`),
+      query(`SELECT COUNT(*)::int AS count FROM points WHERE points = 0`),
+      query(`SELECT COUNT(*)::int AS count FROM points WHERE reason IS NULL OR TRIM(reason) = ''`),
+      query(`SELECT COUNT(*)::int AS count FROM points WHERE given_by IS NULL OR TRIM(given_by) = ''`),
+      query(`SELECT COUNT(*)::int AS count FROM attendance WHERE status IS NULL`),
+      query(`SELECT COUNT(*)::int AS count FROM rewards WHERE title IS NULL OR TRIM(title) = ''`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*)::int AS count FROM rewards WHERE ends_at < NOW() AND (status IS NULL OR status = 'active')`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*)::int AS count FROM points WHERE points < 0`),
+      query(`SELECT COUNT(*)::int AS count FROM points WHERE date > NOW() + INTERVAL '1 day'`),
+      query(`SELECT COUNT(*)::int AS count FROM attendance WHERE date > NOW() + INTERVAL '1 day'`),
+      query(`SELECT p.id, p.cadet_name, p.flight AS point_flight, c.flight AS cadet_flight FROM points p INNER JOIN cadets c ON LOWER(c.name) = LOWER(p.cadet_name) WHERE p.flight IS NOT NULL AND c.flight IS NOT NULL AND LOWER(p.flight) != LOWER(c.flight)`),
+    ]);
+
+    const noFlightCount = Number(cadetsNoFlight.rows[0]?.count || 0);
+    add('Data Quality', 'All Cadets Have Flight',
+      noFlightCount === 0 ? 'pass' : 'fail',
+      noFlightCount === 0 ? 'All cadets assigned to a flight' : `${noFlightCount} cadet(s) missing flight assignment`
+    );
+
+    const emptyNameCount = Number(cadetsEmptyName.rows[0]?.count || 0);
+    add('Data Quality', 'No Empty Cadet Names',
+      emptyNameCount === 0 ? 'pass' : 'fail',
+      emptyNameCount === 0 ? 'All cadets have names' : `${emptyNameCount} cadet(s) with empty names`
+    );
+
+    const noDateCount = Number(pointsNoDate.rows[0]?.count || 0);
+    add('Data Quality', 'All Points Have Dates',
+      noDateCount === 0 ? 'pass' : 'warning',
+      noDateCount === 0 ? 'All point records have dates' : `${noDateCount} point(s) missing date`
+    );
+
+    const zeroCount = Number(pointsZeroValue.rows[0]?.count || 0);
+    add('Data Quality', 'No Zero-Value Points',
+      zeroCount === 0 ? 'pass' : 'warning',
+      zeroCount === 0 ? 'No zero-value point records' : `${zeroCount} point(s) with zero value`
+    );
+
+    const noReasonCount = Number(pointsNoReason.rows[0]?.count || 0);
+    add('Data Quality', 'All Points Have Reasons',
+      noReasonCount === 0 ? 'pass' : 'warning',
+      noReasonCount === 0 ? 'All point records have reasons' : `${noReasonCount} point(s) without a reason`
+    );
+
+    const noGivenByCount = Number(pointsNoGivenBy.rows[0]?.count || 0);
+    add('Data Quality', 'All Points Have Given By',
+      noGivenByCount === 0 ? 'pass' : 'warning',
+      noGivenByCount === 0 ? 'All points recorded who gave them' : `${noGivenByCount} point(s) missing given_by`
+    );
+
+    const invalidStatusCount = Number(attendanceInvalidStatus.rows[0]?.count || 0);
+    add('Data Quality', 'Valid Attendance Status',
+      invalidStatusCount === 0 ? 'pass' : 'fail',
+      invalidStatusCount === 0 ? 'All attendance records have valid status' : `${invalidStatusCount} attendance record(s) with null status`
+    );
+
+    const noTitleCount = Number(rewardsNoTitle.rows[0]?.count || 0);
+    add('Data Quality', 'All Rewards Have Titles',
+      noTitleCount === 0 ? 'pass' : 'fail',
+      noTitleCount === 0 ? 'All rewards have titles' : `${noTitleCount} reward(s) missing title`
+    );
+
+    const expiredActiveCount = Number(rewardsExpiredStillActive.rows[0]?.count || 0);
+    add('Data Quality', 'Expired Rewards Not Active',
+      expiredActiveCount === 0 ? 'pass' : 'warning',
+      expiredActiveCount === 0 ? 'No expired rewards still marked active' : `${expiredActiveCount} reward(s) past end date but still marked active`
+    );
+
+    const negCount = Number(negativePoints.rows[0]?.count || 0);
+    add('Data Quality', 'No Negative Points',
+      negCount === 0 ? 'pass' : 'warning',
+      negCount === 0 ? 'No negative point values' : `${negCount} point record(s) with negative values`
+    );
+
+    const futurePointsCount = Number(futurePoints.rows[0]?.count || 0);
+    add('Data Quality', 'No Future-Dated Points',
+      futurePointsCount === 0 ? 'pass' : 'warning',
+      futurePointsCount === 0 ? 'No points dated in the future' : `${futurePointsCount} point(s) dated in the future`
+    );
+
+    const futureAttCount = Number(futureAttendance.rows[0]?.count || 0);
+    add('Data Quality', 'No Future-Dated Attendance',
+      futureAttCount === 0 ? 'pass' : 'warning',
+      futureAttCount === 0 ? 'No attendance records dated in the future' : `${futureAttCount} attendance record(s) dated in the future`
+    );
+
+    add('Data Quality', 'Points Flight Matches Cadet Flight',
+      pointsFlightMismatch.rows.length === 0 ? 'pass' : 'warning',
+      pointsFlightMismatch.rows.length === 0 ? 'All points have correct flight for cadet' : `${pointsFlightMismatch.rows.length} point(s) where flight doesn't match cadet's current flight`,
+      pointsFlightMismatch.rows.length > 0 ? pointsFlightMismatch.rows.slice(0, 5).map((r: any) => `${r.cadet_name}: point says ${r.point_flight}, cadet is ${r.cadet_flight}`).join('; ') : undefined
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 4: ACCOUNT & AUTH INTEGRITY
+    // ═══════════════════════════════════════════════════
+
+    const [
+      usersWithoutCadet,
+      usersInvalidRole,
+      usersNoPassword,
+      usersInvalidEmail,
+      multipleAccountsSameCadet,
+      ncoWithNonCadetAccount,
+    ] = await Promise.all([
+      query(`SELECT u.id, u.name, u.role FROM app_users u WHERE u.cadet_id IS NULL AND u.role NOT IN ('snco', 'admin', 'staff', 'presentation')`).catch(() => ({ rows: [] })),
+      query(`SELECT id, name, role FROM app_users WHERE role NOT IN ('snco', 'admin', 'staff', 'pointgiver', 'cadet', 'presentation')`).catch(() => ({ rows: [] })),
+      query(`SELECT id, name FROM app_users WHERE password_hash IS NULL OR TRIM(password_hash) = ''`).catch(() => ({ rows: [] })),
+      query(`SELECT id, name, email FROM app_users WHERE email IS NULL OR TRIM(email) = '' OR email NOT LIKE '%@%'`).catch(() => ({ rows: [] })),
+      query(`SELECT cadet_id, COUNT(*)::int AS count FROM app_users WHERE cadet_id IS NOT NULL GROUP BY cadet_id HAVING COUNT(*) > 1`).catch(() => ({ rows: [] })),
+      query(`SELECT u.id, u.name, u.role, c.is_nco FROM app_users u INNER JOIN cadets c ON u.cadet_id = c.id WHERE c.is_nco = true AND u.role = 'cadet'`).catch(() => ({ rows: [] })),
+    ]);
+
+    add('Accounts', 'Cadet/Pointgiver Accounts Linked',
+      usersWithoutCadet.rows.length === 0 ? 'pass' : 'warning',
+      usersWithoutCadet.rows.length === 0 ? 'All cadet/pointgiver accounts are linked to a cadet record' : `${usersWithoutCadet.rows.length} non-admin account(s) without cadet link`,
+      usersWithoutCadet.rows.length > 0 ? usersWithoutCadet.rows.slice(0, 5).map((r: any) => `${r.name} (${r.role})`).join(', ') : undefined
+    );
+
+    add('Accounts', 'Valid User Roles',
+      usersInvalidRole.rows.length === 0 ? 'pass' : 'fail',
+      usersInvalidRole.rows.length === 0 ? 'All users have valid roles' : `${usersInvalidRole.rows.length} user(s) with invalid roles`,
+      usersInvalidRole.rows.length > 0 ? usersInvalidRole.rows.slice(0, 5).map((r: any) => `${r.name}: "${r.role}"`).join(', ') : undefined
+    );
+
+    add('Accounts', 'All Users Have Passwords',
+      usersNoPassword.rows.length === 0 ? 'pass' : 'fail',
+      usersNoPassword.rows.length === 0 ? 'All users have password hashes' : `${usersNoPassword.rows.length} user(s) without password hash`
+    );
+
+    add('Accounts', 'Valid Email Format',
+      usersInvalidEmail.rows.length === 0 ? 'pass' : 'fail',
+      usersInvalidEmail.rows.length === 0 ? 'All user emails have valid format' : `${usersInvalidEmail.rows.length} user(s) with invalid email`,
+      usersInvalidEmail.rows.length > 0 ? usersInvalidEmail.rows.slice(0, 5).map((r: any) => r.name).join(', ') : undefined
+    );
+
+    add('Accounts', 'No Duplicate Cadet Links',
+      multipleAccountsSameCadet.rows.length === 0 ? 'pass' : 'fail',
+      multipleAccountsSameCadet.rows.length === 0 ? 'Each cadet has at most one account' : `${multipleAccountsSameCadet.rows.length} cadet(s) linked to multiple accounts`
+    );
+
+    add('Accounts', 'NCO Role Consistency',
+      ncoWithNonCadetAccount.rows.length === 0 ? 'pass' : 'warning',
+      ncoWithNonCadetAccount.rows.length === 0 ? 'No NCOs with "cadet" role accounts' : `${ncoWithNonCadetAccount.rows.length} NCO(s) have "cadet" role — should they be pointgiver?`,
+      ncoWithNonCadetAccount.rows.length > 0 ? ncoWithNonCadetAccount.rows.slice(0, 5).map((r: any) => r.name).join(', ') : undefined
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 5: POINTS BUSINESS RULES
+    // ═══════════════════════════════════════════════════
+
+    const [
+      ncoWithPoints,
+      hqWithPoints,
+      orphanedAttendancePoints,
+    ] = await Promise.all([
+      query(`SELECT p.id, p.cadet_name, p.points FROM points p INNER JOIN cadets c ON LOWER(c.name) = LOWER(p.cadet_name) WHERE c.is_nco = true`).catch(() => ({ rows: [] })),
+      query(`SELECT p.id, p.cadet_name, p.points FROM points p INNER JOIN cadets c ON LOWER(c.name) = LOWER(p.cadet_name) WHERE LOWER(c.flight) = 'hq'`).catch(() => ({ rows: [] })),
+      query(`SELECT p.id, p.cadet_name, p.date FROM points p LEFT JOIN attendance a ON LOWER(a.cadet_name) = LOWER(p.cadet_name) AND a.date = p.date WHERE p.type = 'attendance' AND a.id IS NULL`),
+    ]);
+
+    add('Business Rules', 'NCOs Have No Points',
+      ncoWithPoints.rows.length === 0 ? 'pass' : 'warning',
+      ncoWithPoints.rows.length === 0 ? 'No NCOs have points (correct — NCOs cannot receive points)' : `${ncoWithPoints.rows.length} point record(s) exist for NCOs (may be pre-NCO status)`,
+      ncoWithPoints.rows.length > 0 ? ncoWithPoints.rows.slice(0, 5).map((r: any) => r.cadet_name).join(', ') : undefined
+    );
+
+    add('Business Rules', 'HQ/Staff Have No Points',
+      hqWithPoints.rows.length === 0 ? 'pass' : 'warning',
+      hqWithPoints.rows.length === 0 ? 'No HQ/Staff cadets have points (correct)' : `${hqWithPoints.rows.length} point record(s) exist for HQ/Staff members`,
+      hqWithPoints.rows.length > 0 ? hqWithPoints.rows.slice(0, 5).map((r: any) => r.cadet_name).join(', ') : undefined
+    );
+
+    add('Business Rules', 'Attendance Points Have Records',
+      orphanedAttendancePoints.rows.length === 0 ? 'pass' : 'warning',
+      orphanedAttendancePoints.rows.length === 0 ? 'All attendance-type points have matching attendance records' : `${orphanedAttendancePoints.rows.length} attendance point(s) with no matching attendance record`
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 6: REWARDS INTEGRITY
+    // ═══════════════════════════════════════════════════
+
+    const [
+      claimedNoWinner,
+      winnerNotClaimed,
+      rewardsDuplicateTitle,
+    ] = await Promise.all([
+      query(`SELECT id, title FROM rewards WHERE status = 'claimed' AND (winner_name IS NULL OR TRIM(winner_name) = '')`).catch(() => ({ rows: [] })),
+      query(`SELECT id, title, winner_name FROM rewards WHERE winner_name IS NOT NULL AND TRIM(winner_name) != '' AND (status IS NULL OR status != 'claimed')`).catch(() => ({ rows: [] })),
+      query(`SELECT LOWER(title) AS title, COUNT(*)::int AS count FROM rewards WHERE status = 'active' OR status IS NULL GROUP BY LOWER(title) HAVING COUNT(*) > 1`).catch(() => ({ rows: [] })),
+    ]);
+
+    add('Rewards', 'Claimed Rewards Have Winners',
+      claimedNoWinner.rows.length === 0 ? 'pass' : 'fail',
+      claimedNoWinner.rows.length === 0 ? 'All claimed rewards have a winner set' : `${claimedNoWinner.rows.length} claimed reward(s) without a winner`,
+      claimedNoWinner.rows.length > 0 ? claimedNoWinner.rows.slice(0, 5).map((r: any) => r.title).join(', ') : undefined
+    );
+
+    add('Rewards', 'Winners Marked as Claimed',
+      winnerNotClaimed.rows.length === 0 ? 'pass' : 'warning',
+      winnerNotClaimed.rows.length === 0 ? 'All rewards with winners are marked claimed' : `${winnerNotClaimed.rows.length} reward(s) have winners but aren't marked claimed`,
+      winnerNotClaimed.rows.length > 0 ? winnerNotClaimed.rows.slice(0, 5).map((r: any) => `"${r.title}" → ${r.winner_name}`).join(', ') : undefined
+    );
+
+    add('Rewards', 'No Duplicate Active Rewards',
+      rewardsDuplicateTitle.rows.length === 0 ? 'pass' : 'warning',
+      rewardsDuplicateTitle.rows.length === 0 ? 'No duplicate active reward titles' : `${rewardsDuplicateTitle.rows.length} duplicate active reward title(s)`
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 7: ATTENDANCE INTEGRITY
+    // ═══════════════════════════════════════════════════
+
+    const [
+      attendanceFlightMismatch,
+      bulkTotalMismatch,
+      attendanceNoDate,
+    ] = await Promise.all([
+      query(`SELECT a.id, a.cadet_name, a.flight AS att_flight, c.flight AS cadet_flight FROM attendance a INNER JOIN cadets c ON LOWER(c.name) = LOWER(a.cadet_name) WHERE a.flight IS NOT NULL AND c.flight IS NOT NULL AND LOWER(a.flight) != LOWER(c.flight)`),
+      query(`SELECT b.id, b.total_records AS expected, (SELECT COUNT(*)::int FROM attendance a WHERE a.bulk_id = b.id) AS actual FROM attendance_bulks b WHERE b.total_records IS NOT NULL AND b.total_records != (SELECT COUNT(*)::int FROM attendance a WHERE a.bulk_id = b.id)`),
+      query(`SELECT COUNT(*)::int AS count FROM attendance WHERE date IS NULL`),
+    ]);
+
+    add('Attendance', 'Flight Matches Cadet',
+      attendanceFlightMismatch.rows.length === 0 ? 'pass' : 'warning',
+      attendanceFlightMismatch.rows.length === 0 ? 'All attendance flights match cadet\'s current flight' : `${attendanceFlightMismatch.rows.length} attendance record(s) with mismatched flight`,
+      attendanceFlightMismatch.rows.length > 0 ? attendanceFlightMismatch.rows.slice(0, 5).map((r: any) => `${r.cadet_name}: att=${r.att_flight}, cadet=${r.cadet_flight}`).join('; ') : undefined
+    );
+
+    add('Attendance', 'Bulk Record Counts Match',
+      bulkTotalMismatch.rows.length === 0 ? 'pass' : 'warning',
+      bulkTotalMismatch.rows.length === 0 ? 'All bulk attendance record counts match actual records' : `${bulkTotalMismatch.rows.length} bulk event(s) with mismatched record counts`,
+      bulkTotalMismatch.rows.length > 0 ? bulkTotalMismatch.rows.slice(0, 5).map((r: any) => `Bulk ${r.id.slice(0,8)}: expected ${r.expected}, found ${r.actual}`).join('; ') : undefined
+    );
+
+    const noDateAttCount = Number(attendanceNoDate.rows[0]?.count || 0);
+    add('Attendance', 'All Attendance Has Dates',
+      noDateAttCount === 0 ? 'pass' : 'fail',
+      noDateAttCount === 0 ? 'All attendance records have dates' : `${noDateAttCount} attendance record(s) missing date`
+    );
+
+    // ═══════════════════════════════════════════════════
+    // CATEGORY 8: DATABASE STATISTICS
+    // ═══════════════════════════════════════════════════
+
+    const [
+      totalCadets,
+      totalPoints,
+      totalAttendance,
+      totalBulks,
+      totalRewards,
+      totalUsers,
+      totalTickets,
+      totalSuggestions,
+      pointsSum,
+      flightDistribution,
+      roleDistribution,
+    ] = await Promise.all([
+      query(`SELECT COUNT(*)::int AS count FROM cadets`),
+      query(`SELECT COUNT(*)::int AS count FROM points`),
+      query(`SELECT COUNT(*)::int AS count FROM attendance`),
+      query(`SELECT COUNT(*)::int AS count FROM attendance_bulks`),
+      query(`SELECT COUNT(*)::int AS count FROM rewards`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*)::int AS count FROM app_users`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*)::int AS count FROM tickets`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*)::int AS count FROM reward_suggestions`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COALESCE(SUM(points), 0)::int AS total FROM points`),
+      query(`SELECT flight, COUNT(*)::int AS count FROM cadets GROUP BY flight ORDER BY flight`),
+      query(`SELECT role, COUNT(*)::int AS count FROM app_users GROUP BY role ORDER BY role`).catch(() => ({ rows: [] })),
+    ]);
+
+    const cadetCount = Number(totalCadets.rows[0]?.count || 0);
+    const pointCount = Number(totalPoints.rows[0]?.count || 0);
+    const attCount = Number(totalAttendance.rows[0]?.count || 0);
+    const bulkCount = Number(totalBulks.rows[0]?.count || 0);
+    const rewardCount = Number(totalRewards.rows[0]?.count || 0);
+    const userCount = Number(totalUsers.rows[0]?.count || 0);
+    const ticketCount = Number(totalTickets.rows[0]?.count || 0);
+    const suggestionCount = Number(totalSuggestions.rows[0]?.count || 0);
+    const pointTotal = Number(pointsSum.rows[0]?.total || 0);
+
+    add('Statistics', 'Record Counts',
+      'pass', 
+      `Cadets: ${cadetCount} | Points: ${pointCount} (${pointTotal} total) | Attendance: ${attCount} | Bulks: ${bulkCount} | Rewards: ${rewardCount} | Users: ${userCount} | Tickets: ${ticketCount} | Suggestions: ${suggestionCount}`
+    );
+
+    add('Statistics', 'Flights Distribution',
+      'pass',
+      flightDistribution.rows.map((r: any) => `${r.flight || '(none)'}: ${r.count}`).join(' | ') || 'No cadets'
+    );
+
+    add('Statistics', 'Roles Distribution',
+      'pass',
+      roleDistribution.rows.map((r: any) => `${r.role}: ${r.count}`).join(' | ') || 'No users'
+    );
+
+    add('Statistics', 'Data Populated',
+      cadetCount > 0 ? 'pass' : 'warning',
+      cadetCount > 0 ? 'Database has cadet records' : 'No cadets in database — system has no data'
+    );
+
+    // ═══════════════════════════════════════════════════
+    // BUILD SUMMARY
+    // ═══════════════════════════════════════════════════
 
     const summary = {
       totalChecks: checks.length,
       passed: checks.filter(c => c.status === 'pass').length,
       warnings: checks.filter(c => c.status === 'warning').length,
       failed: checks.filter(c => c.status === 'fail').length,
+      categories: [...new Set(checks.map(c => c.category))],
     };
 
     res.json({ checks, summary });
@@ -1128,14 +1840,385 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   }
 });
 
-// Tickets endpoint
-app.get('/api/tickets', async (req, res) => {
+// ========== REWARD SUGGESTIONS & VOTING ENDPOINTS ==========
+
+// Ensure rewards schema has winner_name, status, and suggestion tables
+let rewardsSchemaInitPromise: Promise<void> | null = null;
+async function ensureRewardsSchema() {
+  if (!rewardsSchemaInitPromise) {
+    rewardsSchemaInitPromise = (async () => {
+      console.log('[ensureRewardsSchema] Initialising rewards schema...');
+      await query('ALTER TABLE rewards ADD COLUMN IF NOT EXISTS winner_name VARCHAR');
+      await query('ALTER TABLE rewards ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT \'active\'');
+      await query(`CREATE TABLE IF NOT EXISTS reward_suggestions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title VARCHAR NOT NULL,
+        description TEXT,
+        suggested_by VARCHAR NOT NULL,
+        suggested_by_name VARCHAR,
+        suggested_at TIMESTAMP DEFAULT NOW()
+      )`);
+      await query(`CREATE TABLE IF NOT EXISTS reward_votes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        suggestion_id UUID NOT NULL REFERENCES reward_suggestions(id) ON DELETE CASCADE,
+        user_id VARCHAR NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(suggestion_id, user_id)
+      )`);
+      // Drop the old vote_count column if it exists (we compute it via subquery now)
+      await query('ALTER TABLE reward_suggestions DROP COLUMN IF EXISTS vote_count').catch(() => {});
+      await query('CREATE INDEX IF NOT EXISTS idx_reward_votes_suggestion_id ON reward_votes (suggestion_id)');
+      await query('CREATE INDEX IF NOT EXISTS idx_reward_votes_user_id ON reward_votes (user_id)');
+      console.log('[ensureRewardsSchema] Schema ready.');
+    })().catch((error) => {
+      console.error('[ensureRewardsSchema] Failed:', error?.message || error);
+      rewardsSchemaInitPromise = null;
+      throw error;
+    });
+  }
+  return rewardsSchemaInitPromise;
+}
+
+// GET /api/reward-suggestions - List all suggestions ordered by votes
+app.get('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    // If you have a tickets table, query it. Otherwise return empty
-    const result = await query('SELECT * FROM tickets ORDER BY created_at DESC').catch(() => ({ rows: [] }));
-    res.json(result.rows || []);
+    await ensureRewardsSchema();
+    const result = await query(
+      `SELECT rs.id, rs.title, rs.description, rs.suggested_by, rs.suggested_by_name, rs.suggested_at,
+        (SELECT COUNT(*)::int FROM reward_votes rv WHERE rv.suggestion_id = rs.id) AS computed_vote_count
+       FROM reward_suggestions rs
+       ORDER BY computed_vote_count DESC, rs.suggested_at DESC`
+    );
+    // Also get the current user's votes
+    const userId = req.user?.id || '';
+    const votesResult = await query(
+      'SELECT suggestion_id FROM reward_votes WHERE user_id = $1',
+      [userId]
+    );
+    const userVotes = new Set(votesResult.rows.map((r: any) => r.suggestion_id));
+    const suggestions = result.rows.map((row: any) => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      suggestedBy: row.suggested_by,
+      suggestedByName: row.suggested_by_name,
+      suggestedAt: row.suggested_at,
+      voteCount: Number(row.computed_vote_count || 0),
+      hasVoted: userVotes.has(row.id),
+    }));
+    res.json(suggestions);
+  } catch (error: any) {
+    console.error('Error in GET /api/reward-suggestions:', error?.message || error);
+    res.status(500).json({ error: 'Failed to fetch suggestions' });
+  }
+});
+
+// POST /api/reward-suggestions - Create a suggestion (any role except snco)
+app.post('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    await ensureRewardsSchema();
+    if (req.user?.role === 'snco') {
+      return res.status(403).json({ error: 'Flight Point Leads create rewards directly, not suggestions.' });
+    }
+    const { title, description } = req.body || {};
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ error: 'Title is required' });
+    }
+    const id = crypto.randomUUID();
+    const result = await query(
+      `INSERT INTO reward_suggestions (id, title, description, suggested_by, suggested_by_name)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [id, String(title).trim(), String(description || '').trim() || null, req.user?.id || 'unknown', req.user?.name || 'Unknown']
+    );
+    const row = result.rows[0];
+    res.status(201).json({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      suggestedBy: row.suggested_by,
+      suggestedByName: row.suggested_by_name,
+      suggestedAt: row.suggested_at,
+      voteCount: 0,
+      hasVoted: false,
+    });
   } catch (error) {
-    res.json([]);
+    console.error('Error in POST /api/reward-suggestions:', error);
+    res.status(500).json({ error: 'Failed to create suggestion' });
+  }
+});
+
+// POST /api/reward-suggestions/:id/vote - Toggle vote on a suggestion
+app.post('/api/reward-suggestions/:id/vote', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    await ensureRewardsSchema();
+    const userId = req.user?.id || '';
+    const suggestionId = req.params.id;
+    // Check suggestion exists
+    const check = await query('SELECT id FROM reward_suggestions WHERE id = $1', [suggestionId]);
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Suggestion not found' });
+    }
+    // Check if already voted
+    const existing = await query(
+      'SELECT id FROM reward_votes WHERE suggestion_id = $1 AND user_id = $2',
+      [suggestionId, userId]
+    );
+    if (existing.rows.length > 0) {
+      // Remove vote
+      await query('DELETE FROM reward_votes WHERE suggestion_id = $1 AND user_id = $2', [suggestionId, userId]);
+      const countResult = await query('SELECT COUNT(*)::int AS count FROM reward_votes WHERE suggestion_id = $1', [suggestionId]);
+      res.json({ voted: false, voteCount: Number(countResult.rows[0].count) });
+    } else {
+      // Add vote
+      await query(
+        'INSERT INTO reward_votes (id, suggestion_id, user_id) VALUES ($1, $2, $3)',
+        [crypto.randomUUID(), suggestionId, userId]
+      );
+      const countResult = await query('SELECT COUNT(*)::int AS count FROM reward_votes WHERE suggestion_id = $1', [suggestionId]);
+      res.json({ voted: true, voteCount: Number(countResult.rows[0].count) });
+    }
+  } catch (error) {
+    console.error('Error in POST /api/reward-suggestions/:id/vote:', error);
+    res.status(500).json({ error: 'Failed to toggle vote' });
+  }
+});
+
+// DELETE /api/reward-suggestions/:id - Delete a suggestion (snco or the person who suggested it)
+app.delete('/api/reward-suggestions/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const suggestionId = req.params.id;
+    const suggestion = await query('SELECT * FROM reward_suggestions WHERE id = $1', [suggestionId]);
+    if (suggestion.rows.length === 0) {
+      return res.status(404).json({ error: 'Suggestion not found' });
+    }
+    // Allow delete by the suggester or by snco
+    if (suggestion.rows[0].suggested_by !== req.user?.id && req.user?.role !== 'snco') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    await query('DELETE FROM reward_suggestions WHERE id = $1', [suggestionId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error in DELETE /api/reward-suggestions/:id:', error);
+    res.status(500).json({ error: 'Failed to delete suggestion' });
+  }
+});
+
+// Notifications stub endpoint (no notifications table yet — return empty)
+app.get('/api/notifications', requireAuth, async (req: AuthRequest, res: Response) => {
+  res.json([]);
+});
+app.post('/api/notifications/:id/read', requireAuth, async (req: AuthRequest, res: Response) => {
+  res.json({ success: true });
+});
+app.post('/api/notifications/read-all', requireAuth, async (req: AuthRequest, res: Response) => {
+  res.json({ success: true });
+});
+
+// My Points endpoint — returns points for a specific cadet
+app.get('/api/my-points', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const cadetName = req.query.name as string;
+    if (!cadetName) {
+      return res.status(400).json({ error: 'Missing name parameter' });
+    }
+    const result = await query(
+      'SELECT * FROM points WHERE LOWER(cadet_name) = LOWER($1) ORDER BY date DESC NULLS LAST',
+      [cadetName]
+    );
+    const points = result.rows.map((row: any) => ({
+      id: row.id,
+      cadetName: row.cadet_name,
+      date: row.date,
+      flight: row.flight,
+      reason: row.reason,
+      points: row.points,
+      type: row.type,
+      givenBy: row.given_by,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+    const total = points.reduce((sum: number, p: any) => sum + (Number(p.points) || 0), 0);
+    res.json({ points, total });
+  } catch (error) {
+    console.error('Error in GET /api/my-points:', error);
+    res.status(500).json({ error: 'Failed to fetch points' });
+  }
+});
+
+// ========== TICKETS ENDPOINTS ==========
+
+async function ensureTicketsSchema() {
+  // Create table if it doesn't exist (safe on any DB)
+  await query(`
+    CREATE TABLE IF NOT EXISTS tickets (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      title VARCHAR NOT NULL,
+      description TEXT,
+      created_by VARCHAR NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `).catch(() => {});
+  // Add all optional columns safely
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS assigned_to VARCHAR`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'open'`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS priority VARCHAR DEFAULT 'medium'`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS type VARCHAR DEFAULT 'Request'`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category VARCHAR DEFAULT 'Other'`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS evidence_url TEXT`).catch(() => {});
+  await query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS comments JSONB DEFAULT '[]'::jsonb`).catch(() => {});
+  await query(`UPDATE tickets SET comments = '[]'::jsonb WHERE comments IS NULL`).catch(() => {});
+}
+
+function mapTicket(row: any) {
+  return {
+    id: row.id,
+    type: row.type || 'Request',
+    category: row.category || row.title || 'Other',
+    description: row.description,
+    evidenceUrl: row.evidence_url,
+    createdBy: row.created_by,
+    status: row.status || 'open',
+    priority: row.priority || 'medium',
+    comments: Array.isArray(row.comments) ? row.comments : (row.comments ? JSON.parse(row.comments) : []),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// GET /api/tickets/debug — check table schema
+app.get('/api/tickets/debug', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
+  try {
+    const cols = await query(`SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'tickets' ORDER BY ordinal_position`);
+    const count = await query('SELECT COUNT(*) FROM tickets');
+    res.json({ columns: cols.rows, rowCount: count.rows[0].count });
+  } catch (e: any) {
+    res.json({ error: e.message });
+  }
+});
+
+// GET /api/tickets — admins see all, cadets see their own
+app.get('/api/tickets', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    await ensureTicketsSchema();
+    const user = req.user!;
+    let result;
+    if (user.role === 'cadet') {
+      result = await query('SELECT * FROM tickets WHERE created_by = $1 ORDER BY created_at DESC', [user.name]);
+    } else {
+      result = await query('SELECT * FROM tickets ORDER BY created_at DESC');
+    }
+    res.json({ tickets: result.rows.map(mapTicket) });
+  } catch (error: any) {
+    console.error('Error in GET /api/tickets:', error);
+    res.status(500).json({ error: 'Failed to fetch tickets', detail: error?.message });
+  }
+});
+
+// POST /api/tickets — any authenticated user can submit
+app.post('/api/tickets', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    await ensureTicketsSchema();
+    const user = req.user!;
+    const { type, category, description, evidenceUrl } = req.body || {};
+    if (!description?.trim()) {
+      return res.status(400).json({ error: 'Description is required' });
+    }
+    const id = crypto.randomUUID();
+    // Insert using only the guaranteed base columns (everything else has a DEFAULT or is nullable)
+    await query(
+      `INSERT INTO tickets (id, title, description, created_by, created_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
+      [id, category || type || 'Ticket', description.trim(), user.name]
+    );
+    // Update extended columns (added by ensureTicketsSchema)
+    await query(`UPDATE tickets SET type = $1, category = $2, evidence_url = $3 WHERE id = $4`,
+      [type || 'Request', category || 'Other', evidenceUrl || null, id]
+    ).catch(() => {});
+    await query(`UPDATE tickets SET comments = '[]'::jsonb WHERE id = $1 AND comments IS NULL`, [id]).catch(() => {});
+    const result = await query('SELECT * FROM tickets WHERE id = $1', [id]);
+    res.status(201).json({ ticket: mapTicket(result.rows[0]) });
+  } catch (error: any) {
+    console.error('Error in POST /api/tickets:', error);
+    res.status(500).json({ error: 'Failed to create ticket', detail: error?.message });
+  }
+});
+
+// PUT /api/tickets/:id — approve / reject / comment
+app.put('/api/tickets/:id', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    await ensureTicketsSchema();
+    const user = req.user!;
+    const { id } = req.params;
+    const { action, points, reason, comment } = req.body || {};
+
+    const existing = await query('SELECT * FROM tickets WHERE id = $1', [id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Ticket not found' });
+    const ticket = existing.rows[0];
+
+    if (action === 'approve') {
+      if (!['snco', 'admin', 'staff'].includes(user.role)) {
+        return res.status(403).json({ error: 'Only admins can approve tickets' });
+      }
+      // Award points to the cadet if points provided
+      if (points && Number(points) > 0) {
+        const cadetResult = await query('SELECT flight FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1', [ticket.created_by]);
+        const flight = cadetResult.rows[0]?.flight || '';
+        const pointId = crypto.randomUUID();
+        await query(
+          `INSERT INTO points (id, cadet_name, date, flight, reason, points, type, given_by, created_at, updated_at)
+           VALUES ($1, $2, NOW(), $3, $4, $5, 'ticket', $6, NOW(), NOW())`,
+          [pointId, ticket.created_by, flight, reason || `Ticket: ${ticket.category}`, Number(points), user.name]
+        );
+      }
+      // Add a system comment
+      const existingComments = Array.isArray(ticket.comments) ? ticket.comments : (ticket.comments ? JSON.parse(ticket.comments) : []);
+      const newComment = { id: crypto.randomUUID(), author: user.name, text: `✅ Approved${points ? ` — ${points} points awarded` : ''}${reason ? `: ${reason}` : ''}`, createdAt: new Date().toISOString() };
+      const updatedComments = [...existingComments, newComment];
+      await query(
+        `UPDATE tickets SET status = 'approved', updated_at = NOW(), comments = $1 WHERE id = $2`,
+        [JSON.stringify(updatedComments), id]
+      );
+    } else if (action === 'reject') {
+      if (!['snco', 'admin', 'staff'].includes(user.role)) {
+        return res.status(403).json({ error: 'Only admins can reject tickets' });
+      }
+      const existingComments = Array.isArray(ticket.comments) ? ticket.comments : (ticket.comments ? JSON.parse(ticket.comments) : []);
+      const newComment = { id: crypto.randomUUID(), author: user.name, text: `❌ Rejected${reason ? `: ${reason}` : ''}`, createdAt: new Date().toISOString() };
+      const updatedComments = [...existingComments, newComment];
+      await query(
+        `UPDATE tickets SET status = 'rejected', updated_at = NOW(), comments = $1 WHERE id = $2`,
+        [JSON.stringify(updatedComments), id]
+      );
+    } else if (action === 'comment') {
+      if (!comment?.trim()) return res.status(400).json({ error: 'Comment text required' });
+      const existingComments = Array.isArray(ticket.comments) ? ticket.comments : (ticket.comments ? JSON.parse(ticket.comments) : []);
+      const newComment = { id: crypto.randomUUID(), author: user.name, text: comment.trim(), createdAt: new Date().toISOString() };
+      const updatedComments = [...existingComments, newComment];
+      await query(
+        `UPDATE tickets SET updated_at = NOW(), comments = $1 WHERE id = $2`,
+        [JSON.stringify(updatedComments), id]
+      );
+    } else {
+      return res.status(400).json({ error: 'Invalid action' });
+    }
+
+    const updated = await query('SELECT * FROM tickets WHERE id = $1', [id]);
+    res.json({ ticket: mapTicket(updated.rows[0]) });
+  } catch (error) {
+    console.error('Error in PUT /api/tickets/:id:', error);
+    res.status(500).json({ error: 'Failed to update ticket' });
+  }
+});
+
+// DELETE /api/tickets/:id
+app.delete('/api/tickets/:id', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
+  try {
+    await query('DELETE FROM tickets WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Ticket deleted' });
+  } catch (error) {
+    console.error('Error in DELETE /api/tickets/:id:', error);
+    res.status(500).json({ error: 'Failed to delete ticket' });
   }
 });
 

@@ -29,7 +29,7 @@ export function PrivacyPolicyModal() {
                 Flight Points is committed to protecting your personal data and respecting your privacy. This Privacy Policy explains how we collect, use, and protect personal information in accordance with the UK GDPR and the Data Protection Act 2018 and other applicable privacy laws.
               </p>
               <p className="text-gray-700 mt-2">
-                <strong>Last Updated:</strong> February 2026
+                <strong>Last Updated:</strong> March 2026
               </p>
             </section>
 
@@ -63,7 +63,7 @@ export function PrivacyPolicyModal() {
                 <li><strong>Notification Data</strong> - Records of notifications sent regarding points, attendance, and ticket updates</li>
                 <li><strong>Request/Ticket Data</strong> - Information about achievements submitted for review, including descriptions, categories, requested points, and approval status</li>
                 <li><strong>User Activity Metadata</strong> - Information about who submitted data (e.g., "given by," "submitted by" fields) and timestamps of actions</li>
-                <li><strong>Join Codes</strong> - Time-limited access codes used during signup (automatically expire)</li>
+                <li><strong>Account Links</strong> - Cadet account linking records that connect login accounts to cadet profiles for personal point and attendance tracking</li>
                 <li><strong>Authentication Tokens</strong> - Temporary session tokens and admin verification status stored in your browser</li>
               </ul>
               <p className="text-gray-700 mt-2">
@@ -89,7 +89,7 @@ export function PrivacyPolicyModal() {
               <h3 className="font-semibold text-base mb-2">5. How We Collect Your Data</h3>
               <p className="text-gray-700 mb-2">We collect personal data through:</p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
-                <li><strong>Account Registration</strong> - Email and name provided during signup (staff and NCOs only; cadets can use the system without accounts)</li>
+                <li><strong>Account Registration</strong> - Accounts are created by Flight Point Lead administrators; staff, NCOs, and cadets may be issued accounts. Cadet accounts are linked to their cadet profile to enable personal point and attendance tracking.</li>
                 <li><strong>Direct Input</strong> - Points, attendance, and cadet information entered by authorized staff, Flight Point Leads, and Point Givers</li>
                 <li><strong>File Uploads</strong> - Images and documents you voluntarily upload as evidence for achievement ticket requests</li>
                 <li><strong>OCR Processing</strong> - Attendance data extracted from uploaded attendance register photos using optical character recognition</li>
@@ -166,7 +166,7 @@ export function PrivacyPolicyModal() {
                 <li><strong>Authentication:</strong> Secure login system with email/password authentication managed by our server (staff and NCOs only)</li>
                 <li><strong>Admin Verification:</strong> Additional 6-digit PIN verification required for sensitive administrative functions</li>
                 <li><strong>File Sanitization:</strong> Uploaded file names are automatically sanitized to prevent security vulnerabilities</li>
-                <li><strong>Automatic Expiry:</strong> Join codes and temporary access tokens expire automatically after configured durations</li>
+                <li><strong>Automatic Expiry:</strong> Temporary access tokens and session credentials expire automatically</li>
                 <li><strong>Data Integrity Checks:</strong> Automated validation ensures points reference valid cadets and data consistency</li>
               </ul>
               <p className="text-gray-700 mt-2">
@@ -182,10 +182,9 @@ export function PrivacyPolicyModal() {
                 <li><strong>General Data:</strong> Data is retained for a maximum of 4 years, after which it is deleted from the production database</li>
                 <li><strong>Periodic Resets:</strong> The database may be reset at the end of academic years or as operationally required, removing older data</li>
                 <li><strong>Uploaded Evidence Files:</strong> Stored for the duration of the ticket lifecycle; deleted when tickets are resolved or during periodic resets</li>
-                <li><strong>User Accounts:</strong> Staff and Flight Point Lead accounts remain active until manually deleted by administrators</li>
+                <li><strong>User Accounts:</strong> All user accounts (staff, NCOs, cadets) remain active until manually deleted by administrators</li>
                 <li><strong>Notification Data:</strong> Retained for the duration of system use; removed during periodic resets</li>
                 <li><strong>Browser Cache:</strong> Persists in your browser until you manually clear it or the browser automatically clears it based on your settings</li>
-                <li><strong>Join Codes:</strong> Automatically expire after their configured duration (minimum 1 minute, typically 1 hour)</li>
                 <li><strong>CSV Exports:</strong> Once downloaded to a user's device, we have no control over retention - users should delete files when no longer needed</li>
               </ul>
               <p className="text-gray-700 mt-2">
@@ -200,7 +199,7 @@ export function PrivacyPolicyModal() {
                 Your personal data is shared <strong>only with authorised users of this system</strong> as follows:
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
-                <li><strong>Cadets:</strong> Can view leaderboards (all cadets' points and flights), their own points history, and submit tickets</li>
+                <li><strong>Cadets:</strong> Can view leaderboards (all cadets' points and flights), their own points history, their own attendance records, and submit tickets</li>
                 <li><strong>Point Givers:</strong> Can view all cadet data, award points, record attendance, and download CSV exports</li>
                 <li><strong>Flight Point Leads:</strong> Full access to manage cadets, points, attendance, and tickets</li>
                 <li><strong>Staff:</strong> Full administrative access to all system functions and data</li>

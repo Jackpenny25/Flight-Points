@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import TopNav from './TopNav';
 import { Button } from './ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileSpreadsheet, FileText, Gift, Presentation } from 'lucide-react';
+import { LogOut, Award, TrendingUp, Users, CalendarDays, Shield, FileText, Gift } from 'lucide-react';
 import { PointsManager } from './PointsManager';
 import { Leaderboards } from './Leaderboards';
 import { AdminPointGivers } from './AdminPointGivers';
@@ -16,16 +15,16 @@ import { DataIntegrity } from './DataIntegrity';
 import { ReportsExport } from './ReportsExport';
 import { api } from '../../utils/api';
 import { logout } from '../../utils/auth';
-import { exportAllCsvs } from './downloadCsvUtil';
 import AdminSignups from './AdminSignups';
 import { MyPoints } from './MyPoints';
+import { MyAttendance } from './MyAttendance';
 import { NotificationCenter } from './NotificationCenter';
 import { Tickets } from './Tickets';
 import { TicketsAdmin } from './TicketsAdmin';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { Rewards } from './Rewards';
 import { PresentationEditor } from './PresentationEditor';
-import { PresentationMode } from './PresentationMode';
+// PresentationMode is launched from within PresentationEditor
 
 interface DashboardProps {
   user: any;
@@ -44,17 +43,20 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       ? 'Point Giver'
       : userRole === 'staff'
         ? 'Staff'
-        : (userRole.charAt(0).toUpperCase() + userRole.slice(1));
+        : userRole === 'presentation'
+          ? 'Presentation'
+          : (userRole.charAt(0).toUpperCase() + userRole.slice(1));
   const cadetName = user?.user_metadata?.cadetName;
   const suggestedName = user?.user_metadata?.suggestedName;
   const requireNameChange = user?.user_metadata?.requireNameChange === true;
   
   const canGivePoints = userRole === 'pointgiver' || userRole === 'snco' || userRole === 'staff';
-  const canManageCadets = userRole === 'snco' || userRole === 'staff';
+  const canMarkAttendance = userRole === 'pointgiver' || userRole === 'snco';
+  const canManageCadets = userRole === 'snco';
 
   // tabCount not currently used; remove to avoid premature reference
 
-  const [activeTab, setActiveTab] = useState<string>('leaderboards');
+  const [activeTab, setActiveTab] = useState<string>(userRole === 'presentation' ? 'presentation' : 'leaderboards');
   const [adminPendingCount, setAdminPendingCount] = useState<number>(0);
   const [ticketsCount, setTicketsCount] = useState<number>(0);
   
@@ -101,38 +103,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
 
-  const [downloadDialogOpen, setDownloadDialogOpen] = useState<boolean>(false);
-  const [downloadLoading, setDownloadLoading] = useState<boolean>(false);
-  const [showMyRoleEditor, setShowMyRoleEditor] = useState<boolean>(false);
-  const [myRoleSelection, setMyRoleSelection] = useState<string>(userRole);
-  const [myRoleSaving, setMyRoleSaving] = useState<boolean>(false);
-  const [useAdminPin, setUseAdminPin] = useState<boolean>(false);
-  const [adminPinInput, setAdminPinInput] = useState<string>('');
-  const [temporaryRole, setTemporaryRole] = useState<boolean>(false);
-  const [tempDurationMinutes, setTempDurationMinutes] = useState<number>(30);
 
-  const saveMyRole = async () => {
-    if (!accessToken) { alert('Missing access token'); return }
-    if (!user?.id) { alert('Missing user id'); return }
-    if (myRoleSelection === userRole) { setShowMyRoleEditor(false); return }
-    setMyRoleSaving(true)
-    try {
-      let res;
-      // Replace with local API call
-      res = await api.changeUserRole(user.id, myRoleSelection);
-      if (!res || res.error) {
-        alert('Failed to update role: ' + (res?.error || 'Unknown error'));
-        return;
-      }
-      alert('Role updated. Please sign out and sign in to refresh permissions.');
-      setShowMyRoleEditor(false);
-    } catch (e:any) {
-      console.error('Save role failed', e);
-      alert('Save failed: ' + String(e));
-    } finally {
-      setMyRoleSaving(false);
-    }
-  }
 
   const openPinDialog = () => {
     if (!canUseAdminPin) {
@@ -180,32 +151,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     }
   };
 
-  // Poll pending signup requests count for Flight Point Leads/Staff to show a badge on the NCO's tab
-  useEffect(() => {
-    if (!canManageCadets) return;
-    let timer: any;
-    const fetchCount = async () => {
-      try {
-        const res = await api.getPendingSignupsCount?.();
-        if (typeof res?.count === 'number') setAdminPendingCount(res.count);
-      } catch (e) {
-        console.error('Failed to fetch pending signups count:', e);
-      }
-    };
-    fetchCount();
-    timer = setInterval(fetchCount, 20000);
-    return () => clearInterval(timer);
-  }, [canManageCadets, accessToken]);
-
-  // Open download confirmation dialog when navigation requests the download tab
-  useEffect(() => {
-    if (activeTab === 'download') {
-      setDownloadDialogOpen(true);
-      // reset tab selection back to leaderboards so UI doesn't stay on a phantom tab
-      setActiveTab('leaderboards');
-    }
-  }, [activeTab]);
-
   // Poll open tickets count for Flight Point Leads/Staff to show a badge on the Tickets tab
   useEffect(() => {
     if (!canManageCadets) return;
@@ -219,7 +164,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       }
     };
     fetchCount();
-    timer = setInterval(fetchCount, 20000);
+    timer = setInterval(fetchCount, 120000);
     return () => clearInterval(timer);
   }, [canManageCadets, accessToken]);
 
@@ -231,7 +176,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
               <img
-                src={`${import.meta.env.BASE_URL}${adminUnlocked ? 'logo-black.jpg' : ''}`}
+                src={`${import.meta.env.BASE_URL}${adminUnlocked ? 'logo-black.jpg' : 'logo.png'}`}
                 alt="Flight Points Logo"
                 className={`h-12 w-12 object-contain ${canUseAdminPin ? 'cursor-pointer' : ''}`}
                 title={canUseAdminPin ? (adminUnlocked ? 'Click to lock admin' : 'Click to unlock admin') : 'Admin unlock available for Flight Point Leads only'}
@@ -244,7 +189,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 }}
               />
               <div>
-                <h1 className="text-xl font-bold text-primary">2427 (Biggin Hill) Squadron</h1>
+                <h1 className="text-xl font-bold text-primary">Flight Points</h1>
               </div>
               {/* Admin text indicator removed; logo color indicates unlock state */}
             </div>
@@ -253,60 +198,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 {/* Retention cleanup moved to Signups tab (admin only) */}
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">{userName}</p>
-                {userRole === 'snco' && adminUnlocked ? (
-                  // Flight Point Leads in admin mode can open the role-change panel
-                  <div className="text-xs text-gray-500 space-y-1">
-                    <div>
-                      <span className="text-left">{displayRole}</span>
-                    </div>
-                    <div>
-                      {!showMyRoleEditor ? (
-                        <button onClick={() => { setMyRoleSelection(userRole); setShowMyRoleEditor(true) }} className="text-[11px] text-primary underline">Change my role</button>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Select value={myRoleSelection} onValueChange={(v)=>setMyRoleSelection(v)}>
-                              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="cadet">Cadet</SelectItem>
-                                <SelectItem value="pointgiver">Point Giver</SelectItem>
-                                <SelectItem value="snco">Flight Point Lead</SelectItem>
-                                <SelectItem value="staff">Staff</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Button size="sm" onClick={saveMyRole} disabled={myRoleSaving}>{myRoleSaving ? 'Saving...' : 'Save'}</Button>
-                            <Button variant="outline" size="sm" onClick={() => setShowMyRoleEditor(false)}>Cancel</Button>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <label className="flex items-center gap-2 text-xs">
-                              <input type="checkbox" checked={temporaryRole} onChange={(e)=>setTemporaryRole(e.target.checked)} /> Temporary role
-                            </label>
-                            <label className="flex items-center gap-2 text-xs">
-                              <input type="checkbox" checked={useAdminPin} onChange={(e)=>setUseAdminPin(e.target.checked)} /> Use admin PIN
-                            </label>
-                          </div>
-
-                          {temporaryRole && (
-                            <div className="flex items-center gap-2 text-xs">
-                              <label>Duration (minutes)</label>
-                              <input type="number" min={1} value={tempDurationMinutes} onChange={(e)=>setTempDurationMinutes(Math.max(1, Number(e.target.value)))} className="w-20 p-1 rounded border" />
-                            </div>
-                          )}
-
-                          {useAdminPin && (
-                            <div className="flex items-center gap-2 text-xs">
-                              <label>Admin PIN</label>
-                              <input type="password" value={adminPinInput} onChange={(e)=>setAdminPinInput(e.target.value)} className="w-32 p-1 rounded border" />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-500">{displayRole}</p>
-                )}
+                <p className="text-xs text-gray-500">{displayRole}</p>
               </div>
               <Button variant="outline" size="sm" onClick={onLogout}>
                 <LogOut className="size-4 mr-2" />
@@ -348,39 +240,6 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Download confirmation dialog (admin tab) */}
-      <Dialog open={downloadDialogOpen} onOpenChange={setDownloadDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Download CSVs</DialogTitle>
-            <DialogDescription>Export cadets, points and attendance as CSV files. Do you want to continue?</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm">This will download CSV files for points, attendance and cadet totals. Keep your browser's popup/downloads enabled.</p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDownloadDialogOpen(false)} disabled={downloadLoading}>Cancel</Button>
-            <Button onClick={async () => {
-              try {
-                setDownloadLoading(true)
-                const res = await exportAllCsvs(accessToken)
-                if (res && res.topCadet) {
-                  alert(`Exported CSVs. Top cadet: ${res.topCadet.name} (${res.topCadet.totalPoints} points)`)
-                } else {
-                  alert('Exported CSVs')
-                }
-              } catch (err: any) {
-                console.error(err)
-                alert(err?.message || 'Failed to download CSVs. See console for details.')
-              } finally {
-                setDownloadLoading(false)
-                setDownloadDialogOpen(false)
-              }
-            }} disabled={downloadLoading}>{downloadLoading ? 'Downloading...' : 'Download'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* taskbar below header */}
       {userRole !== 'cadet' && (
         <div className="mt-4">
@@ -389,7 +248,9 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
             onSelect={(t) => setActiveTab(t)} 
             showAdmin={canManageCadets && adminUnlocked}
             canGivePoints={canGivePoints}
+            canMarkAttendance={canMarkAttendance}
             canManageCadets={canManageCadets}
+            isPresentationRole={userRole === 'presentation'}
             adminPendingCount={adminUnlocked && canManageCadets ? adminPendingCount : 0}
             ticketsCount={canManageCadets ? ticketsCount : 0}
             accessToken={accessToken}
@@ -398,7 +259,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       )}
 
       {/* Cadet navigation */}
-      {userRole === 'cadet' && cadetName && (
+      {userRole === 'cadet' && (
         <div className="mt-4 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex gap-2 bg-white p-2 rounded-lg shadow-sm border">
             <Button
@@ -419,15 +280,28 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               <Gift className="size-4 mr-2" />
               Rewards
             </Button>
-            <Button
-              variant={activeTab === 'mypoints' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setActiveTab('mypoints')}
-              className="flex-1"
-            >
-              <Award className="size-4 mr-2" />
-              My Points
-            </Button>
+            {cadetName && (
+              <Button
+                variant={activeTab === 'mypoints' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setActiveTab('mypoints')}
+                className="flex-1"
+              >
+                <Award className="size-4 mr-2" />
+                My Points
+              </Button>
+            )}
+            {cadetName && (
+              <Button
+                variant={activeTab === 'myattendance' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setActiveTab('myattendance')}
+                className="flex-1"
+              >
+                <CalendarDays className="size-4 mr-2" />
+                My Attendance
+              </Button>
+            )}
             <Button
               variant={activeTab === 'tickets' ? 'default' : 'ghost'}
               size="sm"
@@ -445,7 +319,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v)} className="space-y-6">
           <TabsContent value="leaderboards">
-            <Leaderboards />
+            <Leaderboards userRole={userRole} />
           </TabsContent>
 
           <TabsContent value="rewards">
@@ -459,6 +333,13 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
             </TabsContent>
           )}
 
+          {/* My Attendance for cadets */}
+          {userRole === 'cadet' && cadetName && (
+            <TabsContent value="myattendance">
+              <MyAttendance cadetName={cadetName} />
+            </TabsContent>
+          )}
+
           {/* Cadet tickets */}
           {userRole === 'cadet' && (
             <TabsContent value="tickets">
@@ -467,15 +348,15 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           )}
 
           {canGivePoints && (
-            <>
-              <TabsContent value="points">
-                <PointsManager userRole={userRole} />
-              </TabsContent>
+            <TabsContent value="points">
+              <PointsManager userRole={userRole} />
+            </TabsContent>
+          )}
 
-              <TabsContent value="attendance">
-                <AttendanceManager userRole={userRole} />
-              </TabsContent>
-            </>
+          {canMarkAttendance && (
+            <TabsContent value="attendance">
+              <AttendanceManager userRole={userRole} />
+            </TabsContent>
           )}
 
           {canManageCadets && (
@@ -509,16 +390,17 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 </TabsContent>
               )}
 
-              <>
-                <TabsContent value="presentationeditor">
-                  <PresentationEditor />
-                </TabsContent>
-                
-                <TabsContent value="presentation" className="h-[calc(100vh-200px)]">
-                  <Presentation />
-                </TabsContent>
-              </>
+              <TabsContent value="presentation">
+                <PresentationEditor />
+              </TabsContent>
             </>
+          )}
+
+          {/* Presentation-only role */}
+          {userRole === 'presentation' && (
+            <TabsContent value="presentation">
+              <PresentationEditor />
+            </TabsContent>
           )}
 
           {/* bottom tab triggers removed; use TopNav above */}
