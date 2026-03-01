@@ -45,6 +45,12 @@
 - Removed GitHub Pages-specific metadata/comments from `package.json` and `vite.config.ts`.
 - Privacy policy text should describe providers generically (not GitHub Pages) and not mention RAF or Biggin Hill.
 
+## LATEST PROJECT NOTES (2026-03-01)
+- Added `server-backup.ps1` at repo root for server-side backups with editable source paths in-script.
+- Backup paths should be configured directly in `$BackupSources`; output location in `$BackupRoot`.
+- `server-backup.ps1` now supports PostgreSQL dumps from root `.env.local` (`DATABASE_URL`) and 30-day cleanup.
+- Added `install-backup-task.ps1` to register/update a Windows Scheduled Task for Sunday automatic backups.
+
 ---
 
 ## Legacy Quick Reference (Condensed, may be outdated)
