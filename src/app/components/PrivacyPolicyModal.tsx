@@ -119,14 +119,18 @@ export function PrivacyPolicyModal() {
               <h3 className="font-semibold text-base mb-2">7. Where Your Data Is Stored</h3>
               
               <p className="text-gray-700 mb-2">
-                <strong>Primary Storage - PostgreSQL Database (Managed Server):</strong>
+                <strong>All data is stored entirely on our own server.</strong> We do not use any third-party cloud databases or external storage services. Your personal data never leaves our infrastructure.
+              </p>
+
+              <p className="text-gray-700 mb-2">
+                <strong>Our Server (PostgreSQL Database):</strong>
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2 mb-3">
-                <li><strong>Database: </strong> All cadet, points, attendance, ticket, and notification data is stored in a PostgreSQL database on our managed server</li>
-                <li><strong>File Storage:</strong> Uploaded evidence files (images/documents) are stored via server-managed file storage with controlled access</li>
-                <li><strong>Authentication:</strong> User accounts and login sessions are managed by our server-side authentication system</li>
-                <li><strong>Deployment:</strong> Application updates are deployed through a local server deployment process (Deploy.bat) managed by administrators</li>
-                <li>Our hosting and infrastructure include appropriate security safeguards aligned with GDPR principles</li>
+                <li><strong>Database: </strong> All cadet, points, attendance, ticket, reward, and account data is stored in a PostgreSQL database hosted directly on our own server — not in any external cloud service</li>
+                <li><strong>File Storage:</strong> Uploaded evidence files (images/documents) are stored on the same server with controlled access</li>
+                <li><strong>Authentication:</strong> User accounts, passwords, and login sessions are all managed on our server</li>
+                <li><strong>Backups:</strong> Database backups are performed locally on the server and are not sent to any external service</li>
+                <li>Our server infrastructure includes appropriate security safeguards aligned with GDPR principles</li>
               </ul>
 
               <p className="text-gray-700 mb-2">
@@ -139,7 +143,7 @@ export function PrivacyPolicyModal() {
               </ul>
 
               <p className="text-gray-700 mt-3">
-                <strong>Important:</strong> Data is <strong>not</strong> stored in source control repositories. Data is stored in managed server infrastructure and temporarily in your web browser where applicable.
+                <strong>Important:</strong> All data is stored on our own server. Data is <strong>not</strong> stored in source control repositories, third-party cloud platforms, or external databases. The only copy outside our server is the temporary cache in your own web browser.
               </p>
               
               <p className="text-gray-700 mt-2">
