@@ -27,7 +27,8 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - Use the VS Code terminal (PowerShell) for commands.
 - You have permission to make repo file changes without asking first.
 - `LOCAL_MODE` / `localApiShim.ts` / `localStore.ts` have been removed — all data goes through the live API. Do not re-introduce local storage mode.
-- Deleted dead files: `src/app/setupFetch.ts`, `src/utils/localApiShim.ts`, `src/utils/localStore.ts`, `src/app/components/RoleChangePanel.tsx`, `src/app/components/AdminPinManager.tsx`.
+- Deleted dead files: `src/app/setupFetch.ts`, `src/utils/localApiShim.ts`, `src/utils/localStore.ts`, `src/app/components/RoleChangePanel.tsx`, `src/app/components/AdminPinManager.tsx`, `src/app/components/DownloadCsvButton.tsx`, `src/app/components/downloadCsvUtil.ts`.
+- CSV export functionality has been fully removed. Do not re-introduce CSV downloads.
 
 ## Database & API Architecture
 - Generic CRUD: `GET/POST/PUT/DELETE /api/data/:type` with `typeConfig` mapping.

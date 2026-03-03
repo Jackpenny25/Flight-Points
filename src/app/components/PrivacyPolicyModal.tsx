@@ -43,7 +43,8 @@ export function PrivacyPolicyModal() {
                 <strong>Data Protection Contact:</strong> Admin
               </p>
               <p className="text-gray-700 mt-1">
-                <em>Email address to be provided following approval from the administrator.</em>
+                <strong>Email:</strong>{' '}
+                <a href="mailto:help@flightpoints.uk" className="text-blue-600 underline">help@flightpoints.uk</a>
               </p>
             </section>
 
@@ -53,7 +54,7 @@ export function PrivacyPolicyModal() {
               <p className="text-gray-700 mb-2">We collect the following personal data:</p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Names</strong> - Full name of cadets and staff (format:  Surname Initial)</li>
-                <li><strong>Email addresses</strong> - For account access and notifications (staff and NCOs only)</li>
+                <li><strong>Usernames / Login Credentials</strong> - Used for account login (accounts created by administrators for staff, NCOs, and cadets as needed)</li>
                 <li><strong>Role information</strong> - Cadet, Point Giver, Flight Point Lead, or Staff designation</li>
                 <li><strong>Flight assignments</strong> - Which flight (1, 2, 3, or 4) you belong to</li>
                 <li><strong>Attendance records</strong> - Dates, times, and status (present/absent) at squadron activities</li>
@@ -63,6 +64,7 @@ export function PrivacyPolicyModal() {
                 <li><strong>Notification Data</strong> - Records of notifications sent regarding points, attendance, and ticket updates</li>
                 <li><strong>Request/Ticket Data</strong> - Information about achievements submitted for review, including descriptions, categories, requested points, and approval status</li>
                 <li><strong>User Activity Metadata</strong> - Information about who submitted data (e.g., "given by," "submitted by" fields) and timestamps of actions</li>
+                <li><strong>Reward Suggestions & Votes</strong> - Reward ideas submitted by users and voting records</li>
                 <li><strong>Account Links</strong> - Cadet account linking records that connect login accounts to cadet profiles for personal point and attendance tracking</li>
                 <li><strong>Authentication Tokens</strong> - Temporary session tokens and admin verification status stored in your browser</li>
               </ul>
@@ -89,10 +91,10 @@ export function PrivacyPolicyModal() {
               <h3 className="font-semibold text-base mb-2">5. How We Collect Your Data</h3>
               <p className="text-gray-700 mb-2">We collect personal data through:</p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
-                <li><strong>Account Registration</strong> - Accounts are created by Flight Point Lead administrators; staff, NCOs, and cadets may be issued accounts. Cadet accounts are linked to their cadet profile to enable personal point and attendance tracking.</li>
+                <li><strong>Account Registration</strong> - Accounts are created by Flight Point Lead administrators (self-signup is not available). Staff, NCOs, and cadets may be issued accounts. Cadet accounts are linked to their cadet profile to enable personal point and attendance tracking.</li>
                 <li><strong>Direct Input</strong> - Points, attendance, and cadet information entered by authorized staff, Flight Point Leads, and Point Givers</li>
                 <li><strong>File Uploads</strong> - Images and documents you voluntarily upload as evidence for achievement ticket requests</li>
-                <li><strong>OCR Processing</strong> - Attendance data extracted from uploaded attendance register photos using optical character recognition</li>
+
                 <li><strong>Automated Processes</strong> - System-generated IDs, timestamps, bulk operation tracking, and attendance points</li>
               </ul>
             </section>
@@ -108,7 +110,6 @@ export function PrivacyPolicyModal() {
                 <li>Processing achievement tickets submitted by cadets</li>
                 <li>Producing leaderboards and performance reports (visible only to authorised system users)</li>
                 <li>Sending notifications about points awarded, attendance, and ticket status updates</li>
-                <li>Exporting data to CSV spreadsheets for displaying leaderboards (Flight Point Leads only)</li>
                 <li>Ensuring data integrity and system security through integrity checks</li>
               </ul>
             </section>
@@ -137,16 +138,6 @@ export function PrivacyPolicyModal() {
                 <li>You can clear browser storage at any time through your browser settings without affecting the central database</li>
               </ul>
 
-              <p className="text-gray-700 mb-2">
-                <strong>CSV Data Exports (For Leaderboards):</strong>
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2 mb-3">
-                <li>Flight Point Leads can export data to CSV format for creating leaderboard spreadsheets in Excel</li>
-                <li>Exported CSV files are downloaded directly to the user's device - they are not stored on any server</li>
-                <li>Exports contain cadet names, flights, points totals, and attendance summaries</li>
-                <li>Users are responsible for securely storing and disposing of exported files</li>
-              </ul>
-
               <p className="text-gray-700 mt-3">
                 <strong>Important:</strong> Data is <strong>not</strong> stored in source control repositories. Data is stored in managed server infrastructure and temporarily in your web browser where applicable.
               </p>
@@ -163,7 +154,7 @@ export function PrivacyPolicyModal() {
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
                 <li><strong>Encryption:</strong> All data transmitted between your device and our servers uses industry-standard SSL/TLS encryption</li>
                 <li><strong>Access Control:</strong> Role-based permissions limit who can view, edit, or delete data (Cadet, Point Giver, Flight Point Lead, Staff roles)</li>
-                <li><strong>Authentication:</strong> Secure login system with email/password authentication managed by our server (staff and NCOs only)</li>
+                <li><strong>Authentication:</strong> Secure login system with username/password authentication managed by our server</li>
                 <li><strong>Admin Verification:</strong> Additional 6-digit PIN verification required for sensitive administrative functions</li>
                 <li><strong>File Sanitization:</strong> Uploaded file names are automatically sanitized to prevent security vulnerabilities</li>
                 <li><strong>Automatic Expiry:</strong> Temporary access tokens and session credentials expire automatically</li>
@@ -185,7 +176,6 @@ export function PrivacyPolicyModal() {
                 <li><strong>User Accounts:</strong> All user accounts (staff, NCOs, cadets) remain active until manually deleted by administrators</li>
                 <li><strong>Notification Data:</strong> Retained for the duration of system use; removed during periodic resets</li>
                 <li><strong>Browser Cache:</strong> Persists in your browser until you manually clear it or the browser automatically clears it based on your settings</li>
-                <li><strong>CSV Exports:</strong> Once downloaded to a user's device, we have no control over retention - users should delete files when no longer needed</li>
               </ul>
               <p className="text-gray-700 mt-2">
                 Data may be retained longer if required by applicable law or legal obligations. Cadets or parents/guardians may request early deletion of data by contacting the Data Protection Contact.
@@ -199,10 +189,10 @@ export function PrivacyPolicyModal() {
                 Your personal data is shared <strong>only with authorised users of this system</strong> as follows:
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
-                <li><strong>Cadets:</strong> Can view leaderboards (all cadets' points and flights), their own points history, their own attendance records, and submit tickets</li>
-                <li><strong>Point Givers:</strong> Can view all cadet data, award points, record attendance, and download CSV exports</li>
-                <li><strong>Flight Point Leads:</strong> Full access to manage cadets, points, attendance, and tickets</li>
-                <li><strong>Staff:</strong> Full administrative access to all system functions and data</li>
+                <li><strong>Cadets:</strong> Can view leaderboards (all cadets' points and flights), their own points history, their own attendance records, submit tickets, and participate in rewards</li>
+                <li><strong>Point Givers:</strong> Can view cadet data, award points to their own flight, and record attendance</li>
+                <li><strong>Flight Point Leads:</strong> Full access to manage cadets, points, attendance, tickets, and accounts</li>
+                <li><strong>Staff:</strong> Can award points to any flight; no attendance or administrative access</li>
               </ul>
               <p className="text-gray-700 mt-2">
                 <strong>We do NOT share your data with:</strong>
@@ -227,7 +217,7 @@ export function PrivacyPolicyModal() {
                 <li><strong>Right to Rectification:</strong> Request correction of inaccurate or incomplete data (e.g., name corrections via the system)</li>
                 <li><strong>Right to Erasure:</strong> Request deletion of your personal data (subject to legitimate operational requirements)</li>
                 <li><strong>Right to Restrict Processing:</strong> Request we limit how we use your data</li>
-                <li><strong>Right to Data Portability:</strong> Request transfer of your data in a machine-readable format (CSV export available)</li>
+                <li><strong>Right to Data Portability:</strong> Request transfer of your data in a machine-readable format</li>
                 <li><strong>Right to Object:</strong> Object to processing based on legitimate interests</li>
               </ul>
               <p className="text-gray-700 mt-2">
@@ -280,7 +270,8 @@ export function PrivacyPolicyModal() {
               </p>
               <p className="text-gray-700 ml-2">
                 <strong>Data Protection Contact:</strong> Admin<br />
-                <em>(Email address to be provided following approval)</em>
+                <strong>Email:</strong>{' '}
+                <a href="mailto:help@flightpoints.uk" className="text-blue-600 underline">help@flightpoints.uk</a>
               </p>
               <p className="text-gray-700 mt-2">
                 Alternatively, speak to any authorized administrator.

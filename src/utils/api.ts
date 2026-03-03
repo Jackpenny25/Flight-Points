@@ -97,9 +97,6 @@ export const api = {
   // User's own points
   getMyPoints: (cadetName: string) => fetchWithAuth(`/my-points?name=${encodeURIComponent(cadetName)}`, { method: 'GET' }).then(r => r.json()),
   
-  // CSV Export
-  exportCsv: (type: string) => fetchWithAuth(`/export/${type}`, { method: 'GET' }).then(r => r.blob()),
-  
   // Auth helpers
   lookupEmail: (username: string) => fetch(`${API_URL}/auth/lookup-email`, {
     method: 'POST',

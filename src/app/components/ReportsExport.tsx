@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { formatFlight } from './ui/utils';
-import { Download, Filter, FileSpreadsheet, Edit2, Save, X } from 'lucide-react';
+import { Filter, Edit2, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
@@ -106,48 +106,6 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
 
   const filteredPoints = filterData(points);
   const filteredAttendance = filterData(attendance);
-
-  // Export to CSV
-  const exportToCSV = (data: any[], filename: string, headers: string[]) => {
-    const csvContent = [
-      headers.join(','),
-      ...data.map(row => 
-        headers.map(header => {
-          const value = row[header] ?? '';
-          // Escape quotes and wrap in quotes if contains comma
-          const stringValue = String(value).replace(/"/g, '""');
-          return stringValue.includes(',') ? `"${stringValue}"` : stringValue;
-        }).join(',')
-      )
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success('CSV exported successfully!');
-  };
-
-  const exportPointsCSV = () => {
-    exportToCSV(
-      filteredPoints,
-      'points_report',
-      ['cadetName', 'flight', 'points', 'reason', 'type', 'date', 'givenBy']
-    );
-  };
-
-  const exportAttendanceCSV = () => {
-    exportToCSV(
-      filteredAttendance,
-      'attendance_report',
-      ['cadetName', 'flight', 'status', 'date', 'submittedBy']
-    );
-  };
 
   const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
   const cadetNames = cadets.map(c => c.name).sort();
@@ -254,10 +212,6 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
                     {filteredPoints.length} record(s) found
                   </CardDescription>
                 </div>
-                <Button onClick={exportPointsCSV}>
-                  <Download className="size-4 mr-2" />
-                  Export CSV
-                </Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -330,10 +284,6 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
                     {filteredAttendance.length} record(s) found
                   </CardDescription>
                 </div>
-                <Button onClick={exportAttendanceCSV}>
-                  <Download className="size-4 mr-2" />
-                  Export CSV
-                </Button>
               </div>
             </CardHeader>
             <CardContent>

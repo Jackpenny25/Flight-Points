@@ -127,7 +127,6 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
               )
             })}
           </div>
-            {/* DownloadCsvButton removed from standalone area — download is an admin tab now */}
           </div>
         </div>
       </div>
