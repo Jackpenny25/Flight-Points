@@ -72,6 +72,14 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - NCOs (`is_nco = true`) and HQ/Staff cadets (`flight = 'hq'`) cannot receive points (server-enforced).
 - PointsManager auto-detects flight from entered names with real-time validation.
 
+## LATEST PROJECT NOTES (2026-03-01)
+- Added `server-backup.ps1` at repo root for server-side backups with editable source paths in-script.
+- Backup paths should be configured directly in `$BackupSources`; output location in `$BackupRoot`.
+- `server-backup.ps1` now supports PostgreSQL dumps from root `.env.local` (`DATABASE_URL`) and 30-day cleanup.
+- Added `install-backup-task.ps1` to register/update a Windows Scheduled Task for Sunday automatic backups.
+
+---
+
 ## Cadets
 - Sorted alphabetically (A to Z) within each flight.
 - HQ members in separate "Staff / HQ Flight" section. Rank shown in blue.
