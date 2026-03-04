@@ -43,10 +43,10 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-center">
             <div className="w-full max-w-3xl">
-              <div className="flex flex-wrap justify-center items-center gap-2 bg-white/90 dark:bg-slate-800/80 rounded-full p-1.5 shadow-md border border-[#00247D]/10">
+              <div className="flex flex-wrap justify-center items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-full p-1 shadow-sm">
                 <button
                   onClick={() => handleClick(presItem.key)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-xs sm:text-sm font-medium transition min-w-0 bg-primary text-primary-foreground shadow-md flex-shrink-0`}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-xs sm:text-sm font-medium transition min-w-0 bg-primary text-primary-foreground shadow-sm flex-shrink-0`}
                   aria-label={presItem.label}
                   aria-pressed={true}
                 >
@@ -114,13 +114,13 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-center">
           <div className="w-full max-w-3xl">
-            <div className="flex flex-wrap justify-center items-center gap-2 bg-white/90 dark:bg-slate-800/80 rounded-full p-1.5 shadow-md border border-[#00247D]/10">
+            <div className="flex flex-wrap justify-center items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-full p-1 shadow-sm">
             {allItems.map((it) => {
               const Icon = it.icon
               const isActive = active === it.key
               const base = 'flex items-center gap-2 px-3 py-2 rounded-full text-xs sm:text-sm font-medium transition min-w-0'
-              const activeCls = 'bg-primary text-primary-foreground shadow-md'
-              const inactiveCls = 'text-[#1a2332] hover:bg-[#00247D]/8 dark:hover:bg-slate-700'
+              const activeCls = 'bg-primary text-primary-foreground shadow-sm'
+              const inactiveCls = 'hover:bg-slate-100 dark:hover:bg-slate-700'
 
               const badgeCount = (it as any).badgeCount as number | undefined
               return (

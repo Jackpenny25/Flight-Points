@@ -116,7 +116,7 @@ export function NotificationCenter({ accessToken }: Props) {
                   <div
                     key={notif.id}
                     className={`p-4 hover:bg-slate-50 cursor-pointer transition ${
-                      !notif.read ? 'bg-blue-50' : ''
+                      !notif.read ? 'bg-[#00247D]/5' : ''
                     }`}
                     onClick={() => {
                       if (!notif.read) markAsRead(notif.id);
@@ -136,7 +136,7 @@ export function NotificationCenter({ accessToken }: Props) {
                         </p>
                       </div>
                       {!notif.read && (
-                        <div className="w-2 h-2 rounded-full bg-blue-600 mt-1"></div>
+                        <div className="w-2 h-2 rounded-full bg-[#00247D] mt-1"></div>
                       )}
                     </div>
                   </div>

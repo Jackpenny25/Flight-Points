@@ -80,7 +80,7 @@ export function Presentation() {
     return (
       <div className="w-full min-h-screen bg-white flex items-center justify-center p-6">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00247D] mx-auto mb-4"></div>
           <p className="text-gray-600">Loading presentation data...</p>
         </div>
       </div>
@@ -130,7 +130,7 @@ export function Presentation() {
           <div className="border-2 border-gray-400">
             <table className="w-full">
               <thead>
-                <tr className="bg-blue-600">
+                <tr className="bg-[#00247D]">
                   <th className="px-6 py-3 text-left font-bold text-white text-lg">Flight</th>
                   <th className="px-6 py-3 text-left font-bold text-white text-lg">Points</th>
                 </tr>
@@ -141,7 +141,7 @@ export function Presentation() {
                   .map(([flight, total], idx) => (
                     <tr
                       key={flight}
-                      className={idx % 2 === 0 ? 'bg-blue-100' : 'bg-white'}
+                      className={idx % 2 === 0 ? 'bg-[#00247D]/10' : 'bg-white'}
                     >
                       <td className="px-6 py-4 text-gray-800 border-b border-gray-300">{flight}</td>
                       <td className="px-6 py-4 text-gray-800 border-b border-gray-300 font-semibold">{total}</td>
@@ -175,13 +175,13 @@ export function Presentation() {
           <div className="border-2 border-gray-400">
             <table className="w-full">
               <thead>
-                <tr className="bg-blue-600">
+                <tr className="bg-[#00247D]">
                   <th className="px-6 py-3 text-left font-bold text-white text-lg">Winning cadet</th>
                   <th className="px-6 py-3 text-left font-bold text-white text-lg">Points</th>
                 </tr>
               </thead>
               <tbody>
-                <tr className="bg-blue-100">
+                <tr className="bg-[#00247D]/10">
                   <td className="px-6 py-4 text-gray-800 border-b border-gray-300">{topCadet?.name || 'N/A'}</td>
                   <td className="px-6 py-4 text-gray-800 border-b border-gray-300 font-semibold">{topCadet?.points || 0}</td>
                 </tr>
@@ -193,13 +193,13 @@ export function Presentation() {
           <div className="border-2 border-gray-400">
             <table className="w-full">
               <thead>
-                <tr className="bg-blue-600">
+                <tr className="bg-[#00247D]">
                   <th className="px-6 py-3 text-left font-bold text-white text-lg">Flight</th>
                   <th className="px-6 py-3 text-left font-bold text-white text-lg">Points</th>
                 </tr>
               </thead>
               <tbody>
-                <tr className="bg-blue-100">
+                <tr className="bg-[#00247D]/10">
                   <td className="px-6 py-4 text-gray-800 border-b border-gray-300">{winningFlight?.[0] || 'N/A'}</td>
                   <td className="px-6 py-4 text-gray-800 border-b border-gray-300 font-semibold">{winningFlight?.[1] || 0}</td>
                 </tr>
@@ -231,7 +231,7 @@ export function Presentation() {
         <div className="border-2 border-gray-400 overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="bg-blue-600">
+              <tr className="bg-[#00247D]">
                 <th className="px-4 py-3 text-left font-bold text-white text-sm">Rank</th>
                 <th className="px-4 py-3 text-left font-bold text-white text-sm">Cadet Name</th>
                 <th className="px-4 py-3 text-left font-bold text-white text-sm">Flight</th>
@@ -243,7 +243,7 @@ export function Presentation() {
                 leaderboard.map((cadet, idx) => (
                   <tr
                     key={cadet.id}
-                    className={idx % 2 === 0 ? 'bg-blue-100' : 'bg-white'}
+                    className={idx % 2 === 0 ? 'bg-[#00247D]/10' : 'bg-white'}
                   >
                     <td className="px-4 py-2 text-gray-800 border-b border-gray-300 font-semibold">{idx + 1}</td>
                     <td className="px-4 py-2 text-gray-800 border-b border-gray-300">{cadet.name}</td>

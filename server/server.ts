@@ -747,16 +747,12 @@ app.get('/api/integrity-check/count', async (req: Request, res: Response) => {
       invalidAttendanceCadets,
       invalidRewardWinners,
       invalidUserCadetLinks,
-      duplicatePointRecords,
-      duplicateAttendanceSameDay,
       duplicateUserEmails,
     ] = await Promise.all([
       query(`SELECT COUNT(*)::int AS count FROM points p LEFT JOIN cadets c ON LOWER(c.name) = LOWER(p.cadet_name) WHERE c.id IS NULL`),
       query(`SELECT COUNT(*)::int AS count FROM attendance a LEFT JOIN cadets c ON LOWER(c.name) = LOWER(a.cadet_name) WHERE c.id IS NULL`),
       query(`SELECT COUNT(*)::int AS count FROM rewards r WHERE r.winner_name IS NOT NULL AND r.winner_name != '' AND NOT EXISTS (SELECT 1 FROM cadets c WHERE LOWER(c.name) = LOWER(r.winner_name))`).catch(() => ({ rows: [{ count: 0 }] })),
       query(`SELECT COUNT(*)::int AS count FROM app_users u WHERE u.cadet_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM cadets c WHERE c.id = u.cadet_id)`).catch(() => ({ rows: [{ count: 0 }] })),
-      query(`SELECT p.cadet_name, p.date, COUNT(*)::int as cnt FROM points p GROUP BY p.cadet_name, p.date HAVING COUNT(*) > 1`),
-      query(`SELECT a.cadet_name, a.date, COUNT(*)::int as cnt FROM attendance a GROUP BY a.cadet_name, a.date HAVING COUNT(*) > 1`),
       query(`SELECT COUNT(*)::int AS count FROM app_users GROUP BY email HAVING COUNT(*) > 1`).catch(() => ({ rows: [] })),
     ]);
 
@@ -765,8 +761,6 @@ app.get('/api/integrity-check/count', async (req: Request, res: Response) => {
     if (invalidAttendanceCadets.rows[0]?.count > 0) add('Referential Integrity', 'Attendance → Cadets', 'fail', `${invalidAttendanceCadets.rows[0].count} attendance record(s) reference non-existent cadets`);
     if (invalidRewardWinners.rows[0]?.count > 0) add('Referential Integrity', 'Reward Winners → Cadets', 'warning', `${invalidRewardWinners.rows[0].count} reward(s) have invalid winners`);
     if (invalidUserCadetLinks.rows[0]?.count > 0) add('Referential Integrity', 'User Accounts → Cadets', 'fail', `${invalidUserCadetLinks.rows[0].count} user(s) linked to non-existent cadets`);
-    if (duplicatePointRecords.rows.length > 0) add('Duplicates', 'Duplicate Points', 'warning', `${duplicatePointRecords.rows.length} duplicate point record(s) found`);
-    if (duplicateAttendanceSameDay.rows.length > 0) add('Duplicates', 'Attendance Duplicates', 'warning', `${duplicateAttendanceSameDay.rows.length} attendance duplicate(s) found`);
     if (duplicateUserEmails.rows.length > 0) add('Accounts', 'Duplicate User Emails', 'fail', `${duplicateUserEmails.rows.length} duplicate email(s) found`);
 
     // Count failures and warnings
@@ -1552,15 +1546,15 @@ app.get('/api/integrity-check', async (req, res) => {
       duplicateUserEmails.rows.length > 0 ? duplicateUserEmails.rows.map((r: any) => r.email).join(', ') : undefined
     );
 
-    add('Duplicates', 'Possible Duplicate Points',
-      duplicatePointRecords.rows.length === 0 ? 'pass' : 'warning',
-      duplicatePointRecords.rows.length === 0 ? 'No exact duplicate point records found' : `${duplicatePointRecords.rows.length} set(s) of identical point records detected`,
+    add('Duplicates', 'Possible Duplicate Points (Info)',
+      'pass',
+      duplicatePointRecords.rows.length === 0 ? 'No exact duplicate point records found' : `${duplicatePointRecords.rows.length} set(s) of identical point records detected (allowed in some workflows)`,
       duplicatePointRecords.rows.length > 0 ? duplicatePointRecords.rows.slice(0, 5).map((r: any) => `${r.cadet_name} on ${r.date ? new Date(r.date).toLocaleDateString('en-GB') : 'unknown'} (×${r.count})`).join(', ') : undefined
     );
 
-    add('Duplicates', 'Single Attendance Per Day',
-      duplicateAttendanceSameDay.rows.length === 0 ? 'pass' : 'warning',
-      duplicateAttendanceSameDay.rows.length === 0 ? 'No duplicate attendance records for same cadet/date' : `${duplicateAttendanceSameDay.rows.length} cadet(s) with multiple attendance records on same date`,
+    add('Duplicates', 'Multiple Attendance Records Per Day (Info)',
+      'pass',
+      duplicateAttendanceSameDay.rows.length === 0 ? 'No multiple attendance records for same cadet/date' : `${duplicateAttendanceSameDay.rows.length} cadet(s) with multiple attendance records on same date (allowed)`,
       duplicateAttendanceSameDay.rows.length > 0 ? duplicateAttendanceSameDay.rows.slice(0, 5).map((r: any) => `${r.cadet_name} (×${r.count})`).join(', ') : undefined
     );
 

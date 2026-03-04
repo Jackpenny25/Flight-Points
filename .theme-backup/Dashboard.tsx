@@ -222,9 +222,9 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   }, [canGivePoints, accessToken]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50">
       {/* Header */}
-      <header className="bg-white shadow-lg border-b-2 border-[#00247D]/15">
+      <header className="bg-white shadow-md border-b-2 border-primary/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
@@ -317,7 +317,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       {/* Cadet navigation */}
       {userRole === 'cadet' && (
         <div className="mt-4 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-2 bg-white p-2 rounded-xl shadow-sm border border-[#00247D]/10">
+          <div className="flex gap-2 bg-white p-2 rounded-lg shadow-sm border">
             <Button
               variant={activeTab === 'leaderboards' ? 'default' : 'ghost'}
               size="sm"

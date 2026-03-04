@@ -114,6 +114,7 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - `GET /api/integrity-check` runs comprehensive database validation checks grouped by category.
 - DataIntegrity.tsx displays results with pass/warning/fail badges and category grouping.
 - Checks cover: referential integrity, duplicates, orphaned records, account linking, schema validation, data quality, and more.
+- Duplicate points and multiple attendance records per day are informational (`pass`) and are excluded from `/api/integrity-check/count` badge totals.
 
 ## Tab Notification Badges (2026-03-04)
 - Badges show on tabs when there are important updates/issues to review.

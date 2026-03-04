@@ -60,9 +60,9 @@ export function Login({ onLogin }: LoginProps) {
   
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#00247D] via-[#1a3a8f] to-[#2d5aa0] p-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-100 via-blue-50 to-sky-200 p-8">
       <div className="w-full max-w-2xl px-4">
-        <Card className="w-full max-w-lg md:max-w-xl mx-auto shadow-2xl border-0">
+        <Card className="w-full max-w-lg md:max-w-xl mx-auto shadow-xl">
         <CardHeader className="text-center space-y-4">
           <div>
             <CardTitle className="text-3xl font-bold text-primary">Flight Points</CardTitle>
@@ -109,7 +109,7 @@ export function Login({ onLogin }: LoginProps) {
         </Card>
 
         {/* Privacy Policy below the login card */}
-        <div className="mt-6 text-center text-sm text-white/70">
+        <div className="mt-6 text-center text-sm text-gray-600">
           <PrivacyPolicyModal />
           <div className="mt-2">By signing in, you agree to our Privacy Policy</div>
         </div>

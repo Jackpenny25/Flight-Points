@@ -581,7 +581,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
           ) : (
             <div className="space-y-4 max-h-[600px] overflow-y-auto">
               {points.slice(0, 10).map((point) => (
-                <div key={point.id} className="p-4 border rounded-lg bg-gray-50">
+                <div key={point.id} className="p-4 border rounded-lg bg-slate-50">
                   {editingId === point.id ? (
                     <div className="space-y-3">
                       <div className="grid gap-2 md:grid-cols-2">
