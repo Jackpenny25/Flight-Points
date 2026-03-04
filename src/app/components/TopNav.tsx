@@ -131,15 +131,9 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
                   aria-label={it.label}
                   aria-pressed={isActive}
                 >
-<<<<<<< HEAD
                   <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isActive ? 'opacity-100' : 'opacity-80'}`} />
                   <span className="hidden xs:inline-block truncate">{it.label}</span>
-                  {(it.key === 'signups' || it.key === 'tickets') && badgeCount && badgeCount > 0 && (
-=======
-                  <Icon className={`w-4 h-4 ${isActive ? 'opacity-100' : 'opacity-80'}`} />
-                  <span className="inline-block max-w-[6rem] sm:max-w-[8rem] truncate">{it.label}</span>
                   {(it.key === 'signups' || it.key === 'tickets' || it.key === 'integrity' || it.key === 'rewards' || it.key === 'points') && badgeCount && badgeCount > 0 && (
->>>>>>> 527f54103bc356b13d3feed40a78c1f68e33a631
                     <span className="absolute -top-2 -right-2 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full bg-red-600 text-white">
                       {badgeCount > 99 ? '99+' : badgeCount}
                     </span>
