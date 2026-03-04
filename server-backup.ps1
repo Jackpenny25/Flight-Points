@@ -18,7 +18,8 @@ $KeepDays = 30
 # DATABASE BACKUP
 $EnableDatabaseBackup = $true
 $EnvFilePath = '.\.env.local'
-$PgDumpPath = 'pg_dump'
+# Leave blank to auto-detect from Program Files, or set full path e.g. 'C:\Program Files\PostgreSQL\18\bin\pg_dump.exe'
+$PgDumpPath = ''
 
 # FILE/FOLDER BACKUP
 $EnableFileBackup = $false
@@ -30,6 +31,41 @@ $BackupSources = @(
     'C:\Path\To\AnotherFolder'
 )
 # -----------------------------------------------
+
+# Auto-detect pg_dump if not explicitly set
+if ($EnableDatabaseBackup -and [string]::IsNullOrWhiteSpace($PgDumpPath)) {
+    # Check PATH first
+    $found = Get-Command 'pg_dump' -ErrorAction SilentlyContinue
+    if ($found) {
+        $PgDumpPath = $found.Source
+    } else {
+        # Search common PostgreSQL install directories
+        $pgDirs = @(
+            'C:\Program Files\PostgreSQL',
+            'C:\Program Files (x86)\PostgreSQL'
+        )
+        foreach ($pgDir in $pgDirs) {
+            if (Test-Path $pgDir) {
+                $latest = Get-ChildItem -Path $pgDir -Directory |
+                    Sort-Object { [int]($_.Name -replace '[^\d]','') } -Descending |
+                    Select-Object -First 1
+                if ($latest) {
+                    $candidate = Join-Path $latest.FullName 'bin\pg_dump.exe'
+                    if (Test-Path $candidate) {
+                        $PgDumpPath = $candidate
+                        break
+                    }
+                }
+            }
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($PgDumpPath)) {
+        throw "pg_dump not found. Set `$PgDumpPath in the CONFIGURATION section to the full path of pg_dump.exe"
+    }
+
+    Write-Host "Auto-detected pg_dump: $PgDumpPath"
+}
 
 function Get-DatabaseUrlFromEnvFile {
     param(
