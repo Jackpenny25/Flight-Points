@@ -36,19 +36,19 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
   if (isPresentationRole) {
     const presItem = { key: 'presentation', label: 'Presentation', icon: Presentation }
     return (
-      <nav className="w-full bg-transparent px-4 py-3">
+      <nav className="w-full bg-transparent px-2 sm:px-4 py-2 sm:py-3">
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-center">
             <div className="w-full max-w-3xl">
-              <div className="flex flex-wrap justify-center items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-full p-1 shadow-sm">
+              <div className="flex justify-center items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-2xl sm:rounded-full p-1 shadow-sm">
                 <button
                   onClick={() => handleClick(presItem.key)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-xs sm:text-sm font-medium transition min-w-0 bg-primary text-primary-foreground shadow-sm flex-shrink-0`}
+                  className={`flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition min-w-0 bg-primary text-primary-foreground shadow-sm flex-shrink-0`}
                   aria-label={presItem.label}
                   aria-pressed={true}
                 >
                   <Presentation className="w-4 h-4 opacity-100" />
-                  <span className="inline-block max-w-[6rem] sm:max-w-[8rem] truncate">{presItem.label}</span>
+                  <span className="inline-block truncate">{presItem.label}</span>
                 </button>
               </div>
             </div>
@@ -95,15 +95,15 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
     : visibleItems
 
   return (
-    <nav className="w-full bg-transparent px-4 py-3">
+    <nav className="w-full bg-transparent px-2 sm:px-4 py-2 sm:py-3">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-center">
-          <div className="w-full max-w-3xl">
-            <div className="flex flex-wrap justify-center items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-full p-1 shadow-sm">
+          <div className="w-full max-w-4xl">
+            <div className="flex items-center gap-1 sm:gap-2 bg-white/80 dark:bg-slate-800/80 rounded-2xl sm:rounded-full p-1 shadow-sm overflow-x-auto scrollbar-hide">
             {allItems.map((it) => {
               const Icon = it.icon
               const isActive = active === it.key
-              const base = 'flex items-center gap-2 px-3 py-2 rounded-full text-xs sm:text-sm font-medium transition min-w-0'
+              const base = 'flex items-center gap-1 sm:gap-2 px-2 py-1.5 sm:px-3 sm:py-2 rounded-full text-[11px] sm:text-xs md:text-sm font-medium transition min-w-0 whitespace-nowrap'
               const activeCls = 'bg-primary text-primary-foreground shadow-sm'
               const inactiveCls = 'hover:bg-slate-100 dark:hover:bg-slate-700'
 
@@ -116,8 +116,8 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
                   aria-label={it.label}
                   aria-pressed={isActive}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'opacity-100' : 'opacity-80'}`} />
-                  <span className="inline-block max-w-[6rem] sm:max-w-[8rem] truncate">{it.label}</span>
+                  <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isActive ? 'opacity-100' : 'opacity-80'}`} />
+                  <span className="hidden xs:inline-block truncate">{it.label}</span>
                   {(it.key === 'signups' || it.key === 'tickets') && badgeCount && badgeCount > 0 && (
                     <span className="absolute -top-2 -right-2 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full bg-red-600 text-white">
                       {badgeCount > 99 ? '99+' : badgeCount}

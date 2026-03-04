@@ -172,13 +172,13 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50">
       {/* Header */}
       <header className="bg-white shadow-md border-b-2 border-primary/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center min-h-[3.5rem] sm:min-h-[4rem] py-2 gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <img
                 src={`${import.meta.env.BASE_URL}${adminUnlocked ? 'logo-black.jpg' : 'logo.png'}`}
                 alt="Flight Points Logo"
-                className={`h-12 w-12 object-contain ${canUseAdminPin ? 'cursor-pointer' : ''}`}
+                className={`h-9 w-9 sm:h-12 sm:w-12 object-contain ${canUseAdminPin ? 'cursor-pointer' : ''}`}
                 title={canUseAdminPin ? (adminUnlocked ? 'Click to lock admin' : 'Click to unlock admin') : 'Admin unlock available for Flight Point Leads only'}
                 onClick={() => {
                   if (!canUseAdminPin) return;
@@ -189,20 +189,20 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 }}
               />
               <div>
-                <h1 className="text-xl font-bold text-primary">Flight Points</h1>
+                <h1 className="text-base sm:text-xl font-bold text-primary">Flight Points</h1>
               </div>
               {/* Admin text indicator removed; logo color indicates unlock state */}
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
                 {userRole === 'cadet' && <NotificationCenter accessToken={accessToken} />}
                 {/* Retention cleanup moved to Signups tab (admin only) */}
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">{userName}</p>
-                <p className="text-xs text-gray-500">{displayRole}</p>
+              <div className="text-right min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">{userName}</p>
+                <p className="text-[10px] sm:text-xs text-gray-500 truncate">{displayRole}</p>
               </div>
-              <Button variant="outline" size="sm" onClick={onLogout}>
-                <LogOut className="size-4 mr-2" />
-                Logout
+              <Button variant="outline" size="sm" onClick={onLogout} className="flex-shrink-0 px-2 sm:px-3">
+                <LogOut className="size-4 sm:mr-2" />
+                <span className="hidden sm:inline">Logout</span>
               </Button>
             </div>
           </div>
@@ -260,24 +260,25 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
 
       {/* Cadet navigation */}
       {userRole === 'cadet' && (
-        <div className="mt-4 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-2 bg-white p-2 rounded-lg shadow-sm border">
+        <div className="mt-4 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex gap-1.5 sm:gap-2 bg-white p-1.5 sm:p-2 rounded-lg shadow-sm border overflow-x-auto scrollbar-hide">
             <Button
               variant={activeTab === 'leaderboards' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setActiveTab('leaderboards')}
-              className="flex-1"
+              className="flex-shrink-0 px-2 sm:px-3 text-[11px] sm:text-sm"
             >
-              <TrendingUp className="size-4 mr-2" />
-              Leaderboards
+              <TrendingUp className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
+              <span className="hidden xs:inline">Leaderboards</span>
+              <span className="xs:hidden">Board</span>
             </Button>
             <Button
               variant={activeTab === 'rewards' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setActiveTab('rewards')}
-              className="flex-1"
+              className="flex-shrink-0 px-2 sm:px-3 text-[11px] sm:text-sm"
             >
-              <Gift className="size-4 mr-2" />
+              <Gift className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
               Rewards
             </Button>
             {cadetName && (
@@ -285,10 +286,10 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 variant={activeTab === 'mypoints' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setActiveTab('mypoints')}
-                className="flex-1"
+                className="flex-shrink-0 px-2 sm:px-3 text-[11px] sm:text-sm"
               >
-                <Award className="size-4 mr-2" />
-                My Points
+                <Award className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
+                Points
               </Button>
             )}
             {cadetName && (
@@ -296,19 +297,20 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 variant={activeTab === 'myattendance' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setActiveTab('myattendance')}
-                className="flex-1"
+                className="flex-shrink-0 px-2 sm:px-3 text-[11px] sm:text-sm"
               >
-                <CalendarDays className="size-4 mr-2" />
-                My Attendance
+                <CalendarDays className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
+                <span className="hidden xs:inline">Attendance</span>
+                <span className="xs:hidden">Attend</span>
               </Button>
             )}
             <Button
               variant={activeTab === 'tickets' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setActiveTab('tickets')}
-              className="flex-1"
+              className="flex-shrink-0 px-2 sm:px-3 text-[11px] sm:text-sm"
             >
-              <FileText className="size-4 mr-2" />
+              <FileText className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
               Tickets
             </Button>
           </div>

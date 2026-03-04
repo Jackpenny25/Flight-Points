@@ -1,5 +1,17 @@
 @custom-variant dark (&:is(.dark *));
 
+/* Custom xs breakpoint for mobile-first responsive design */
+@custom-variant xs (@media (min-width: 480px));
+
+/* Hide scrollbar utility */
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 :root {
   --font-size: 16px;
   --background: #f8fafc;
