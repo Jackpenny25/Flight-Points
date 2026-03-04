@@ -22,10 +22,13 @@ type Props = {
   isPresentationRole?: boolean
   adminPendingCount?: number
   ticketsCount?: number
+  integrityCheckCount?: number
+  rewardsCount?: number
+  pointsCount?: number
   accessToken?: string | null
 }
 
-export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canMarkAttendance, canManageCadets, isPresentationRole, adminPendingCount, ticketsCount, accessToken }: Props) {
+export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canMarkAttendance, canManageCadets, isPresentationRole, adminPendingCount, ticketsCount, integrityCheckCount, rewardsCount, pointsCount, accessToken }: Props) {
   const handleClick = (key: string) => {
     // prefer prop handler, but keep event dispatch for backward compatibility
     if (onSelect) onSelect(key)
@@ -76,6 +79,15 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
     if (item.key === 'tickets' && ticketsCount && ticketsCount > 0) {
       return { ...item, badgeCount: ticketsCount }
     }
+    if (item.key === 'integrity' && integrityCheckCount && integrityCheckCount > 0) {
+      return { ...item, badgeCount: integrityCheckCount }
+    }
+    if (item.key === 'rewards' && rewardsCount && rewardsCount > 0) {
+      return { ...item, badgeCount: rewardsCount }
+    }
+    if (item.key === 'points' && pointsCount && pointsCount > 0) {
+      return { ...item, badgeCount: pointsCount }
+    }
     return item
   })
 
@@ -84,7 +96,10 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
     ? [
         ...visibleItems, 
         { key: 'admin', label: 'NCOs', icon: Shield },
-        { key: 'tickets', label: 'Tickets', icon: FileText },
+        ...(ticketsCount && ticketsCount > 0 
+          ? [{ key: 'tickets', label: 'Tickets', icon: FileText, badgeCount: ticketsCount }]
+          : [{ key: 'tickets', label: 'Tickets', icon: FileText }]
+        ),
         { key: 'reports', label: 'Reports', icon: FileText },
         { key: 'presentation', label: 'Presentation', icon: Presentation },
         ...(adminPendingCount && adminPendingCount > 0 
@@ -118,7 +133,7 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
                 >
                   <Icon className={`w-4 h-4 ${isActive ? 'opacity-100' : 'opacity-80'}`} />
                   <span className="inline-block max-w-[6rem] sm:max-w-[8rem] truncate">{it.label}</span>
-                  {(it.key === 'signups' || it.key === 'tickets') && badgeCount && badgeCount > 0 && (
+                  {(it.key === 'signups' || it.key === 'tickets' || it.key === 'integrity' || it.key === 'rewards' || it.key === 'points') && badgeCount && badgeCount > 0 && (
                     <span className="absolute -top-2 -right-2 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full bg-red-600 text-white">
                       {badgeCount > 99 ? '99+' : badgeCount}
                     </span>

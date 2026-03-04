@@ -59,6 +59,9 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<string>(userRole === 'presentation' ? 'presentation' : 'leaderboards');
   const [adminPendingCount, setAdminPendingCount] = useState<number>(0);
   const [ticketsCount, setTicketsCount] = useState<number>(0);
+  const [integrityCheckCount, setIntegrityCheckCount] = useState<number>(0);
+  const [rewardsCount, setRewardsCount] = useState<number>(0);
+  const [pointsCount, setPointsCount] = useState<number>(0);
   
   // Name change dialog state
   const [nameChangeDialogOpen, setNameChangeDialogOpen] = useState<boolean>(false);
@@ -168,6 +171,56 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     return () => clearInterval(timer);
   }, [canManageCadets, accessToken]);
 
+  // Poll integrity check count for Flight Point Leads to show a badge on the Integrity tab
+  useEffect(() => {
+    if (!canManageCadets) return;
+    let timer: any;
+    const fetchCount = async () => {
+      try {
+        const res = await api.getIntegrityCheckCount?.();
+        if (typeof res?.count === 'number') setIntegrityCheckCount(res.count);
+      } catch (e) {
+        console.error('Failed to fetch integrity check count:', e);
+      }
+    };
+    fetchCount();
+    timer = setInterval(fetchCount, 120000);
+    return () => clearInterval(timer);
+  }, [canManageCadets, accessToken]);
+
+  // Poll active rewards count for all users to show a badge on the Rewards tab
+  useEffect(() => {
+    let timer: any;
+    const fetchCount = async () => {
+      try {
+        const res = await api.getActiveRewardsCount?.();
+        if (typeof res?.count === 'number') setRewardsCount(res.count);
+      } catch (e) {
+        console.error('Failed to fetch active rewards count:', e);
+      }
+    };
+    fetchCount();
+    timer = setInterval(fetchCount, 120000);
+    return () => clearInterval(timer);
+  }, [accessToken]);
+
+  // Poll recent points count for point givers/SNOs to show a badge on the Points tab
+  useEffect(() => {
+    if (!canGivePoints) return;
+    let timer: any;
+    const fetchCount = async () => {
+      try {
+        const res = await api.getRecentPointsCount?.();
+        if (typeof res?.count === 'number') setPointsCount(res.count);
+      } catch (e) {
+        console.error('Failed to fetch recent points count:', e);
+      }
+    };
+    fetchCount();
+    timer = setInterval(fetchCount, 120000);
+    return () => clearInterval(timer);
+  }, [canGivePoints, accessToken]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50">
       {/* Header */}
@@ -253,6 +306,9 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
             isPresentationRole={userRole === 'presentation'}
             adminPendingCount={adminUnlocked && canManageCadets ? adminPendingCount : 0}
             ticketsCount={canManageCadets ? ticketsCount : 0}
+            integrityCheckCount={canManageCadets ? integrityCheckCount : 0}
+            rewardsCount={rewardsCount}
+            pointsCount={canGivePoints ? pointsCount : 0}
             accessToken={accessToken}
           />
         </div>

@@ -95,8 +95,9 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - Status: `active` to `claimed` when winner saved. Badge: green/amber/grey.
 - Winner input has cadet name autocomplete (partial matching).
 - Suggestion and voting system: any role except snco can suggest; all can vote (toggle).
+- **Reward Suggestions Moderation** (2026-03-04): Suggestions start as `pending` and only SNOs can see them. SNOs can **Approve** (moves to `approved` status and becomes visible to others for voting) or **Reject** (deletes suggestion). Approved suggestions appear with vote counts. Only approved suggestions can be voted on and create rewards.
 - `ensureRewardsSchema()` auto-creates columns/tables on first use (no manual migration needed).
-- Endpoints: `GET/POST /api/reward-suggestions`, `POST /:id/vote`, `DELETE /:id`.
+- Endpoints: `GET/POST /api/reward-suggestions` (with status filtering), `POST /:id/vote`, `DELETE /:id`, `PUT /:id/moderate` (SNO only).
 
 ## Presentation Mode
 - 9 PowerPoint-style slides with dark slate/gold/green theme.
@@ -113,3 +114,13 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - `GET /api/integrity-check` runs comprehensive database validation checks grouped by category.
 - DataIntegrity.tsx displays results with pass/warning/fail badges and category grouping.
 - Checks cover: referential integrity, duplicates, orphaned records, account linking, schema validation, data quality, and more.
+
+## Tab Notification Badges (2026-03-04)
+- Badges show on tabs when there are important updates/issues to review.
+- **Tickets** (SNOs/Admins): Red badge shows count of open tickets
+- **Accounts** (SNOs, in admin mode): Red badge shows count of pending signups
+- **Integrity** (SNOs/Admins): Red badge shows count of data integrity issues (failures + warnings)
+- **Rewards** (All roles): Red badge shows count of active/unclaimed rewards
+- **Points** (Point givers/SNOs): Red badge shows count of recently added points (last 24 hours, by others)
+- Poll interval: 120 seconds (2 minutes) for all badge counts
+- API endpoints: `/api/integrity-check/count`, `/api/rewards/active-count`, `/api/points/recent-count`

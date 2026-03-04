@@ -733,6 +733,91 @@ app.get('/api/tickets/count', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/integrity-check/count - Get count of integrity issues (failures and warnings)
+app.get('/api/integrity-check/count', async (req: Request, res: Response) => {
+  try {
+    const checks: Array<{ name: string; category: string; status: string; message: string; details?: string }> = [];
+    const add = (category: string, name: string, status: 'pass' | 'warning' | 'fail', message: string, details?: string) => {
+      checks.push({ category, name, status, message, ...(details ? { details } : {}) });
+    };
+
+    // Run all integrity checks (abbreviated version, focusing on count)
+    const [
+      invalidPointsCadets,
+      invalidAttendanceCadets,
+      invalidRewardWinners,
+      invalidUserCadetLinks,
+      duplicatePointRecords,
+      duplicateAttendanceSameDay,
+      duplicateUserEmails,
+    ] = await Promise.all([
+      query(`SELECT COUNT(*)::int AS count FROM points p LEFT JOIN cadets c ON LOWER(c.name) = LOWER(p.cadet_name) WHERE c.id IS NULL`),
+      query(`SELECT COUNT(*)::int AS count FROM attendance a LEFT JOIN cadets c ON LOWER(c.name) = LOWER(a.cadet_name) WHERE c.id IS NULL`),
+      query(`SELECT COUNT(*)::int AS count FROM rewards r WHERE r.winner_name IS NOT NULL AND r.winner_name != '' AND NOT EXISTS (SELECT 1 FROM cadets c WHERE LOWER(c.name) = LOWER(r.winner_name))`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*)::int AS count FROM app_users u WHERE u.cadet_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM cadets c WHERE c.id = u.cadet_id)`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT p.cadet_name, p.date, COUNT(*)::int as cnt FROM points p GROUP BY p.cadet_name, p.date HAVING COUNT(*) > 1`),
+      query(`SELECT a.cadet_name, a.date, COUNT(*)::int as cnt FROM attendance a GROUP BY a.cadet_name, a.date HAVING COUNT(*) > 1`),
+      query(`SELECT COUNT(*)::int AS count FROM app_users GROUP BY email HAVING COUNT(*) > 1`).catch(() => ({ rows: [] })),
+    ]);
+
+    // Add checks
+    if (invalidPointsCadets.rows[0]?.count > 0) add('Referential Integrity', 'Points → Cadets', 'fail', `${invalidPointsCadets.rows[0].count} point(s) reference non-existent cadets`);
+    if (invalidAttendanceCadets.rows[0]?.count > 0) add('Referential Integrity', 'Attendance → Cadets', 'fail', `${invalidAttendanceCadets.rows[0].count} attendance record(s) reference non-existent cadets`);
+    if (invalidRewardWinners.rows[0]?.count > 0) add('Referential Integrity', 'Reward Winners → Cadets', 'warning', `${invalidRewardWinners.rows[0].count} reward(s) have invalid winners`);
+    if (invalidUserCadetLinks.rows[0]?.count > 0) add('Referential Integrity', 'User Accounts → Cadets', 'fail', `${invalidUserCadetLinks.rows[0].count} user(s) linked to non-existent cadets`);
+    if (duplicatePointRecords.rows.length > 0) add('Duplicates', 'Duplicate Points', 'warning', `${duplicatePointRecords.rows.length} duplicate point record(s) found`);
+    if (duplicateAttendanceSameDay.rows.length > 0) add('Duplicates', 'Attendance Duplicates', 'warning', `${duplicateAttendanceSameDay.rows.length} attendance duplicate(s) found`);
+    if (duplicateUserEmails.rows.length > 0) add('Accounts', 'Duplicate User Emails', 'fail', `${duplicateUserEmails.rows.length} duplicate email(s) found`);
+
+    // Count failures and warnings
+    const failCount = checks.filter(c => c.status === 'fail').length;
+    const warningCount = checks.filter(c => c.status === 'warning').length;
+    const totalCount = failCount + warningCount;
+
+    res.json({ count: totalCount, failures: failCount, warnings: warningCount });
+  } catch (error) {
+    console.error('Error in GET /api/integrity-check/count:', error);
+    res.json({ count: 0, failures: 0, warnings: 0 });
+  }
+});
+
+// GET /api/rewards/active-count - Get count of active (unclaimed) rewards
+app.get('/api/rewards/active-count', async (req: Request, res: Response) => {
+  try {
+    await ensureRewardsSchema();
+    const now = new Date().toISOString();
+    const result = await query(
+      `SELECT COUNT(*)::int AS count FROM rewards WHERE (status IS NULL OR status = 'active') AND ends_at > $1`,
+      [now]
+    ).catch(() => ({ rows: [{ count: 0 }] }));
+    res.json({ count: Number(result.rows[0]?.count || 0) });
+  } catch (error) {
+    console.error('Error in GET /api/rewards/active-count:', error);
+    res.json({ count: 0 });
+  }
+});
+
+// GET /api/points/recent-count - Get count of recently added points (last 24 hours)
+app.get('/api/points/recent-count', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    if (!user || !['snco', 'staff', 'pointgiver'].includes(user.role)) {
+      return res.json({ count: 0 });
+    }
+    
+    // Get points added in the last 24 hours that weren't added by the current user
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const result = await query(
+      `SELECT COUNT(*)::int AS count FROM points WHERE created_at > $1 AND given_by != $2`,
+      [oneDayAgo, user.email]
+    ).catch(() => ({ rows: [{ count: 0 }] }));
+    res.json({ count: Number(result.rows[0]?.count || 0) });
+  } catch (error) {
+    console.error('Error in GET /api/points/recent-count:', error);
+    res.json({ count: 0 });
+  }
+});
+
 // Test route
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Server is working!' });
@@ -1856,7 +1941,10 @@ async function ensureRewardsSchema() {
         description TEXT,
         suggested_by VARCHAR NOT NULL,
         suggested_by_name VARCHAR,
-        suggested_at TIMESTAMP DEFAULT NOW()
+        suggested_at TIMESTAMP DEFAULT NOW(),
+        status VARCHAR DEFAULT 'pending',
+        reviewed_at TIMESTAMP,
+        reviewed_by VARCHAR
       )`);
       await query(`CREATE TABLE IF NOT EXISTS reward_votes (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1867,8 +1955,13 @@ async function ensureRewardsSchema() {
       )`);
       // Drop the old vote_count column if it exists (we compute it via subquery now)
       await query('ALTER TABLE reward_suggestions DROP COLUMN IF EXISTS vote_count').catch(() => {});
+      // Add status column if it doesn't exist
+      await query('ALTER TABLE reward_suggestions ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT \'pending\'').catch(() => {});
+      await query('ALTER TABLE reward_suggestions ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP').catch(() => {});
+      await query('ALTER TABLE reward_suggestions ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR').catch(() => {});
       await query('CREATE INDEX IF NOT EXISTS idx_reward_votes_suggestion_id ON reward_votes (suggestion_id)');
       await query('CREATE INDEX IF NOT EXISTS idx_reward_votes_user_id ON reward_votes (user_id)');
+      await query('CREATE INDEX IF NOT EXISTS idx_reward_suggestions_status ON reward_suggestions (status)');
       console.log('[ensureRewardsSchema] Schema ready.');
     })().catch((error) => {
       console.error('[ensureRewardsSchema] Failed:', error?.message || error);
@@ -1880,15 +1973,27 @@ async function ensureRewardsSchema() {
 }
 
 // GET /api/reward-suggestions - List all suggestions ordered by votes
+// SNOs see pending (for moderation) + approved suggestions; others only see approved
 app.get('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     await ensureRewardsSchema();
+    const isSNO = req.user?.role === 'snco';
+    
+    // SNOs see all statuses, others only see approved
+    const statusFilter = isSNO 
+      ? `(rs.status = 'pending' OR rs.status = 'approved')`
+      : `rs.status = 'approved'`;
+    
     const result = await query(
       `SELECT rs.id, rs.title, rs.description, rs.suggested_by, rs.suggested_by_name, rs.suggested_at,
+        rs.status, rs.reviewed_at, rs.reviewed_by,
         (SELECT COUNT(*)::int FROM reward_votes rv WHERE rv.suggestion_id = rs.id) AS computed_vote_count
        FROM reward_suggestions rs
-       ORDER BY computed_vote_count DESC, rs.suggested_at DESC`
+       WHERE ${statusFilter}
+       ORDER BY CASE WHEN rs.status = 'pending' THEN 0 ELSE 1 END,
+                computed_vote_count DESC, rs.suggested_at DESC`
     );
+    
     // Also get the current user's votes
     const userId = req.user?.id || '';
     const votesResult = await query(
@@ -1903,6 +2008,9 @@ app.get('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Re
       suggestedBy: row.suggested_by,
       suggestedByName: row.suggested_by_name,
       suggestedAt: row.suggested_at,
+      status: row.status,
+      reviewedAt: row.reviewed_at,
+      reviewedBy: row.reviewed_by,
       voteCount: Number(row.computed_vote_count || 0),
       hasVoted: userVotes.has(row.id),
     }));
@@ -1926,8 +2034,8 @@ app.post('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: R
     }
     const id = crypto.randomUUID();
     const result = await query(
-      `INSERT INTO reward_suggestions (id, title, description, suggested_by, suggested_by_name)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      `INSERT INTO reward_suggestions (id, title, description, suggested_by, suggested_by_name, status)
+       VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING *`,
       [id, String(title).trim(), String(description || '').trim() || null, req.user?.id || 'unknown', req.user?.name || 'Unknown']
     );
     const row = result.rows[0];
@@ -1938,6 +2046,9 @@ app.post('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: R
       suggestedBy: row.suggested_by,
       suggestedByName: row.suggested_by_name,
       suggestedAt: row.suggested_at,
+      status: row.status,
+      reviewedAt: row.reviewed_at,
+      reviewedBy: row.reviewed_by,
       voteCount: 0,
       hasVoted: false,
     });
@@ -2000,6 +2111,65 @@ app.delete('/api/reward-suggestions/:id', requireAuth, async (req: AuthRequest, 
   } catch (error) {
     console.error('Error in DELETE /api/reward-suggestions/:id:', error);
     res.status(500).json({ error: 'Failed to delete suggestion' });
+  }
+});
+
+// PUT /api/reward-suggestions/:id/moderate - Accept or reject a suggestion (SNCO only)
+app.put('/api/reward-suggestions/:id/moderate', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    // Only SNOs can moderate
+    if (req.user?.role !== 'snco') {
+      return res.status(403).json({ error: 'Only Flight Point Leads can moderate suggestions' });
+    }
+    
+    await ensureRewardsSchema();
+    const suggestionId = req.params.id;
+    const { action } = req.body || {};
+    
+    if (!action || !['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ error: 'Action must be "approve" or "reject"' });
+    }
+    
+    // Check suggestion exists
+    const suggestion = await query('SELECT * FROM reward_suggestions WHERE id = $1', [suggestionId]);
+    if (suggestion.rows.length === 0) {
+      return res.status(404).json({ error: 'Suggestion not found' });
+    }
+    
+    if (action === 'reject') {
+      // Delete the suggestion
+      await query('DELETE FROM reward_suggestions WHERE id = $1', [suggestionId]);
+      res.json({ success: true, action: 'rejected' });
+    } else {
+      // Approve the suggestion
+      const result = await query(
+        `UPDATE reward_suggestions 
+         SET status = 'approved', reviewed_at = NOW(), reviewed_by = $1 
+         WHERE id = $2 
+         RETURNING *`,
+        [req.user?.id || 'unknown', suggestionId]
+      );
+      
+      const row = result.rows[0];
+      res.json({
+        success: true,
+        action: 'approved',
+        suggestion: {
+          id: row.id,
+          title: row.title,
+          description: row.description,
+          suggestedBy: row.suggested_by,
+          suggestedByName: row.suggested_by_name,
+          suggestedAt: row.suggested_at,
+          status: row.status,
+          reviewedAt: row.reviewed_at,
+          reviewedBy: row.reviewed_by,
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error in PUT /api/reward-suggestions/:id/moderate:', error);
+    res.status(500).json({ error: 'Failed to moderate suggestion' });
   }
 });
 
