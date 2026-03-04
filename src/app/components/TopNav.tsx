@@ -114,11 +114,11 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-center">
           <div className="w-full max-w-4xl">
-            <div className="flex items-center gap-1 sm:gap-2 bg-white/80 dark:bg-slate-800/80 rounded-2xl sm:rounded-full p-1 shadow-sm overflow-x-auto scrollbar-hide">
+            <div className="flex flex-wrap justify-center items-center gap-1 sm:gap-2 bg-white/80 dark:bg-slate-800/80 rounded-2xl p-1.5 sm:p-2 shadow-sm">
             {allItems.map((it) => {
               const Icon = it.icon
               const isActive = active === it.key
-              const base = 'flex items-center gap-1 sm:gap-2 px-2 py-1.5 sm:px-3 sm:py-2 rounded-full text-[11px] sm:text-xs md:text-sm font-medium transition min-w-0 whitespace-nowrap'
+              const base = 'flex items-center gap-1 sm:gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 rounded-full text-[11px] sm:text-xs md:text-sm font-medium transition'
               const activeCls = 'bg-primary text-primary-foreground shadow-sm'
               const inactiveCls = 'hover:bg-slate-100 dark:hover:bg-slate-700'
 
@@ -127,12 +127,12 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
                 <button
                   key={it.key}
                   onClick={() => handleClick(it.key)}
-                  className={`${base} ${isActive ? activeCls : inactiveCls} relative flex-shrink-0`}
+                  className={`${base} ${isActive ? activeCls : inactiveCls} relative`}
                   aria-label={it.label}
                   aria-pressed={isActive}
                 >
-                  <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isActive ? 'opacity-100' : 'opacity-80'}`} />
-                  <span className="hidden xs:inline-block truncate">{it.label}</span>
+                  <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 ${isActive ? 'opacity-100' : 'opacity-80'}`} />
+                  <span className="truncate">{it.label}</span>
                   {(it.key === 'signups' || it.key === 'tickets' || it.key === 'integrity' || it.key === 'rewards' || it.key === 'points') && badgeCount && badgeCount > 0 && (
                     <span className="absolute -top-2 -right-2 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full bg-red-600 text-white">
                       {badgeCount > 99 ? '99+' : badgeCount}
