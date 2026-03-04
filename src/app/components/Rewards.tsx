@@ -33,6 +33,9 @@ type Suggestion = {
   suggestedBy: string;
   suggestedByName: string;
   suggestedAt: string;
+  status?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
   voteCount: number;
   hasVoted: boolean;
 };
@@ -81,6 +84,9 @@ export function Rewards({ userRole }: RewardsProps) {
   const [suggestionDescription, setSuggestionDescription] = useState('');
   const [suggestingSaving, setSuggestingSaving] = useState(false);
   const [votingId, setVotingId] = useState<string | null>(null);
+  
+  // Moderation
+  const [moderatingId, setModeratingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRewards();
@@ -399,6 +405,32 @@ export function Rewards({ userRole }: RewardsProps) {
     }
   };
 
+  const handleModerateSuggestion = async (suggestion: Suggestion, action: 'approve' | 'reject') => {
+    setModeratingId(suggestion.id);
+    try {
+      const result = await api.moderateRewardSuggestion(suggestion.id, action);
+      if (result.error) throw new Error(result.error);
+      
+      if (action === 'reject') {
+        toast.success('Suggestion rejected');
+        setSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
+      } else {
+        toast.success('Suggestion approved!');
+        setSuggestions(prev =>
+          prev.map(s =>
+            s.id === suggestion.id
+              ? { ...s, status: 'approved', reviewedAt: new Date().toISOString(), reviewedBy: 'snco' }
+              : s
+          )
+        );
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to moderate suggestion');
+    } finally {
+      setModeratingId(null);
+    }
+  };
+
   const currentUser = getUser();
 
   // Winner name suggestion dropdown
@@ -589,29 +621,41 @@ export function Rewards({ userRole }: RewardsProps) {
                 const canDelete =
                   canManageRewards ||
                   suggestion.suggestedBy === currentUser?.id;
+                const isPending = suggestion.status === 'pending';
+                const isApproved = suggestion.status === 'approved';
+                
                 return (
                   <div
                     key={suggestion.id}
-                    className="flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3 hover:bg-slate-50 transition-colors"
+                    className={`flex items-center gap-3 rounded-md border p-3 transition-colors ${
+                      isPending
+                        ? 'border-yellow-200 bg-yellow-50 hover:bg-yellow-100'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
                   >
-                    {/* Vote button */}
-                    <button
-                      className={`flex flex-col items-center min-w-[48px] rounded-md px-2 py-1 transition-colors ${
-                        suggestion.hasVoted
-                          ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                          : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-blue-50 hover:text-blue-600'
-                      }`}
-                      onClick={() => handleVote(suggestion)}
-                      disabled={votingId === suggestion.id}
-                      title={suggestion.hasVoted ? 'Remove vote' : 'Vote for this'}
-                    >
-                      <span className="text-lg leading-none">{suggestion.hasVoted ? '▲' : '△'}</span>
-                      <span className="text-sm font-bold">{suggestion.voteCount}</span>
-                    </button>
+                    {/* Vote button - hide for pending (not approved yet) */}
+                    {isApproved && (
+                      <button
+                        className={`flex flex-col items-center min-w-[48px] rounded-md px-2 py-1 transition-colors ${
+                          suggestion.hasVoted
+                            ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-blue-50 hover:text-blue-600'
+                        }`}
+                        onClick={() => handleVote(suggestion)}
+                        disabled={votingId === suggestion.id}
+                        title={suggestion.hasVoted ? 'Remove vote' : 'Vote for this'}
+                      >
+                        <span className="text-lg leading-none">{suggestion.hasVoted ? '▲' : '△'}</span>
+                        <span className="text-sm font-bold">{suggestion.voteCount}</span>
+                      </button>
+                    )}
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-800 truncate">{suggestion.title}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-slate-800 truncate">{suggestion.title}</p>
+                        {isPending && <Badge className="bg-yellow-600 text-white whitespace-nowrap">Pending</Badge>}
+                      </div>
                       {suggestion.description && (
                         <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{suggestion.description}</p>
                       )}
@@ -620,8 +664,32 @@ export function Rewards({ userRole }: RewardsProps) {
                       </p>
                     </div>
 
-                    {/* Delete (if owner or snco) */}
-                    {canDelete && (
+                    {/* Moderation buttons (SNCO only, for pending suggestions) */}
+                    {canManageRewards && isPending && (
+                      <div className="flex gap-2 shrink-0">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 h-8 px-3"
+                          onClick={() => handleModerateSuggestion(suggestion, 'approve')}
+                          disabled={moderatingId === suggestion.id}
+                        >
+                          ✓ Approve
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-8 px-3"
+                          onClick={() => handleModerateSuggestion(suggestion, 'reject')}
+                          disabled={moderatingId === suggestion.id}
+                        >
+                          ✕ Reject
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Delete (if owner or snco, for non-pending or approved) */}
+                    {canDelete && !isPending && (
                       <Button
                         variant="ghost"
                         size="sm"

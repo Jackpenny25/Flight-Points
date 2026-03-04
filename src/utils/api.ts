@@ -64,6 +64,7 @@ export const api = {
   createRewardSuggestion: (data: { title: string; description?: string }) => fetchWithAuth('/reward-suggestions', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
   voteRewardSuggestion: (id: string) => fetchWithAuth(`/reward-suggestions/${id}/vote`, { method: 'POST' }).then(r => r.json()),
   deleteRewardSuggestion: (id: string) => fetchWithAuth(`/reward-suggestions/${id}`, { method: 'DELETE' }).then(r => r.json()),
+  moderateRewardSuggestion: (id: string, action: 'approve' | 'reject') => fetchWithAuth(`/reward-suggestions/${id}/moderate`, { method: 'PUT', body: JSON.stringify({ action }) }).then(r => r.json()),
 
   // Other endpoints
   getLeaderboards: () => fetchWithAuth('/leaderboards', { method: 'GET' }).then(r => r.json()),
@@ -88,6 +89,10 @@ export const api = {
       body: formData,
     }).then(r => r.json());
   },
+  getTicketsCount: () => fetchWithAuth('/tickets/count', { method: 'GET' }).then(r => r.json()),
+  getIntegrityCheckCount: () => fetchWithAuth('/integrity-check/count', { method: 'GET' }).then(r => r.json()),
+  getActiveRewardsCount: () => fetchWithAuth('/rewards/active-count', { method: 'GET' }).then(r => r.json()),
+  getRecentPointsCount: () => fetchWithAuth('/points/recent-count', { method: 'GET' }).then(r => r.json()),
   
   // Notifications
   getNotifications: () => fetchWithAuth('/notifications', { method: 'GET' }).then(r => r.json()),
@@ -123,13 +128,10 @@ export const api = {
   // Verify PIN
   verifyPin: (pin: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ pin }) }).then(r => r.json()),
   
-  // Added missing methods for getPinStatus, changeUserRole, getTicketsCount, and updateUserName
+  // Admin utilities
   getPinStatus: () => fetchWithAuth('/admin/pin-status', { method: 'GET' }).then(r => r.json()),
   changeUserRole: (userId: string, role: string) => fetchWithAuth(`/admin/change-role/${userId}`, { method: 'POST', body: JSON.stringify({ role }) }).then(r => r.json()),
-  getTicketsCount: () => fetchWithAuth('/tickets/count', { method: 'GET' }).then(r => r.json()),
   updateUserName: (userId: string, newName: string) => fetchWithAuth(`/users/${userId}/name`, { method: 'PUT', body: JSON.stringify({ name: newName }) }).then(r => r.json()),
-  
-  // Added missing methods for changePin and resetPin
   changePin: (userId: string, currentPin: string, newPin: string) => fetchWithAuth(`/admin/change-pin`, { method: 'POST', body: JSON.stringify({ userId, currentPin, newPin }) }).then(r => r.json()),
   resetPin: (targetUserId: string) => fetchWithAuth(`/admin/reset-pin`, { method: 'POST', body: JSON.stringify({ targetUserId }) }).then(r => r.json()),
 };

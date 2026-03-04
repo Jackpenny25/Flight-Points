@@ -1,5 +1,6 @@
 # monitor-deploy.ps1 — Live dashboard showing auto-deploy activity.
 # Keep this window open to watch commits arrive and deployments run.
+# Type "check" + Enter to manually check for incoming commits.
 
 $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $LogFile = Join-Path $ProjectDir "auto-deploy.log"
@@ -37,7 +38,8 @@ function Write-Header {
 
     # Show last few relevant events from log
     if (Test-Path $LogFile) {
-        $lastDeploy = Get-Content $LogFile -Tail 100 | Where-Object { $_ -match "Deployment complete|ERROR during deployment" } | Select-Object -Last 1
+        $logContent = Read-LogSafe -Path $LogFile -Tail 100
+        $lastDeploy = $logContent | Where-Object { $_ -match "Deployment complete|ERROR during deployment" } | Select-Object -Last 1
         if ($lastDeploy) {
             $wasSuccess = $lastDeploy -match "Deployment complete"
             Write-Host "  Last Deploy: " -NoNewline -ForegroundColor DarkGray
@@ -49,7 +51,7 @@ function Write-Header {
             }
         }
 
-        $lastMode = Get-Content $LogFile -Tail 50 | Where-Object { $_ -match "MODE ->" } | Select-Object -Last 1
+        $lastMode = $logContent | Where-Object { $_ -match "MODE ->" } | Select-Object -Last 1
         if ($lastMode -and $lastMode -match 'MODE -> (\w+)') {
             Write-Host "  Current Mode:" -NoNewline -ForegroundColor DarkGray
             $mode = $Matches[1]
@@ -66,7 +68,12 @@ function Write-Header {
     }
 
     Write-Host ""
-    Write-Host "  -------- Live Log (Ctrl+C to exit) --------" -ForegroundColor DarkGray
+    Write-Host "  Commands: " -NoNewline -ForegroundColor DarkGray
+    Write-Host "check" -NoNewline -ForegroundColor Yellow
+    Write-Host " = check for commits  |  " -NoNewline -ForegroundColor DarkGray
+    Write-Host "Ctrl+C" -NoNewline -ForegroundColor Yellow
+    Write-Host " = exit" -ForegroundColor DarkGray
+    Write-Host "  --------- Live Log ---------" -ForegroundColor DarkGray
     Write-Host ""
 }
 
@@ -147,22 +154,70 @@ function Format-LogLine {
     }
 }
 
+# --- Safe log reader (non-locking) ---
+function Read-LogSafe {
+    param([string]$Path, [int]$Tail = 0)
+    try {
+        $fs = [System.IO.FileStream]::new($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $sr = [System.IO.StreamReader]::new($fs)
+        $allLines = @()
+        while ($null -ne ($line = $sr.ReadLine())) {
+            $allLines += $line
+        }
+        $sr.Close()
+        $fs.Close()
+        if ($Tail -gt 0 -and $allLines.Count -gt $Tail) {
+            return $allLines[($allLines.Count - $Tail)..($allLines.Count - 1)]
+        }
+        return $allLines
+    } catch {
+        return @()
+    }
+}
+
+# --- Manual commit check ---
+function Invoke-CommitCheck {
+    Write-Host ""
+    Write-Host "  Checking for incoming commits..." -ForegroundColor Yellow
+    try {
+        Push-Location $ProjectDir
+        git fetch origin 2>&1 | Out-Null
+        $local = git rev-parse HEAD 2>&1
+        $remote = git rev-parse "origin/main" 2>&1
+        if ($local -ne $remote) {
+            $behind = git rev-list --count "HEAD..origin/main" 2>&1
+            $commits = git log --oneline "HEAD..origin/main" 2>&1
+            Write-Host ""
+            Write-Host "  $behind incoming commit(s) found!" -ForegroundColor Green
+            Write-Host ""
+            foreach ($c in $commits) {
+                Write-Host "    $c" -ForegroundColor Cyan
+            }
+        } else {
+            Write-Host "  No incoming commits. You are up to date." -ForegroundColor DarkGray
+        }
+        Pop-Location
+    } catch {
+        Write-Host "  Error checking commits: $_" -ForegroundColor Red
+    }
+    Write-Host ""
+}
+
 # --- Main ---
 Write-Header
 
 if (-not (Test-Path $LogFile)) {
     Write-Host "  Waiting for log file to be created..." -ForegroundColor Yellow
     Write-Host "  (Is the auto-deploy task running?)" -ForegroundColor DarkGray
-    # Wait for log file to appear
     while (-not (Test-Path $LogFile)) {
         Start-Sleep -Seconds 2
     }
     Write-Host ""
 }
 
-# Show last 15 lines of history then tail
+# Show last 15 lines of history
 Write-Host "  --- Recent History ---" -ForegroundColor DarkGray
-$history = Get-Content $LogFile -Tail 15 -ErrorAction SilentlyContinue
+$history = Read-LogSafe -Path $LogFile -Tail 15
 if ($history) {
     foreach ($line in $history) {
         Format-LogLine $line
@@ -171,7 +226,77 @@ if ($history) {
 Write-Host "  --- Live ---" -ForegroundColor DarkGray
 Write-Host ""
 
-# Tail the log file indefinitely with colored output
-Get-Content $LogFile -Wait -Tail 0 | ForEach-Object {
-    Format-LogLine $_
+# Track file position for tailing without locking
+$lastSize = (Get-Item $LogFile -ErrorAction SilentlyContinue).Length
+$inputBuffer = ""
+$promptShown = $false
+
+# Poll-based tail loop with keyboard input support
+while ($true) {
+    # Check for new log content (non-locking read)
+    try {
+        $currentSize = (Get-Item $LogFile -ErrorAction SilentlyContinue).Length
+        if ($currentSize -gt $lastSize) {
+            # Clear the prompt line if we had one
+            if ($promptShown) {
+                Write-Host "`r$(' ' * 60)`r" -NoNewline
+                $promptShown = $false
+            }
+            $fs = [System.IO.FileStream]::new($LogFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+            $fs.Seek($lastSize, [System.IO.SeekOrigin]::Begin) | Out-Null
+            $sr = [System.IO.StreamReader]::new($fs)
+            while ($null -ne ($line = $sr.ReadLine())) {
+                if ($line.Trim()) {
+                    Format-LogLine $line
+                }
+            }
+            $sr.Close()
+            $fs.Close()
+            $lastSize = $currentSize
+        }
+    } catch {
+        # File may be momentarily locked by writer, skip this cycle
+    }
+
+    # Check for keyboard input (non-blocking)
+    while ([Console]::KeyAvailable) {
+        $key = [Console]::ReadKey($true)
+        if ($key.Key -eq 'Enter') {
+            # Clear the prompt line
+            Write-Host "`r$(' ' * 60)`r" -NoNewline
+            $promptShown = $false
+            $cmd = $inputBuffer.Trim().ToLower()
+            $inputBuffer = ""
+            if ($cmd -eq 'check') {
+                Invoke-CommitCheck
+            } elseif ($cmd -eq 'clear') {
+                Write-Header
+                Write-Host "  --- Live ---" -ForegroundColor DarkGray
+                Write-Host ""
+            } elseif ($cmd -eq 'help') {
+                Write-Host ""
+                Write-Host "  Available commands:" -ForegroundColor Yellow
+                Write-Host "    check  - Fetch and show incoming commits" -ForegroundColor Gray
+                Write-Host "    clear  - Refresh the header and clear screen" -ForegroundColor Gray
+                Write-Host "    help   - Show this help" -ForegroundColor Gray
+                Write-Host ""
+            } elseif ($cmd) {
+                Write-Host ("  Unknown command: '" + $cmd + "'. Type 'help' for commands.") -ForegroundColor DarkYellow
+            }
+        } elseif ($key.Key -eq 'Backspace') {
+            if ($inputBuffer.Length -gt 0) {
+                $inputBuffer = $inputBuffer.Substring(0, $inputBuffer.Length - 1)
+            }
+            # Redraw prompt
+            Write-Host ("`r  > " + $inputBuffer + "  ") -NoNewline -ForegroundColor Yellow
+            $promptShown = $true
+        } else {
+            $inputBuffer += $key.KeyChar
+            # Show what user is typing
+            Write-Host ("`r  > " + $inputBuffer) -NoNewline -ForegroundColor Yellow
+            $promptShown = $true
+        }
+    }
+
+    Start-Sleep -Milliseconds 500
 }
