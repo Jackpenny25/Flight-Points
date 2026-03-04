@@ -73,7 +73,7 @@ function Write-Header {
     Write-Host " = check for commits  |  " -NoNewline -ForegroundColor DarkGray
     Write-Host "Ctrl+C" -NoNewline -ForegroundColor Yellow
     Write-Host " = exit" -ForegroundColor DarkGray
-    Write-Host "  -------- Live Log --------" -ForegroundColor DarkGray
+    Write-Host "  --------- Live Log ---------" -ForegroundColor DarkGray
     Write-Host ""
 }
 
@@ -267,12 +267,12 @@ while ($true) {
             } elseif ($cmd -eq 'help') {
                 Write-Host ""
                 Write-Host "  Available commands:" -ForegroundColor Yellow
-                Write-Host "    check  — Fetch and show incoming commits" -ForegroundColor Gray
-                Write-Host "    clear  — Refresh the header and clear screen" -ForegroundColor Gray
-                Write-Host "    help   — Show this help" -ForegroundColor Gray
+                Write-Host "    check  - Fetch and show incoming commits" -ForegroundColor Gray
+                Write-Host "    clear  - Refresh the header and clear screen" -ForegroundColor Gray
+                Write-Host "    help   - Show this help" -ForegroundColor Gray
                 Write-Host ""
             } elseif ($cmd) {
-                Write-Host "  Unknown command: '$cmd'. Type 'help' for commands." -ForegroundColor DarkYellow
+                Write-Host ("  Unknown command: '" + $cmd + "'. Type 'help' for commands.") -ForegroundColor DarkYellow
             }
         } elseif ($key.Key -eq 'Backspace') {
             if ($inputBuffer.Length -gt 0) {
