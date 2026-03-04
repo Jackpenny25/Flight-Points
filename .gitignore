@@ -7,6 +7,9 @@ docs/assets/
 # Auto-deploy logs
 auto-deploy.log
 
+# Theme backup (for reverting visual changes)
+.theme-backup/
+
 # Environment variables - NEVER commit these
 .env
 .env.local
