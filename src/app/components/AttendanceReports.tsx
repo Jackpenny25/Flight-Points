@@ -89,15 +89,15 @@ export function AttendanceReports({ accessToken }: AttendanceReportsProps) {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-[#00247D]/10 to-white border-[#00247D]/20">
+        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-200">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
-              <UserCheck className="size-4 text-[#00247D]" />
+              <UserCheck className="size-4 text-blue-600" />
               Avg. Attendance
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-[#00247D]">{stats.averageAttendanceRate}%</p>
+            <p className="text-3xl font-bold text-blue-900">{stats.averageAttendanceRate}%</p>
           </CardContent>
         </Card>
       </div>

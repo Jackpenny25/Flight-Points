@@ -122,7 +122,7 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
   if (loading) {
     return (
       <div className="text-center py-12">
-        <RefreshCw className="size-8 text-[#00247D] animate-spin mx-auto mb-3" />
+        <RefreshCw className="size-8 text-blue-600 animate-spin mx-auto mb-3" />
         <div className="text-gray-600">Running {summary.totalChecks > 0 ? summary.totalChecks : ''} integrity checks...</div>
       </div>
     );
@@ -132,15 +132,15 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
     <div className="space-y-6">
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className="bg-gradient-to-br from-[#00247D]/10 to-white border-[#00247D]/20">
+        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-200">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
-              <Shield className="size-4 text-[#00247D]" />
+              <Shield className="size-4 text-blue-600" />
               Total Checks
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-[#00247D]">{summary.totalChecks}</p>
+            <p className="text-3xl font-bold text-blue-900">{summary.totalChecks}</p>
           </CardContent>
         </Card>
 

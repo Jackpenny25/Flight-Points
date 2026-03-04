@@ -73,10 +73,10 @@ const SLIDE_COUNT = 9;
 const AUTO_ADVANCE_MS = 15000;
 const DATA_REFRESH_MS = 30000;
 
-/* ─── Theme — deep navy / gold / green ─── */
+/* ─── Theme — dark slate / gold / green ─── */
 const T = {
   /* Backgrounds */
-  darkBg: '#0a1628',       // deep navy
+  darkBg: '#2d3a45',       // dark slate
   cardBg: 'rgba(255,255,255,0.06)',
   /* Accents */
   gold: '#FFD700',
@@ -92,7 +92,7 @@ const T = {
   textLight: 'rgba(255,255,255,0.85)',
   textMuted: 'rgba(255,255,255,0.5)',
   /* Table */
-  headerBg: '#00247D',
+  headerBg: '#3d4f5f',
   rowEven: 'rgba(255,255,255,0.05)',
   rowOdd: 'rgba(255,255,255,0.02)',
   border: 'rgba(255,255,255,0.15)',

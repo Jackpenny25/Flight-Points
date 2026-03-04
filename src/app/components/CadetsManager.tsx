@@ -399,7 +399,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
           }} />
           <div className="flex-1 min-w-0">
             <div className="font-medium truncate max-w-[220px] flex items-center gap-1">
-              {isHq && cadet.rank ? <span className="text-[#00247D] font-semibold mr-1">{cadet.rank}</span> : null}
+              {isHq && cadet.rank ? <span className="text-blue-700 mr-1">{cadet.rank}</span> : null}
               {formatDisplayName(cadet.name)}
               {cadet.isNco && (
                 <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-700 bg-amber-200 px-1.5 py-0.5 rounded ml-1" title="NCO — cannot receive points">
@@ -429,7 +429,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     }));
 
     return (
-      <div ref={drop as any} className="bg-[#00247D]/5 rounded-lg p-3 min-h-[200px]">
+      <div ref={drop as any} className="bg-blue-50 rounded p-3 min-h-[200px]">
         <h4 className="font-semibold mb-2">{formatFlight(flight)} ({items.length})</h4>
         <div className="space-y-2">
           {items.map((c) => (

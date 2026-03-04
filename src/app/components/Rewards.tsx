@@ -446,7 +446,7 @@ export function Rewards({ userRole }: RewardsProps) {
           <button
             key={cadet.id}
             type="button"
-            className="w-full text-left px-3 py-2 text-sm hover:bg-[#00247D]/5 flex items-center gap-2 border-b border-slate-100 last:border-0"
+            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center gap-2 border-b border-slate-100 last:border-0"
             onClick={() => {
               onSelect(cadet.name);
               onClear();
@@ -482,7 +482,7 @@ export function Rewards({ userRole }: RewardsProps) {
 
     return (
       <Card key={reward.id} className="border-slate-200 shadow-sm">
-        <CardHeader className={`rounded-t-lg ${isInactive ? 'bg-slate-50' : 'bg-gradient-to-r from-[#00247D]/5 to-blue-50'}`}>
+        <CardHeader className={`rounded-t-lg ${isInactive ? 'bg-slate-50' : 'bg-gradient-to-r from-sky-50 to-blue-50'}`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isInactive ? 'bg-slate-200 text-slate-600' : 'bg-primary/10 text-primary'}`}>★</div>
@@ -561,7 +561,7 @@ export function Rewards({ userRole }: RewardsProps) {
     <div className="space-y-6">
       {/* Active Rewards */}
       <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="bg-gradient-to-r from-[#00247D]/5 to-blue-50 rounded-t-lg">
+        <CardHeader className="bg-gradient-to-r from-sky-50 to-blue-50 rounded-t-lg">
           <CardTitle>Current Rewards</CardTitle>
           <CardDescription>See what is up for grabs and how to win.</CardDescription>
         </CardHeader>
@@ -580,7 +580,7 @@ export function Rewards({ userRole }: RewardsProps) {
 
       {/* Reward Suggestions & Voting */}
       <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="bg-gradient-to-r from-[#00247D]/8 to-indigo-50 rounded-t-lg">
+        <CardHeader className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-t-lg">
           <CardTitle>Reward Suggestions</CardTitle>
           <CardDescription>Suggest rewards you'd like to see and vote for your favourites.</CardDescription>
         </CardHeader>
@@ -638,8 +638,8 @@ export function Rewards({ userRole }: RewardsProps) {
                       <button
                         className={`flex flex-col items-center min-w-[48px] rounded-md px-2 py-1 transition-colors ${
                           suggestion.hasVoted
-                            ? 'bg-[#00247D]/10 text-[#00247D] border border-[#00247D]/30'
-                            : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-[#00247D]/5 hover:text-[#00247D]'
+                            ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-blue-50 hover:text-blue-600'
                         }`}
                         onClick={() => handleVote(suggestion)}
                         disabled={votingId === suggestion.id}
@@ -710,7 +710,7 @@ export function Rewards({ userRole }: RewardsProps) {
       {/* Claimed Rewards */}
       {claimedRewards.length > 0 && (
         <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="bg-amber-50/80 rounded-t-lg">
+          <CardHeader className="bg-amber-50 rounded-t-lg">
             <CardTitle>Claimed Rewards</CardTitle>
             <CardDescription>Rewards that have been won.</CardDescription>
           </CardHeader>

@@ -60,7 +60,7 @@ export function TicketsAdmin({ accessToken }: Props) {
   };
 
   const badge = (s: string) => {
-    const map: Record<string, string> = { open: 'bg-[#00247D]/10 text-[#00247D]', approved: 'bg-green-100 text-green-800', rejected: 'bg-red-100 text-red-800' };
+    const map: Record<string, string> = { open: 'bg-blue-100 text-blue-800', approved: 'bg-green-100 text-green-800', rejected: 'bg-red-100 text-red-800' };
     return <Badge variant="outline" className={map[s] || ''}>{s}</Badge>;
   };
 

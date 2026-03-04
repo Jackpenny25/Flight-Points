@@ -71,10 +71,10 @@ export function Leaderboards({ userRole }: LeaderboardsProps) {
       <TabsContent value="points" className="space-y-6">
         {/* Winners Cards */}
         <div className="grid gap-4 md:grid-cols-2">
-          <Card className="border-amber-300 bg-gradient-to-br from-amber-50 via-yellow-50 to-white shadow-md">
+          <Card className="border-yellow-200 bg-gradient-to-br from-yellow-50 to-white">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Trophy className="size-6 text-amber-600" />
+                <Trophy className="size-6 text-yellow-600" />
                 {data.winnersFlights && data.winnersFlights.length > 1 ? 'Joint Winning Flights' : 'Winning Flight'}
               </CardTitle>
             </CardHeader>
@@ -83,27 +83,27 @@ export function Leaderboards({ userRole }: LeaderboardsProps) {
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
                     {data.winnersFlights.map((f: any) => (
-                      <Badge key={f.flight} variant="default" className="text-lg font-bold px-3 py-1 bg-amber-600">
+                      <Badge key={f.flight} variant="default" className="text-lg font-bold px-3 py-1 bg-yellow-600">
                         {formatFlight(f.flight)}
                       </Badge>
                     ))}
                   </div>
-                  <p className="text-2xl font-semibold text-amber-800">{data.winnersFlights[0].points} points</p>
+                  <p className="text-2xl font-semibold text-yellow-800">{data.winnersFlights[0].points} points</p>
                 </div>
               ) : data.winningFlight ? (
                 <div>
-                  <p className="text-4xl font-extrabold text-amber-900">{formatFlight(data.winningFlight.flight)}</p>
-                  <p className="text-2xl font-semibold text-amber-800">{data.winningFlight.points} points</p>
+                  <p className="text-4xl font-extrabold text-yellow-900">{formatFlight(data.winningFlight.flight)}</p>
+                  <p className="text-2xl font-semibold text-yellow-800">{data.winningFlight.points} points</p>
                 </div>
               ) : (
                 <p className="text-gray-500">No data yet</p>
               )}
             </CardContent>
           </Card>
-          <Card className="border-[#00247D]/20 bg-gradient-to-br from-blue-50 via-indigo-50/50 to-white shadow-md">
+          <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Award className="size-6 text-[#00247D]" />
+                <Award className="size-6 text-blue-600" />
                 {data.winnersCadets && data.winnersCadets.length > 1 ? 'Joint Winning Cadets' : 'Winning Cadet'}
               </CardTitle>
             </CardHeader>
@@ -117,12 +117,12 @@ export function Leaderboards({ userRole }: LeaderboardsProps) {
                       </Badge>
                     ))}
                   </div>
-                  <p className="text-2xl font-semibold text-[#00247D]">{data.winnersCadets[0].points} points</p>
+                  <p className="text-2xl font-semibold text-blue-800">{data.winnersCadets[0].points} points</p>
                 </div>
               ) : data.winningCadet ? (
                 <div>
-                  <p className="text-4xl font-extrabold text-[#00247D]">{data.winningCadet.name}</p>
-                  <p className="text-2xl font-semibold text-[#00247D]/80">{data.winningCadet.points} points</p>
+                  <p className="text-4xl font-extrabold text-blue-900">{data.winningCadet.name}</p>
+                  <p className="text-2xl font-semibold text-blue-800">{data.winningCadet.points} points</p>
                 </div>
               ) : (
                 <p className="text-gray-500">No data yet</p>
@@ -153,7 +153,7 @@ export function Leaderboards({ userRole }: LeaderboardsProps) {
                       <TableRow key={entry.flight}>
                         <TableCell className="font-medium">
                           {entry.points === data.flightLeaderboard[0].points && (
-                            <Trophy className="inline size-4 text-amber-600 mr-1" />
+                            <Trophy className="inline size-4 text-yellow-600 mr-1" />
                           )}
                           #{index + 1}
                         </TableCell>
@@ -193,7 +193,7 @@ export function Leaderboards({ userRole }: LeaderboardsProps) {
                       <TableRow key={entry.name}>
                         <TableCell className="font-medium">
                           {entry.points === data.cadetLeaderboard[0].points && (
-                            <Award className="inline size-4 text-[#00247D] mr-1" />
+                            <Award className="inline size-4 text-blue-600 mr-1" />
                           )}
                           #{index + 1}
                         </TableCell>
@@ -226,7 +226,7 @@ export function Leaderboards({ userRole }: LeaderboardsProps) {
             {data.recentPoints && data.recentPoints.length > 0 ? (
               <div className="space-y-3">
                 {data.recentPoints.map((point: any) => (
-                  <div key={point.id} className="flex items-start justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div key={point.id} className="flex items-start justify-between p-3 bg-gray-50 rounded-lg border">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium">{point.cadetName}</span>

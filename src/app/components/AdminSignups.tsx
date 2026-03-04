@@ -413,9 +413,9 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
 
       {/* Reset Password Result */}
       {resetCredentials && (
-        <Card className="border-[#00247D]/20 bg-[#00247D]/5 dark:bg-blue-950">
+        <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950">
           <CardContent className="pt-4 space-y-3">
-            <div className="font-semibold text-[#00247D] dark:text-blue-200">
+            <div className="font-semibold text-blue-800 dark:text-blue-200">
               New password for {resetCredentials.name}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
