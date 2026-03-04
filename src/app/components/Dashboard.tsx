@@ -317,22 +317,21 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       {/* Cadet navigation */}
       {userRole === 'cadet' && (
         <div className="mt-4 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex gap-1.5 sm:gap-2 bg-white p-1.5 sm:p-2 rounded-lg shadow-sm border overflow-x-auto scrollbar-hide">
+          <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 bg-white p-1.5 sm:p-2 rounded-lg shadow-sm border">
             <Button
               variant={activeTab === 'leaderboards' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setActiveTab('leaderboards')}
-              className="flex-shrink-0 px-2 sm:px-3 text-[11px] sm:text-sm"
+              className="px-2 sm:px-3 text-[11px] sm:text-sm"
             >
               <TrendingUp className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
-              <span className="hidden xs:inline">Leaderboards</span>
-              <span className="xs:hidden">Board</span>
+              Leaderboards
             </Button>
             <Button
               variant={activeTab === 'rewards' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setActiveTab('rewards')}
-              className="flex-shrink-0 px-2 sm:px-3 text-[11px] sm:text-sm"
+              className="px-2 sm:px-3 text-[11px] sm:text-sm"
             >
               <Gift className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
               Rewards
@@ -342,7 +341,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 variant={activeTab === 'mypoints' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setActiveTab('mypoints')}
-                className="flex-shrink-0 px-2 sm:px-3 text-[11px] sm:text-sm"
+                className="px-2 sm:px-3 text-[11px] sm:text-sm"
               >
                 <Award className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
                 Points
@@ -353,18 +352,17 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 variant={activeTab === 'myattendance' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setActiveTab('myattendance')}
-                className="flex-shrink-0 px-2 sm:px-3 text-[11px] sm:text-sm"
+                className="px-2 sm:px-3 text-[11px] sm:text-sm"
               >
                 <CalendarDays className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
-                <span className="hidden xs:inline">Attendance</span>
-                <span className="xs:hidden">Attend</span>
+                Attendance
               </Button>
             )}
             <Button
               variant={activeTab === 'tickets' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setActiveTab('tickets')}
-              className="flex-shrink-0 px-2 sm:px-3 text-[11px] sm:text-sm"
+              className="px-2 sm:px-3 text-[11px] sm:text-sm"
             >
               <FileText className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
               Tickets
