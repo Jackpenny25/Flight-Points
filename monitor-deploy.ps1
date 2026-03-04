@@ -229,6 +229,7 @@ Write-Host ""
 # Track file position for tailing without locking
 $lastSize = (Get-Item $LogFile -ErrorAction SilentlyContinue).Length
 $inputBuffer = ""
+$promptShown = $false
 
 # Poll-based tail loop with keyboard input support
 while ($true) {
@@ -236,6 +237,11 @@ while ($true) {
     try {
         $currentSize = (Get-Item $LogFile -ErrorAction SilentlyContinue).Length
         if ($currentSize -gt $lastSize) {
+            # Clear the prompt line if we had one
+            if ($promptShown) {
+                Write-Host "`r$(' ' * 60)`r" -NoNewline
+                $promptShown = $false
+            }
             $fs = [System.IO.FileStream]::new($LogFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
             $fs.Seek($lastSize, [System.IO.SeekOrigin]::Begin) | Out-Null
             $sr = [System.IO.StreamReader]::new($fs)
@@ -256,6 +262,9 @@ while ($true) {
     while ([Console]::KeyAvailable) {
         $key = [Console]::ReadKey($true)
         if ($key.Key -eq 'Enter') {
+            # Clear the prompt line
+            Write-Host "`r$(' ' * 60)`r" -NoNewline
+            $promptShown = $false
             $cmd = $inputBuffer.Trim().ToLower()
             $inputBuffer = ""
             if ($cmd -eq 'check') {
@@ -278,8 +287,14 @@ while ($true) {
             if ($inputBuffer.Length -gt 0) {
                 $inputBuffer = $inputBuffer.Substring(0, $inputBuffer.Length - 1)
             }
+            # Redraw prompt
+            Write-Host ("`r  > " + $inputBuffer + "  ") -NoNewline -ForegroundColor Yellow
+            $promptShown = $true
         } else {
             $inputBuffer += $key.KeyChar
+            # Show what user is typing
+            Write-Host ("`r  > " + $inputBuffer) -NoNewline -ForegroundColor Yellow
+            $promptShown = $true
         }
     }
 
