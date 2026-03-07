@@ -799,11 +799,17 @@ app.get('/api/points/recent-count', requireAuth, async (req: AuthRequest, res: R
       return res.json({ count: 0 });
     }
     
-    // Get points added in the last 24 hours that weren't added by the current user
+    // Get non-attendance points added in the last 24 hours that weren't added by the current user
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const currentUserName = String(user.name || '').trim();
+    const currentUserEmail = String(user.email || '').trim();
     const result = await query(
-      `SELECT COUNT(*)::int AS count FROM points WHERE created_at > $1 AND given_by != $2`,
-      [oneDayAgo, user.email]
+      `SELECT COUNT(*)::int AS count
+       FROM points
+       WHERE created_at > $1
+         AND (type IS NULL OR LOWER(type) <> 'attendance')
+         AND COALESCE(LOWER(TRIM(given_by)), '') NOT IN (LOWER($2), LOWER($3))`,
+      [oneDayAgo, currentUserName, currentUserEmail]
     ).catch(() => ({ rows: [{ count: 0 }] }));
     res.json({ count: Number(result.rows[0]?.count || 0) });
   } catch (error) {
