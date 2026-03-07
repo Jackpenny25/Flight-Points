@@ -20,6 +20,8 @@ $ErrorActionPreference = "Continue"
 $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $LogFile = Join-Path $ProjectDir "auto-deploy.log"
 $Branch = "main"
+$MutexName = "Global\FlightPoints-AutoDeploy"
+$script:SingleInstanceMutex = $null
 
 # --- Timing constants (in seconds) ---
 $BURST_INTERVAL     = 30        # 30 seconds — first 30 min after commit
@@ -42,6 +44,59 @@ function Write-Log {
     $line = "[$timestamp] $Message"
     Write-Host $line
     Add-Content -Path $LogFile -Value $line
+}
+
+function Acquire-SingleInstance {
+    try {
+        $createdNew = $false
+        $script:SingleInstanceMutex = New-Object System.Threading.Mutex($false, $MutexName, [ref]$createdNew)
+        $hasHandle = $script:SingleInstanceMutex.WaitOne(0, $false)
+        if (-not $hasHandle) {
+            Write-Log "Another auto-deploy instance is already running. Exiting this instance."
+            return $false
+        }
+        return $true
+    }
+    catch {
+        Write-Log "Failed to acquire single-instance lock: $_"
+        return $false
+    }
+}
+
+function Release-SingleInstance {
+    try {
+        if ($script:SingleInstanceMutex) {
+            $script:SingleInstanceMutex.ReleaseMutex() | Out-Null
+            $script:SingleInstanceMutex.Dispose()
+            $script:SingleInstanceMutex = $null
+        }
+    }
+    catch {
+        # Ignore cleanup issues
+    }
+}
+
+function Resolve-GitIndexLock {
+    $indexLockPath = Join-Path $ProjectDir ".git/index.lock"
+    if (-not (Test-Path $indexLockPath)) {
+        return $true
+    }
+
+    $gitProcesses = Get-Process -Name git,git-remote-http,git-remote-https,git-lfs -ErrorAction SilentlyContinue
+    if ($gitProcesses) {
+        Write-Log "Git lock exists and another git process is running. Skipping this cycle to avoid corruption."
+        return $false
+    }
+
+    try {
+        Remove-Item -Path $indexLockPath -Force
+        Write-Log "Removed stale git lock file: $indexLockPath"
+        return $true
+    }
+    catch {
+        Write-Log "Failed to remove stale git lock file: $_"
+        return $false
+    }
 }
 
 function Get-CurrentInterval {
@@ -103,24 +158,59 @@ function Invoke-Deploy {
 
     Push-Location $ProjectDir
     try {
+        if (-not (Resolve-GitIndexLock)) {
+            Write-Log "Deployment skipped due to active/stale git lock."
+            return
+        }
+
         # Prevent commits from this device
-        & git config --local core.hooksPath /dev/null
+        & git config --local core.hooksPath /dev/null 2>&1 | Out-Null
 
         # Reset any local changes
-        & git reset --hard 2>&1 | ForEach-Object { Write-Log "  git reset: $_" }
-        & git clean -fd 2>&1 | ForEach-Object { Write-Log "  git clean: $_" }
+        $resetOutput = & git reset --hard 2>&1
+        $resetExit = $LASTEXITCODE
+        $resetOutput | ForEach-Object { Write-Log "  git reset: $_" }
+        if ($resetExit -ne 0) {
+            throw "git reset failed with exit code $resetExit"
+        }
+
+        $cleanOutput = & git clean -fd 2>&1
+        $cleanExit = $LASTEXITCODE
+        $cleanOutput | ForEach-Object { Write-Log "  git clean: $_" }
+        if ($cleanExit -ne 0) {
+            throw "git clean failed with exit code $cleanExit"
+        }
+
+        if (-not (Resolve-GitIndexLock)) {
+            Write-Log "Deployment skipped due to active/stale git lock before pull."
+            return
+        }
 
         # Pull latest
         $pullOutput = & git pull --no-rebase 2>&1
+        $pullExit = $LASTEXITCODE
         $pullOutput | ForEach-Object { Write-Log "  git pull: $_" }
+        if ($pullExit -ne 0) {
+            throw "git pull failed with exit code $pullExit"
+        }
 
         # Install dependencies
         Write-Log "Running npm install..."
-        & npm install --no-fund --no-audit 2>&1 | Select-Object -Last 5 | ForEach-Object { Write-Log "  npm: $_" }
+        $installOutput = & npm install --no-fund --no-audit 2>&1
+        $installExit = $LASTEXITCODE
+        $installOutput | Select-Object -Last 5 | ForEach-Object { Write-Log "  npm: $_" }
+        if ($installExit -ne 0) {
+            throw "npm install failed with exit code $installExit"
+        }
 
         # Build
         Write-Log "Running npm build..."
-        & npm run build 2>&1 | Select-Object -Last 5 | ForEach-Object { Write-Log "  build: $_" }
+        $buildOutput = & npm run build 2>&1
+        $buildExit = $LASTEXITCODE
+        $buildOutput | Select-Object -Last 5 | ForEach-Object { Write-Log "  build: $_" }
+        if ($buildExit -ne 0) {
+            throw "npm run build failed with exit code $buildExit"
+        }
 
         # Restart service if it exists
         $svc = Get-Service -Name "flight-points" -ErrorAction SilentlyContinue
@@ -147,6 +237,10 @@ function Invoke-Deploy {
 function Test-NewCommits {
     Push-Location $ProjectDir
     try {
+        if (-not (Resolve-GitIndexLock)) {
+            return $false
+        }
+
         # Fetch latest from remote
         & git fetch origin $Branch 2>&1 | Out-Null
 
@@ -177,6 +271,10 @@ Write-Log "  Schedule: burst(30s/30min) -> cooldown(1min/30min) -> normal(2min)"
 Write-Log "            idle after 7 days (1hr), hibernate after 30 days (stop)"
 Write-Log "============================================"
 
+if (-not (Acquire-SingleInstance)) {
+    exit 0
+}
+
 # Initial deploy check on startup
 if (Test-NewCommits) {
     Invoke-Deploy
@@ -187,6 +285,7 @@ if (Test-NewCommits) {
 
 if ($RunOnce) {
     Write-Log "RunOnce flag set. Exiting."
+    Release-SingleInstance
     exit 0
 }
 
@@ -200,6 +299,7 @@ while ($true) {
     # Hibernate: stop the script
     if ($interval -lt 0) {
         Write-Log "Auto-deploy hibernated. Exiting process."
+        Release-SingleInstance
         exit 0
     }
 

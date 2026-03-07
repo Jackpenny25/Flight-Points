@@ -79,6 +79,7 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - Added `install-backup-task.ps1` to register/update a Windows Scheduled Task for Sunday automatic backups.
 - **Attendance Save Scope** (2026-03-07): In `AttendanceManager`, **Save All** now always saves all non-HQ cadets in the current flight filter; it no longer limits submission to `selectedIds`. `selectedIds` is only for bulk status actions (Mark Selected Present/Clear Selected).
 - **Attendance Defaults & Session Editing** (2026-03-07): New bulk attendance statuses now default to **absent** to reduce accidental presents. In the Recent Attendance panel, sessions can be expanded to view per-cadet statuses and SNCOs can edit each saved record (present/absent) inline.
+- **Auto-Deploy Lock Hardening** (2026-03-07): `auto-deploy.ps1` now enforces a single running instance via a global mutex, handles stale `.git/index.lock` files safely, and aborts deployment steps on command failures instead of continuing. `setup-auto-deploy.ps1` now sets scheduled task `-MultipleInstances IgnoreNew`.
 
 ---
 
