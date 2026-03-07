@@ -99,6 +99,45 @@ function Resolve-GitIndexLock {
     }
 }
 
+function Test-TcpPort {
+    param(
+        [string]$Host,
+        [int]$Port,
+        [int]$TimeoutMs = 1500
+    )
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $iar = $client.BeginConnect($Host, $Port, $null, $null)
+        $connected = $iar.AsyncWaitHandle.WaitOne($TimeoutMs, $false)
+        if (-not $connected) {
+            $client.Close()
+            return $false
+        }
+        $client.EndConnect($iar)
+        $client.Close()
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Wait-OriginServiceReady {
+    param(
+        [int]$Port = 3001,
+        [int]$TimeoutSeconds = 45
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if ((Test-TcpPort -Host "127.0.0.1" -Port $Port) -or (Test-TcpPort -Host "localhost" -Port $Port)) {
+            return $true
+        }
+        Start-Sleep -Seconds 1
+    }
+    return $false
+}
+
 function Get-CurrentInterval {
     $now = Get-Date
     $secsSinceCommit = ($now - $script:LastCommitTime).TotalSeconds
@@ -219,7 +258,11 @@ function Invoke-Deploy {
             Stop-Service -Name "flight-points" -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 2
             Start-Service -Name "flight-points" -ErrorAction SilentlyContinue
-            Write-Log "Service restarted."
+            if (Wait-OriginServiceReady -Port 3001 -TimeoutSeconds 45) {
+                Write-Log "Service restarted and origin is reachable on port 3001."
+            } else {
+                throw "Service restarted but origin port 3001 is not reachable in time"
+            }
         } else {
             Write-Log "Service 'flight-points' not found. Skipping restart."
         }
