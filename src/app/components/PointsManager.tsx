@@ -22,7 +22,7 @@ interface Point {
   flight: string;
   reason: string;
   points: number;
-  type: string;
+  type?: string;
   givenBy: string;
 }
 
@@ -374,9 +374,13 @@ export function PointsManager({ userRole }: PointsManagerProps) {
   const canDelete = canAdmin;
   const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
 
+  const flightPoints = useMemo(() => {
+    return points.filter((point) => (point.type || '').toLowerCase() !== 'attendance');
+  }, [points]);
+
   const cadetTotals = useMemo(() => {
     const totals: Record<string, { points: number; flight: string }> = {};
-    points.forEach((p) => {
+    flightPoints.forEach((p) => {
       const key = p.cadetName || 'Unknown';
       if (!totals[key]) {
         totals[key] = { points: 0, flight: p.flight || 'unknown' };
@@ -387,7 +391,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     return Object.entries(totals)
       .map(([name, info]) => ({ name, points: info.points, flight: info.flight }))
       .sort((a, b) => b.points - a.points);
-  }, [points]);
+  }, [flightPoints]);
 
   return (
     <div className="space-y-6">
@@ -570,17 +574,17 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       {userRole === 'snco' && (
       <Card>
         <CardHeader>
-          <CardTitle>Recent Points</CardTitle>
-          <CardDescription>Last 10 point entries</CardDescription>
+          <CardTitle>Recent Flight Points</CardTitle>
+          <CardDescription>Last 10 flight point entries</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="text-center py-8 text-gray-500">Loading...</div>
-          ) : points.length === 0 ? (
+          ) : flightPoints.length === 0 ? (
             <div className="text-center py-8 text-gray-500">No points recorded yet</div>
           ) : (
             <div className="space-y-4 max-h-[600px] overflow-y-auto">
-              {points.slice(0, 10).map((point) => (
+              {flightPoints.slice(0, 10).map((point) => (
                 <div key={point.id} className="p-4 border rounded-lg bg-gray-50">
                   {editingId === point.id ? (
                     <div className="space-y-3">

@@ -1312,6 +1312,162 @@ app.get('/api/attendance/bulks', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/attendance/bulk/:id/records — list records for a bulk session
+app.get('/api/attendance/bulk/:id/records', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await query(
+      `SELECT * FROM attendance
+       WHERE bulk_id = $1
+       ORDER BY flight ASC, cadet_name ASC, created_at ASC`,
+      [id]
+    );
+
+    res.json(result.rows.map(row => ({
+      id: row.id,
+      cadetName: row.cadet_name,
+      date: row.date,
+      flight: row.flight,
+      status: row.status,
+      submittedBy: row.submitted_by,
+      bulkId: row.bulk_id,
+      createdAt: row.created_at,
+    })));
+  } catch (error) {
+    console.error('Error in GET /api/attendance/bulk/:id/records:', error);
+    res.status(500).json({ error: 'Failed to fetch bulk attendance records' });
+  }
+});
+
+// PUT /api/attendance/:id/status — update a saved attendance status and sync attendance points
+app.put('/api/attendance/:id/status', requireAuth, requireRole(['snco', 'admin', 'pointgiver']), async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const status = String(req.body?.status || '').toLowerCase();
+
+    if (status !== 'present' && status !== 'absent') {
+      return res.status(400).json({ error: 'status must be present or absent' });
+    }
+
+    const existingResult = await query(
+      `SELECT id, cadet_name, date, flight, status, bulk_id
+       FROM attendance
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+
+    if (existingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Attendance record not found' });
+    }
+
+    const existing = existingResult.rows[0];
+
+    const updatedResult = await query(
+      `UPDATE attendance
+       SET status = $1
+       WHERE id = $2
+       RETURNING id, cadet_name, date, flight, status, submitted_by, bulk_id, created_at`,
+      [status, id]
+    );
+
+    const updated = updatedResult.rows[0];
+
+    if (ATTENDANCE_POINTS > 0) {
+      if (status === 'present') {
+        const cadetCheck = await query(
+          'SELECT is_nco, flight FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
+          [existing.cadet_name]
+        );
+        const isIneligible =
+          cadetCheck.rows.length > 0 &&
+          (cadetCheck.rows[0].is_nco === true || String(cadetCheck.rows[0].flight || '').toLowerCase() === 'hq');
+
+        if (!isIneligible) {
+          const existingPoint = await query(
+            `SELECT id FROM points
+             WHERE LOWER(cadet_name) = LOWER($1)
+               AND DATE(date) = DATE($2)
+               AND type = 'attendance'
+             LIMIT 1`,
+            [existing.cadet_name, existing.date]
+          );
+
+          if (existingPoint.rows.length === 0) {
+            await query(
+              `INSERT INTO points (id, cadet_name, date, flight, reason, points, type, given_by, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+              [
+                crypto.randomUUID(),
+                existing.cadet_name,
+                existing.date,
+                existing.flight,
+                'Attendance',
+                ATTENDANCE_POINTS,
+                'attendance',
+                req.user?.name || 'attendance-edit',
+              ]
+            );
+          }
+        }
+      } else {
+        const anyPresentSameDay = await query(
+          `SELECT id FROM attendance
+           WHERE LOWER(cadet_name) = LOWER($1)
+             AND DATE(date) = DATE($2)
+             AND status = 'present'
+           LIMIT 1`,
+          [existing.cadet_name, existing.date]
+        );
+
+        if (anyPresentSameDay.rows.length === 0) {
+          await query(
+            `DELETE FROM points
+             WHERE LOWER(cadet_name) = LOWER($1)
+               AND DATE(date) = DATE($2)
+               AND type = 'attendance'`,
+            [existing.cadet_name, existing.date]
+          );
+        }
+      }
+    }
+
+    let bulkTotalPresent: number | null = null;
+    if (existing.bulk_id) {
+      const countResult = await query(
+        `SELECT COUNT(*)::int AS total_present
+         FROM attendance
+         WHERE bulk_id = $1 AND status = 'present'`,
+        [existing.bulk_id]
+      );
+      bulkTotalPresent = Number(countResult.rows[0]?.total_present || 0);
+      await query(
+        `UPDATE attendance_bulks
+         SET total_present = $1
+         WHERE id = $2`,
+        [bulkTotalPresent, existing.bulk_id]
+      );
+    }
+
+    res.json({
+      record: {
+        id: updated.id,
+        cadetName: updated.cadet_name,
+        date: updated.date,
+        flight: updated.flight,
+        status: updated.status,
+        submittedBy: updated.submitted_by,
+        bulkId: updated.bulk_id,
+        createdAt: updated.created_at,
+      },
+      bulkTotalPresent,
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/attendance/:id/status:', error);
+    res.status(500).json({ error: 'Failed to update attendance status' });
+  }
+});
+
 // POST /api/attendance/bulk — create a bulk attendance session with individual records
 app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'pointgiver']), async (req, res) => {
   try {

@@ -31,6 +31,10 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   const [cadets, setCadets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [bulkEvents, setBulkEvents] = useState<Array<any>>([]);
+  const [expandedBulkIds, setExpandedBulkIds] = useState<Set<string>>(new Set());
+  const [bulkRecords, setBulkRecords] = useState<Record<string, AttendanceRecord[]>>({});
+  const [loadingBulkIds, setLoadingBulkIds] = useState<Set<string>>(new Set());
+  const [updatingRecordIds, setUpdatingRecordIds] = useState<Set<string>>(new Set());
 
   // Bulk attendance state
   const [attendanceStatuses, setAttendanceStatuses] = useState<Record<string, 'present' | 'absent'>>({});
@@ -86,9 +90,9 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   };
 
   const saveAttendanceBulk = async () => {
-    const targets = cadets.filter(c => c.flight && c.flight.toLowerCase() !== 'hq' && (selectedIds.size ? selectedIds.has(c.id) : true) && (flightFilter === 'all' || c.flight === flightFilter));
+    const targets = cadets.filter(c => c.flight && c.flight.toLowerCase() !== 'hq' && (flightFilter === 'all' || c.flight === flightFilter));
     if (targets.length === 0) {
-      toast.error('No cadets selected for bulk save');
+      toast.error('No cadets available for this flight filter');
       return;
     }
 
@@ -116,8 +120,8 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
           toast.error(`Failed: ${res.error}`);
         } else {
           const pointsMsg = res.pointsAwarded > 0
-            ? `, ${res.pointsAwarded} cadets awarded ${res.pointsAwarded} pts`
-            : (res.totalPresent > 0 ? `, 0 attendance points awarded` : '');
+            ? `, ${res.pointsAwarded} cadets awarded ${res.pointsAwarded} flight points`
+            : (res.totalPresent > 0 ? `, 0 flight points awarded` : '');
           toast.success(`Saved ${res.totalRecords || entries.length} attendance records (${res.totalPresent || 0} present${pointsMsg})`);
           if (res.pointErrors && res.pointErrors.length > 0) {
             console.error('Point award errors:', res.pointErrors);
@@ -176,7 +180,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
       setAttendanceStatuses(prev => {
         const next = { ...prev };
         cadetList.forEach((c: any) => {
-          if (!next[c.id]) next[c.id] = 'present';
+          if (!next[c.id]) next[c.id] = 'absent';
         });
         return next;
       });
@@ -200,6 +204,94 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
     } catch (error) {
       console.error('Error deleting bulk attendance session:', error);
       toast.error('Failed to delete bulk attendance session');
+    }
+  };
+
+  const toggleBulkExpand = async (bulkId: string) => {
+    const currentlyExpanded = expandedBulkIds.has(bulkId);
+    if (currentlyExpanded) {
+      setExpandedBulkIds(prev => {
+        const next = new Set(prev);
+        next.delete(bulkId);
+        return next;
+      });
+      return;
+    }
+
+    setExpandedBulkIds(prev => {
+      const next = new Set(prev);
+      next.add(bulkId);
+      return next;
+    });
+
+    if (bulkRecords[bulkId]) return;
+
+    setLoadingBulkIds(prev => {
+      const next = new Set(prev);
+      next.add(bulkId);
+      return next;
+    });
+
+    try {
+      const data = await api.getAttendanceBulkRecords(bulkId);
+      const records = (Array.isArray(data) ? data : [])
+        .sort((a: any, b: any) => {
+          const flightCmp = String(a.flight || '').localeCompare(String(b.flight || ''));
+          if (flightCmp !== 0) return flightCmp;
+          return String(a.cadetName || '').localeCompare(String(b.cadetName || ''));
+        });
+      setBulkRecords(prev => ({ ...prev, [bulkId]: records }));
+    } catch (error) {
+      console.error('Error loading bulk attendance records:', error);
+      toast.error('Failed to load session details');
+    } finally {
+      setLoadingBulkIds(prev => {
+        const next = new Set(prev);
+        next.delete(bulkId);
+        return next;
+      });
+    }
+  };
+
+  const handleUpdateSavedAttendance = async (bulkId: string, record: AttendanceRecord, status: 'present' | 'absent') => {
+    if (record.status === status) return;
+
+    setUpdatingRecordIds(prev => {
+      const next = new Set(prev);
+      next.add(record.id);
+      return next;
+    });
+
+    try {
+      const res = await api.updateAttendanceStatus(record.id, status);
+      if (res?.error) {
+        toast.error(res.error || 'Failed to update attendance');
+        return;
+      }
+
+      setBulkRecords(prev => {
+        const list = prev[bulkId] || [];
+        return {
+          ...prev,
+          [bulkId]: list.map(r => (r.id === record.id ? { ...r, status } : r)),
+        };
+      });
+
+      if (typeof res?.bulkTotalPresent === 'number') {
+        setBulkEvents(prev => prev.map(b => b.id === bulkId ? { ...b, totalPresent: res.bulkTotalPresent } : b));
+      }
+
+      toast.success(`${record.cadetName} marked ${status}`);
+      fetchAttendance();
+    } catch (error) {
+      console.error('Error updating saved attendance:', error);
+      toast.error('Failed to update attendance');
+    } finally {
+      setUpdatingRecordIds(prev => {
+        const next = new Set(prev);
+        next.delete(record.id);
+        return next;
+      });
     }
   };
 
@@ -409,7 +501,14 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <p className="font-medium">Session on {new Date(b.date).toLocaleString()}</p>
+                          <button
+                            type="button"
+                            onClick={() => toggleBulkExpand(b.id)}
+                            className="font-medium inline-flex items-center gap-1 hover:underline text-left"
+                          >
+                            {expandedBulkIds.has(b.id) ? <ChevronDown className="size-4 text-gray-500" /> : <ChevronRight className="size-4 text-gray-500" />}
+                            <span>Session on {new Date(b.date).toLocaleString()}</span>
+                          </button>
                           <Badge variant="outline" className="text-xs">{formatFlight(b.flightFilter)}</Badge>
                         </div>
                         <p className="text-sm text-gray-600">Present: {b.totalPresent} / {b.totalRecords}</p>
@@ -421,6 +520,44 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
                         </Button>
                       )}
                     </div>
+
+                    {expandedBulkIds.has(b.id) && (
+                      <div className="mt-3 pt-3 border-t">
+                        {loadingBulkIds.has(b.id) ? (
+                          <div className="text-xs text-gray-500">Loading session details...</div>
+                        ) : (bulkRecords[b.id] || []).length === 0 ? (
+                          <div className="text-xs text-gray-500">No attendance records in this session.</div>
+                        ) : (
+                          <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
+                            {(bulkRecords[b.id] || []).map((record) => {
+                              const isUpdating = updatingRecordIds.has(record.id);
+                              const isPresent = record.status === 'present';
+                              return (
+                                <div key={record.id} className="flex items-center justify-between gap-2 text-xs bg-white rounded border px-2 py-1.5">
+                                  <div className="min-w-0">
+                                    <div className="font-medium truncate">{record.cadetName}</div>
+                                    <div className="text-gray-500">{formatFlight(record.flight)}</div>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <Badge variant="outline" className={isPresent ? 'text-green-700 border-green-200' : 'text-gray-500'}>
+                                      {isPresent ? 'Present' : 'Absent'}
+                                    </Badge>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isUpdating}
+                                      onClick={() => handleUpdateSavedAttendance(b.id, record, isPresent ? 'absent' : 'present')}
+                                    >
+                                      {isUpdating ? 'Saving...' : (isPresent ? 'Mark Absent' : 'Mark Present')}
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

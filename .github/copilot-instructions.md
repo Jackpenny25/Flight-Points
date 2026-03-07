@@ -77,6 +77,8 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - Backup paths should be configured directly in `$BackupSources`; output location in `$BackupRoot`.
 - `server-backup.ps1` now supports PostgreSQL dumps from root `.env.local` (`DATABASE_URL`) and 30-day cleanup.
 - Added `install-backup-task.ps1` to register/update a Windows Scheduled Task for Sunday automatic backups.
+- **Attendance Save Scope** (2026-03-07): In `AttendanceManager`, **Save All** now always saves all non-HQ cadets in the current flight filter; it no longer limits submission to `selectedIds`. `selectedIds` is only for bulk status actions (Mark Selected Present/Clear Selected).
+- **Attendance Defaults & Session Editing** (2026-03-07): New bulk attendance statuses now default to **absent** to reduce accidental presents. In the Recent Attendance panel, sessions can be expanded to view per-cadet statuses and SNCOs can edit each saved record (present/absent) inline.
 
 ---
 

@@ -49,6 +49,8 @@ export const api = {
   createAttendance: (data: Partial<Attendance>) => fetchWithAuth('/data/attendance', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
   createBulkAttendance: (data: { entries: any[]; date: string; flightFilter: string }) => fetchWithAuth('/attendance/bulk', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
   getAttendanceBulks: () => fetchWithAuth('/attendance/bulks', { method: 'GET' }).then(r => r.json()),
+  getAttendanceBulkRecords: (id: string) => fetchWithAuth(`/attendance/bulk/${id}/records`, { method: 'GET' }).then(r => r.json()),
+  updateAttendanceStatus: (id: string, status: 'present' | 'absent') => fetchWithAuth(`/attendance/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }).then(r => r.json()),
   deleteAttendanceBulk: (id: string) => fetchWithAuth(`/attendance/bulk/${id}`, { method: 'DELETE' }).then(r => r.json()),
   updateAttendance: (id: string, data: Partial<Attendance>) => fetchWithAuth(`/data/attendance/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => r.json()),
   deleteAttendance: (id: string) => fetchWithAuth(`/data/attendance/${id}`, { method: 'DELETE' }).then(r => r.json()),
