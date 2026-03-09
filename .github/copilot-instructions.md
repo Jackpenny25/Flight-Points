@@ -20,6 +20,35 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - Auto-deploy setup: run `setup-auto-deploy.ps1` as Administrator on server.
 - `.env.local` must contain `DATABASE_URL`, `JWT_SECRET`, and `ADMIN_PIN` (6 digits).
 
+### Deploy failure email alerts (server setup)
+Use this exact checklist on the Windows server where `auto-deploy.ps1` runs:
+
+1. Open the repo root `.env.local` on the server and add:
+  - `SMTP_TO=your-email@domain.com`
+  - `SMTP_FROM=alerts@your-domain.com`
+  - `SMTP_SERVER=smtp.your-provider.com`
+  - `SMTP_PORT=587`
+  - `SMTP_USER=your-smtp-username`
+  - `SMTP_PASS=your-smtp-password-or-app-password`
+2. Restart the scheduled auto-deploy task (or reboot server) so the script reloads env values.
+3. Confirm task is running under an account that can read `.env.local` and write to `data/deploy-status.json`.
+4. Confirm outbound SMTP is allowed from the server (firewall/network).
+5. Trigger a test failure safely:
+  - Temporarily introduce a known build error locally, commit, push.
+  - Wait for auto-deploy cycle.
+  - Verify you receive email and `data/deploy-status.json` shows `"status": "failed"`.
+  - Revert/fix immediately and push again.
+6. Verify recovery:
+  - Ensure a subsequent successful deploy updates `data/deploy-status.json` to `"status": "success"`.
+  - In the app Integrity tab, confirm the red deploy failure alert disappears after success.
+
+### Email alert troubleshooting
+- No email and no log entry: verify Scheduled Task is running and script path is correct.
+- Log says "Email alerting not configured": check `SMTP_TO`, `SMTP_FROM`, `SMTP_SERVER` are set and not blank.
+- SMTP auth error: use an app password (not normal mailbox password) where required.
+- TLS/connection error: verify `SMTP_PORT` and SSL policy of your provider.
+- Integrity tab still red after fix: check timestamp and status in `data/deploy-status.json`; ensure latest deploy completed successfully.
+
 ## Core Working Rules
 - The user has database access via DBeaver.
 - Prefer doing as much as possible without human input; ask only when needed.
