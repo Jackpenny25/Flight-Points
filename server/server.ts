@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -51,16 +52,34 @@ const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
     fs.mkdirSync(dir, { recursive: true });
   }
 });
-// Configure multer for file uploads
+// Configure multer for file uploads with security restrictions
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'application/pdf',
+  'text/plain',
+]);
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, UPLOADS_DIR);
   },
   filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
+    // Use a random name to prevent path-traversal and filename collisions
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
+    cb(null, `${crypto.randomUUID()}${ext}`);
   }
 });
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter: (_req, file, cb) => {
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      return cb(new Error(`File type '${file.mimetype}' is not allowed. Accepted: JPEG, PNG, GIF, WebP, PDF, TXT.`));
+    }
+    cb(null, true);
+  },
+});
 
 // Rate limiters
 // General API rate limiter
@@ -82,6 +101,21 @@ const authLimiter = rateLimit({
   keyGenerator: ipKeyGenerator // Properly handles IPv6 addresses
 });
 
+// Rate limiter for admin PIN verification (brute-force protection)
+const pinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Only 5 attempts per 15 minutes
+  message: { error: 'Too many PIN attempts, please try again later.' },
+  skipSuccessfulRequests: false,
+  keyGenerator: ipKeyGenerator,
+});
+
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // SPA serves its own CSP via meta tags
+  crossOriginEmbedderPolicy: false,
+}));
+
 // Middleware
 app.use(cors({
   origin: ['https://flightpoints.uk', 'https://api.flightpoints.uk'],
@@ -89,11 +123,15 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use('/api/', apiLimiter);
 
-// JWT secret
-const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
+// JWT secret — refuse to start with the insecure default
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET === 'changeme') {
+  console.error('FATAL: JWT_SECRET is not set or is the insecure default. Set a strong secret in .env.local and restart.');
+  process.exit(1);
+}
 
 
 // Middleware to require authentication
@@ -632,7 +670,8 @@ function mapRowsToClient(type: DataType, rows: Record<string, any>[]) {
 // ========== PIN MANAGEMENT ENDPOINTS ==========
 
 function getConfiguredAdminPin() {
-  const configuredPin = String(process.env.ADMIN_PIN || process.env.VITE_ADMIN_PIN || '').trim();
+  // Only read from server-side env — never fall back to VITE_ prefixed vars which may leak to the client bundle
+  const configuredPin = String(process.env.ADMIN_PIN || '').trim();
   return configuredPin;
 }
 
@@ -659,8 +698,8 @@ app.get('/api/admin/pin-status', requireAuth, async (req: AuthRequest, res: Resp
   }
 });
 
-// POST /api/admin/verify-pin - Verify a PIN
-app.post('/api/admin/verify-pin', requireAuth, async (req: AuthRequest, res: Response) => {
+// POST /api/admin/verify-pin - Verify a PIN (rate-limited to prevent brute force)
+app.post('/api/admin/verify-pin', pinLimiter, requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     if (!hasAdminPinRole(req.user)) {
       return res.status(403).json({ error: 'Only Flight Point Leads can verify admin PIN' });
@@ -673,7 +712,7 @@ app.post('/api/admin/verify-pin', requireAuth, async (req: AuthRequest, res: Res
 
     const configuredPin = getConfiguredAdminPin();
     if (!/^\d{6}$/.test(configuredPin)) {
-      return res.status(500).json({ error: 'Admin PIN is not configured correctly. Set a 6-digit ADMIN_PIN or VITE_ADMIN_PIN in .env.local.' });
+      return res.status(500).json({ error: 'Admin PIN is not configured correctly. Set a 6-digit ADMIN_PIN in .env.local.' });
     }
 
     const pinStr = String(pin).trim();
@@ -700,7 +739,7 @@ app.post('/api/admin/change-pin', requireAuth, async (req: AuthRequest, res: Res
     }
 
     res.status(400).json({
-      error: 'Admin PIN is managed in .env.local. Update ADMIN_PIN (or VITE_ADMIN_PIN) to a new 6-digit value and restart the server.',
+      error: 'Admin PIN is managed in .env.local. Update ADMIN_PIN to a new 6-digit value and restart the server.',
     });
   } catch (error) {
     console.error('Error in POST /api/admin/change-pin:', error);
@@ -712,7 +751,7 @@ app.post('/api/admin/change-pin', requireAuth, async (req: AuthRequest, res: Res
 app.post('/api/admin/reset-pin', requireAuth, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
   try {
     res.status(400).json({
-      error: 'Admin PIN is managed in .env.local. Set ADMIN_PIN (or VITE_ADMIN_PIN) to a 6-digit value and restart the server.',
+      error: 'Admin PIN is managed in .env.local. Set ADMIN_PIN to a 6-digit value and restart the server.',
     });
   } catch (error) {
     console.error('Error in POST /api/admin/reset-pin:', error);
@@ -762,6 +801,19 @@ app.get('/api/integrity-check/count', async (req: Request, res: Response) => {
     if (invalidRewardWinners.rows[0]?.count > 0) add('Referential Integrity', 'Reward Winners → Cadets', 'warning', `${invalidRewardWinners.rows[0].count} reward(s) have invalid winners`);
     if (invalidUserCadetLinks.rows[0]?.count > 0) add('Referential Integrity', 'User Accounts → Cadets', 'fail', `${invalidUserCadetLinks.rows[0].count} user(s) linked to non-existent cadets`);
     if (duplicateUserEmails.rows.length > 0) add('Accounts', 'Duplicate User Emails', 'fail', `${duplicateUserEmails.rows.length} duplicate email(s) found`);
+
+    // Check deploy status for failures
+    try {
+      const deployStatusPath = path.join(projectRoot, 'data', 'deploy-status.json');
+      if (fs.existsSync(deployStatusPath)) {
+        const deployData = JSON.parse(fs.readFileSync(deployStatusPath, 'utf-8'));
+        if (deployData.status === 'failed') {
+          add('Deployment', 'Last Deploy Failed', 'fail', deployData.message || 'Auto-deploy failed', deployData.error || undefined);
+        }
+      }
+    } catch (e) {
+      // Ignore deploy status read errors
+    }
 
     // Count failures and warnings
     const failCount = checks.filter(c => c.status === 'fail').length;
@@ -822,8 +874,8 @@ app.get('/api/points/recent-count', requireAuth, async (req: AuthRequest, res: R
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Server is working!' });
 });
-// CRUD Endpoints
-app.get('/api/data/:type', async (req, res) => {
+// CRUD Endpoints — all data reads now require authentication
+app.get('/api/data/:type', requireAuth, async (req: AuthRequest, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
@@ -838,21 +890,10 @@ app.get('/api/data/:type', async (req, res) => {
     const { table, orderBy } = typeConfig[normalized];
 
     // Cadets can only see their own attendance records
-    if (normalized === 'attendance') {
-      const authHeader = req.headers['authorization'];
-      if (authHeader) {
-        try {
-          const token = authHeader.replace('Bearer ', '');
-          const decoded = jwt.verify(token, JWT_SECRET) as any;
-          if (decoded.role === 'cadet' && decoded.name) {
-            const sql = `SELECT * FROM ${table} WHERE LOWER(cadet_name) = LOWER($1)${orderBy ? ` ORDER BY ${orderBy}` : ''}`;
-            const result = await query(sql, [decoded.name]);
-            return res.json(mapRowsToClient(normalized, result.rows));
-          }
-        } catch (e) {
-          // Token invalid or missing — fall through to full list (requires auth elsewhere)
-        }
-      }
+    if (normalized === 'attendance' && req.user?.role === 'cadet' && req.user?.name) {
+      const sql = `SELECT * FROM ${table} WHERE LOWER(cadet_name) = LOWER($1)${orderBy ? ` ORDER BY ${orderBy}` : ''}`;
+      const result = await query(sql, [req.user.name]);
+      return res.json(mapRowsToClient(normalized, result.rows));
     }
 
     const sql = orderBy ? `SELECT * FROM ${table} ORDER BY ${orderBy}` : `SELECT * FROM ${table}`;
@@ -863,7 +904,7 @@ app.get('/api/data/:type', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch data' });
   }
 });
-app.get('/api/data/:type/:id', async (req, res) => {
+app.get('/api/data/:type/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
@@ -2041,6 +2082,43 @@ app.get('/api/integrity-check', async (req, res) => {
     );
 
     // ═══════════════════════════════════════════════════
+    // DEPLOYMENT STATUS
+    // ═══════════════════════════════════════════════════
+    try {
+      const deployStatusPath = path.join(projectRoot, 'data', 'deploy-status.json');
+      if (fs.existsSync(deployStatusPath)) {
+        const deployData = JSON.parse(fs.readFileSync(deployStatusPath, 'utf-8'));
+        if (deployData.status === 'failed') {
+          add('Deployment', 'Last Auto-Deploy',
+            'fail',
+            `Deploy failed at ${deployData.timestamp || 'unknown time'}: ${deployData.message || 'Unknown error'}`,
+            deployData.error || undefined
+          );
+        } else if (deployData.status === 'success') {
+          add('Deployment', 'Last Auto-Deploy',
+            'pass',
+            `Deploy succeeded at ${deployData.timestamp || 'unknown time'}${deployData.commit ? ` (${deployData.commit})` : ''}`
+          );
+        } else {
+          add('Deployment', 'Last Auto-Deploy',
+            'warning',
+            `Deploy status unknown: ${deployData.message || 'No details'}`
+          );
+        }
+      } else {
+        add('Deployment', 'Last Auto-Deploy',
+          'warning',
+          'No deploy status file found. Auto-deploy may not have run yet.'
+        );
+      }
+    } catch (e) {
+      add('Deployment', 'Last Auto-Deploy',
+        'warning',
+        'Could not read deploy status file'
+      );
+    }
+
+    // ═══════════════════════════════════════════════════
     // BUILD SUMMARY
     // ═══════════════════════════════════════════════════
 
@@ -2058,27 +2136,68 @@ app.get('/api/integrity-check', async (req, res) => {
     res.status(500).json({ error: 'Failed to run integrity checks' });
   }
 });
-// File upload endpoint
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-    const fileUrl = `/uploads/${req.file.filename}`;
-    res.json({ 
-      success: true, 
-      file: {
-        url: fileUrl,
-        filename: req.file.filename,
-        originalname: req.file.originalname,
-        size: req.file.size,
-        mimetype: req.file.mimetype
+// File upload endpoint — requires authentication, validates MIME type and size
+app.post('/api/upload', requireAuth, (req: AuthRequest, res: Response, next: NextFunction) => {
+  upload.single('file')(req, res, (err: any) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024} MB.` });
       }
-    });
-  } catch (error) {
-    console.error('Error handling file upload:', error);
-    res.status(500).json({ error: 'Failed to handle file upload' });
-  }
+      return res.status(400).json({ error: err.message || 'Upload failed' });
+    }
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+      const fileUrl = `/uploads/${req.file.filename}`;
+      console.log(`[Upload] ${req.user?.name || 'unknown'} uploaded ${req.file.originalname} (${req.file.mimetype}, ${req.file.size} bytes)`);
+      res.json({ 
+        success: true, 
+        file: {
+          url: fileUrl,
+          filename: req.file.filename,
+          originalname: req.file.originalname,
+          size: req.file.size,
+          mimetype: req.file.mimetype
+        }
+      });
+    } catch (error) {
+      console.error('Error handling file upload:', error);
+      res.status(500).json({ error: 'Failed to handle file upload' });
+    }
+  });
+});
+
+// Alias for ticket evidence uploads (matches client-side api.uploadTicketEvidence)
+app.post('/api/upload/ticket-evidence', requireAuth, (req: AuthRequest, res: Response, next: NextFunction) => {
+  upload.single('file')(req, res, (err: any) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024} MB.` });
+      }
+      return res.status(400).json({ error: err.message || 'Upload failed' });
+    }
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+      const fileUrl = `/uploads/${req.file.filename}`;
+      console.log(`[Upload/Evidence] ${req.user?.name || 'unknown'} uploaded ${req.file.originalname} (${req.file.mimetype}, ${req.file.size} bytes)`);
+      res.json({ 
+        success: true, 
+        file: {
+          url: fileUrl,
+          filename: req.file.filename,
+          originalname: req.file.originalname,
+          size: req.file.size,
+          mimetype: req.file.mimetype
+        }
+      });
+    } catch (error) {
+      console.error('Error handling file upload:', error);
+      res.status(500).json({ error: 'Failed to handle file upload' });
+    }
+  });
 });
 
 // ========== REWARD SUGGESTIONS & VOTING ENDPOINTS ==========
@@ -2548,6 +2667,23 @@ app.delete('/api/tickets/:id', requireAuth, requireRole(['snco', 'admin']), asyn
   }
 });
 
+// ========== DEPLOY STATUS ENDPOINT ==========
+const DEPLOY_STATUS_FILE = path.join(projectRoot, 'data', 'deploy-status.json');
+
+app.get('/api/deploy-status', requireAuth, requireRole(['snco', 'admin']), async (req: AuthRequest, res: Response) => {
+  try {
+    if (!fs.existsSync(DEPLOY_STATUS_FILE)) {
+      return res.json({ status: 'unknown', message: 'No deploy status file found. Auto-deploy may not have run yet.' });
+    }
+    const raw = fs.readFileSync(DEPLOY_STATUS_FILE, 'utf-8');
+    const data = JSON.parse(raw);
+    return res.json(data);
+  } catch (error) {
+    console.error('Error reading deploy status:', error);
+    return res.json({ status: 'unknown', message: 'Failed to read deploy status' });
+  }
+});
+
 // Serve static files from the dist folder
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -2563,4 +2699,5 @@ app.use((req, res, next) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  console.log('Security: helmet enabled, auth enforced on data endpoints, upload restrictions active');
 });

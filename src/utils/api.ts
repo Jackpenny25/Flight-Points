@@ -127,6 +127,9 @@ export const api = {
   // Cleanup retention
   cleanupRetention: () => fetchWithAuth('/admin/cleanup-retention', { method: 'POST' }).then(r => r.json()),
   
+  // Deploy Status
+  getDeployStatus: () => fetchWithAuth('/deploy-status', { method: 'GET' }).then(r => r.json()),
+  
   // Verify PIN
   verifyPin: (pin: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ pin }) }).then(r => r.json()),
   

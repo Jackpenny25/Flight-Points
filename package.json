@@ -60,6 +60,7 @@
     "embla-carousel-react": "8.6.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
     "input-otp": "1.4.2",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "0.487.0",

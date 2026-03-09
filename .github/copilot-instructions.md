@@ -72,7 +72,7 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - NCOs (`is_nco = true`) and HQ/Staff cadets (`flight = 'hq'`) cannot receive points (server-enforced).
 - PointsManager auto-detects flight from entered names with real-time validation.
 
-## LATEST PROJECT NOTES (2026-03-01)
+## LATEST PROJECT NOTES (2026-03-09)
 - Added `server-backup.ps1` at repo root for server-side backups with editable source paths in-script.
 - Backup paths should be configured directly in `$BackupSources`; output location in `$BackupRoot`.
 - `server-backup.ps1` now supports PostgreSQL dumps from root `.env.local` (`DATABASE_URL`) and 30-day cleanup.
@@ -80,6 +80,18 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - **Attendance Save Scope** (2026-03-07): In `AttendanceManager`, **Save All** now always saves all non-HQ cadets in the current flight filter; it no longer limits submission to `selectedIds`. `selectedIds` is only for bulk status actions (Mark Selected Present/Clear Selected).
 - **Attendance Defaults & Session Editing** (2026-03-07): New bulk attendance statuses now default to **absent** to reduce accidental presents. In the Recent Attendance panel, sessions can be expanded to view per-cadet statuses and SNCOs can edit each saved record (present/absent) inline.
 - **Auto-Deploy Lock Hardening** (2026-03-07): `auto-deploy.ps1` now enforces a single running instance via a global mutex, handles stale `.git/index.lock` files safely, and aborts deployment steps on command failures instead of continuing. `setup-auto-deploy.ps1` now sets scheduled task `-MultipleInstances IgnoreNew`.
+- **Security Hardening** (2026-03-09):
+  - `helmet` added for HTTP security headers (X-Frame-Options, X-Content-Type-Options, etc.)
+  - `JWT_SECRET` no longer has a fallback default — server refuses to start if not set or equals 'changeme'
+  - `VITE_ADMIN_PIN` fallback removed from server — only `ADMIN_PIN` env var is read to prevent client-side leakage
+  - PIN verify endpoint rate-limited (5 attempts per 15 minutes) to prevent brute force
+  - `GET /api/data/:type` and `GET /api/data/:type/:id` now require authentication (previously open to anyone)
+  - Attendance data leak fixed — cadets only see their own records via proper auth middleware instead of fragile try/catch fallback
+  - File upload (`POST /api/upload`) now requires authentication, validates MIME type (JPEG/PNG/GIF/WebP/PDF/TXT), enforces 5 MB limit, uses randomized filenames
+  - `POST /api/upload/ticket-evidence` alias added to match client-side `api.uploadTicketEvidence` endpoint
+  - `express.json()` limited to 1 MB to prevent request body abuse
+- **Deploy Email Alerting** (2026-03-09): `auto-deploy.ps1` now writes `data/deploy-status.json` on success/failure and sends email on deploy failure via SMTP (configured via `SMTP_TO`, `SMTP_FROM`, `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in `.env.local`).
+- **Deploy Status in Integrity Tab** (2026-03-09): `GET /api/integrity-check` and `/api/integrity-check/count` now include Deployment category. If the last deploy failed, a prominent pulsing red banner appears at the top of the Integrity tab and the tab badge count increases.
 
 ---
 

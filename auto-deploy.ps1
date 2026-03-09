@@ -38,6 +38,40 @@ $HIBERNATE_THRESHOLD = 2592000  # 30 days in seconds
 $script:LastCommitTime = Get-Date
 $script:Mode = "normal"  # normal, burst, cooldown, idle
 
+# --- Deploy status file (read by the web server for integrity checks) ---
+$DeployStatusFile = Join-Path $ProjectDir "data\deploy-status.json"
+
+# --- Email alerting configuration ---
+# Set these in .env.local on the server, or edit them here directly.
+# If SMTP_TO is empty, email alerts are disabled.
+$script:SmtpTo       = $env:SMTP_TO       # e.g. 'you@example.com'
+$script:SmtpFrom     = $env:SMTP_FROM     # e.g. 'deploy@flightpoints.uk'
+$script:SmtpServer   = $env:SMTP_SERVER   # e.g. 'smtp.gmail.com'
+$script:SmtpPort     = if ($env:SMTP_PORT) { [int]$env:SMTP_PORT } else { 587 }
+$script:SmtpUser     = $env:SMTP_USER     # e.g. 'you@gmail.com'
+$script:SmtpPass     = $env:SMTP_PASS     # app-specific password
+
+# Load SMTP settings from .env.local if environment variables are not set
+function Load-EnvSmtp {
+    $envFile = Join-Path $ProjectDir '.env.local'
+    if (-not (Test-Path $envFile)) { return }
+    Get-Content $envFile | ForEach-Object {
+        if ($_ -match '^\s*(SMTP_\w+)\s*=\s*(.+)$') {
+            $key = $Matches[1].Trim()
+            $val = $Matches[2].Trim().Trim('"').Trim("'")
+            switch ($key) {
+                'SMTP_TO'     { if (-not $script:SmtpTo)     { $script:SmtpTo     = $val } }
+                'SMTP_FROM'   { if (-not $script:SmtpFrom)   { $script:SmtpFrom   = $val } }
+                'SMTP_SERVER' { if (-not $script:SmtpServer) { $script:SmtpServer = $val } }
+                'SMTP_PORT'   { if (-not $script:SmtpPort -or $script:SmtpPort -eq 587) { $script:SmtpPort = [int]$val } }
+                'SMTP_USER'   { if (-not $script:SmtpUser)   { $script:SmtpUser   = $val } }
+                'SMTP_PASS'   { if (-not $script:SmtpPass)   { $script:SmtpPass   = $val } }
+            }
+        }
+    }
+}
+Load-EnvSmtp
+
 function Write-Log {
     param([string]$Message)
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -192,6 +226,76 @@ function Enter-HeightenedMode {
     Write-Log "MODE -> BURST (every $($BURST_INTERVAL)s for 30 min)"
 }
 
+function Write-DeployStatus {
+    param(
+        [string]$Status,   # 'success' or 'failed'
+        [string]$Message,
+        [string]$ErrorDetails = '',
+        [string]$Commit = ''
+    )
+    try {
+        $dataDir = Join-Path $ProjectDir 'data'
+        if (-not (Test-Path $dataDir)) {
+            New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+        }
+        $obj = @{
+            status    = $Status
+            message   = $Message
+            error     = $ErrorDetails
+            commit    = $Commit
+            timestamp = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+        }
+        $obj | ConvertTo-Json -Depth 3 | Set-Content -Path $DeployStatusFile -Encoding UTF8 -Force
+    }
+    catch {
+        Write-Log "WARNING: Failed to write deploy status file: $_"
+    }
+}
+
+function Send-DeployFailureEmail {
+    param(
+        [string]$ErrorMessage
+    )
+    # Skip if email is not configured
+    if (-not $script:SmtpTo -or -not $script:SmtpServer -or -not $script:SmtpFrom) {
+        Write-Log "Email alerting not configured (SMTP_TO/SMTP_SERVER/SMTP_FROM). Skipping email."
+        return
+    }
+    try {
+        $subject = "[Flight-Points] Auto-Deploy FAILED — $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+        $body = @"
+Flight-Points Auto-Deploy has failed.
+
+Time:    $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+Server:  $env:COMPUTERNAME
+Branch:  $Branch
+Error:   $ErrorMessage
+
+Check the deploy log at: $LogFile
+Integrity tab on the website will also show this failure.
+"@
+        $mailParams = @{
+            To         = $script:SmtpTo
+            From       = $script:SmtpFrom
+            Subject    = $subject
+            Body       = $body
+            SmtpServer = $script:SmtpServer
+            Port       = $script:SmtpPort
+            UseSsl     = $true
+        }
+        if ($script:SmtpUser -and $script:SmtpPass) {
+            $secPass = ConvertTo-SecureString $script:SmtpPass -AsPlainText -Force
+            $cred = New-Object System.Management.Automation.PSCredential($script:SmtpUser, $secPass)
+            $mailParams['Credential'] = $cred
+        }
+        Send-MailMessage @mailParams -ErrorAction Stop
+        Write-Log "Deploy failure email sent to $($script:SmtpTo)"
+    }
+    catch {
+        Write-Log "WARNING: Failed to send deploy failure email: $_"
+    }
+}
+
 function Invoke-Deploy {
     Write-Log "=== Starting deployment ==="
 
@@ -267,10 +371,17 @@ function Invoke-Deploy {
             Write-Log "Service 'flight-points' not found. Skipping restart."
         }
 
+        # Get current commit hash for status report
+        $currentCommit = (& git rev-parse --short HEAD 2>&1).Trim()
+
         Write-Log "=== Deployment complete ==="
+        Write-DeployStatus -Status 'success' -Message 'Deployment completed successfully' -Commit $currentCommit
     }
     catch {
-        Write-Log "ERROR during deployment: $_"
+        $errMsg = "$_"
+        Write-Log "ERROR during deployment: $errMsg"
+        Write-DeployStatus -Status 'failed' -Message 'Auto-deploy failed' -ErrorDetails $errMsg
+        Send-DeployFailureEmail -ErrorMessage $errMsg
     }
     finally {
         Pop-Location

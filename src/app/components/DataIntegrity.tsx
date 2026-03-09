@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { CheckCircle, XCircle, AlertTriangle, Shield, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Shield, RefreshCw, ChevronDown, ChevronRight, Rocket } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { Button } from './ui/button';
@@ -107,6 +107,7 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
       case 'Rewards': return '🏆';
       case 'Attendance': return '📅';
       case 'Statistics': return '📊';
+      case 'Deployment': return '🚀';
       default: return '🔍';
     }
   };
@@ -130,6 +131,27 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
 
   return (
     <div className="space-y-6">
+      {/* Deploy Failure Banner */}
+      {checks.some(c => c.category === 'Deployment' && c.status === 'fail') && (
+        <Alert className="bg-red-100 border-red-400 border-2 animate-pulse">
+          <Rocket className="size-5 text-red-700" />
+          <AlertTitle className="text-red-900 font-bold text-lg">Deployment Failed!</AlertTitle>
+          <AlertDescription className="text-red-800">
+            The last auto-deploy failed. The live site may be running an outdated version.
+            Check the deploy log on the server or contact the system administrator.
+            <br />
+            <span className="font-mono text-sm mt-1 block">
+              {checks.find(c => c.category === 'Deployment' && c.status === 'fail')?.message}
+            </span>
+            {checks.find(c => c.category === 'Deployment' && c.status === 'fail')?.details && (
+              <span className="font-mono text-xs mt-1 block text-red-700">
+                Error: {checks.find(c => c.category === 'Deployment' && c.status === 'fail')?.details}
+              </span>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-200">
