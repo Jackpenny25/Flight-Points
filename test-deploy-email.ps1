@@ -75,7 +75,7 @@ Write-Host ""
 Write-Host "Sending test email..." -ForegroundColor Yellow
 
 try {
-    $subject = "[Flight-Points] Deploy Email Test — $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+    $subject = "[Flight-Points] Deploy Email Test - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
     $body = @"
 This is a TEST email from the Flight-Points deployment system.
 
@@ -117,7 +117,7 @@ Flight-Points Auto-Deploy Email Alert System
     Write-Host ""
     Write-Host "SUCCESS! Test email sent to $script:SmtpTo" -ForegroundColor Green
     Write-Host ""
-    Write-Host "Check your inbox. If you don't see it:" -ForegroundColor Yellow
+    Write-Host "Check your inbox. If you do not see it:" -ForegroundColor Yellow
     Write-Host "  1. Check spam/junk folder"
     Write-Host "  2. Verify SMTP credentials and server settings"
     Write-Host "  3. Ensure firewall allows outbound SMTP traffic"
