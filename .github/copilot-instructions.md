@@ -121,6 +121,19 @@ Use this exact checklist on the Windows server where `auto-deploy.ps1` runs:
   - `express.json()` limited to 1 MB to prevent request body abuse
 - **Deploy Email Alerting** (2026-03-09): `auto-deploy.ps1` now writes `data/deploy-status.json` on success/failure and sends email on deploy failure via SMTP (configured via `SMTP_TO`, `SMTP_FROM`, `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in `.env.local`).
 - **Deploy Status in Integrity Tab** (2026-03-09): `GET /api/integrity-check` and `/api/integrity-check/count` now include Deployment category. If the last deploy failed, a prominent pulsing red banner appears at the top of the Integrity tab and the tab badge count increases.
+- **Usage Rate Limiting** (2026-03-10): 
+  - Daily limits enforceable on attendance bulk submission and points giving:
+    - `pointgiver` / `staff`: 1 attendance report + 20 points/day
+    - `snco` / `admin`: 5 attendance reports + 30 points/day
+  - Limits checked before processing requests; on violation, returns HTTP 429 + email alert to admins
+  - Infrastructure: `checkAttendanceLimit()`, `checkPointsLimit()`, `incrementAttendanceCount()`, `incrementPointsCount()` in `server/server.ts`
+  - Usage tracker resets daily based on `getToday()` ISO date string
+  - `notifyAdminOfLimitReached()` sends email when user hits limit
+- **Global Error Alert Handler** (2026-03-10): 
+  - Global Express error handler now catches all 5xx errors and sends email alerts to admins
+  - Prevents exposure of stack traces to client in production; development mode includes error details
+  - Email alert includes: timestamp, status code, endpoint, user, IP, first 10 lines of stack trace
+  - Error handler registered after all routes and before server start
 
 ---
 
