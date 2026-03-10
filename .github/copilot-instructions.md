@@ -1,10 +1,10 @@
 
-
+Dont commit yourself as it confuses me.
 ## Flight-Points Copilot Instructions
 
 Please frequently update when you learn new things about the project or make decisions. This file is intended to be a single source of truth for how to work on the project, and it should be updated as the project evolves.
 
-Always test using `npm run build` at the end of any large changes. If you break something, fix it immediately.
+Always test using `npm run build` and `npm run server` at the end of any large changes. If you break something, fix it immediately. Unlwess it is broken on purpose.
 
 ## Project Stack
 - **Frontend**: React + TypeScript + Vite + Tailwind CSS + shadcn/ui components
@@ -19,6 +19,55 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - Manual deploy: `Deploy.bat` (requires admin for service restart).
 - Auto-deploy setup: run `setup-auto-deploy.ps1` as Administrator on server.
 - `.env.local` must contain `DATABASE_URL`, `JWT_SECRET`, and `ADMIN_PIN` (6 digits).
+
+### Server & Cloudflare Tunnel Automation
+Use `start-server-and-tunnel.ps1` to run both `npm run server` and `cloudflared tunnel` with auto-restart:
+- **Run manually:** `.\start-server-and-tunnel.ps1` in PowerShell (repo root)
+- **Run on server startup:** Register as Scheduled Task (Administrator PowerShell): 
+  ```powershell
+  $TaskName = "Flight-Points_Server_Tunnel"
+  $ScriptPath = "C:\Users\Admin\...\Flight-Points\start-server-and-tunnel.ps1"
+  $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`""
+  $Trigger = New-ScheduledTaskTrigger -AtStartup
+  Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -RunLevel Highest
+  ```
+- **Logs:** Both services log to `C:\inetpub\wwwroot\Flight-Points\Logs\Server` and `Logs\Tunnel` with timestamps
+- **Monitor:** Tail logs in PowerShell: `Get-Content -Path "C:\inetpub\wwwroot\Flight-Points\Logs\Server\*.log" -Tail 20`
+- **Stop:** Press Ctrl+C in the PowerShell window; gracefully shuts down both services
+- **Important:** `npm run server` is the API process (Express backend). If this task is running, the API is running.
+
+### What Should Restart Automatically
+- **Server reboot:** Scheduled Task `Flight-Points_Server_Tunnel` starts both API server and Cloudflare tunnel.
+- **API crash while script is running:** `start-server-and-tunnel.ps1` auto-restarts API.
+- **Tunnel crash while script is running:** `start-server-and-tunnel.ps1` auto-restarts tunnel.
+- **Auto-deploy checker:** separate Scheduled Task for `auto-deploy.ps1` should also be enabled.
+- **Backups:** separate Scheduled Task `FlightPoints-Weekly-Backup` runs Sundays at 03:00.
+
+Startup verification commands:
+```powershell
+Get-ScheduledTask -TaskName "Flight-Points_Server_Tunnel","FlightPoints-Weekly-Backup"
+Get-ScheduledTaskInfo -TaskName "Flight-Points_Server_Tunnel"
+Get-ScheduledTaskInfo -TaskName "FlightPoints-Weekly-Backup"
+```
+
+### Centralized Log Locations
+All Flight-Points logs go to `C:\inetpub\wwwroot\Flight-Points\Logs\`:
+- **Server** (`\Logs\Server\`): Express.js server output (started by start-server-and-tunnel.ps1)
+- **Server errors** (`\Logs\Server\server-errors-YYYY-MM-DD.log`): global 5xx error log entries from `server/server.ts`
+- **Tunnel** (`\Logs\Tunnel\`): Cloudflare tunnel output (started by start-server-and-tunnel.ps1)
+- **Deploy** (`\Logs\Deploy\`): auto-deploy.ps1 logs (deployment checks, git pull, build output)
+- **Backup** (`\Logs\Backup\`): server-backup.ps1 logs (database and file backup operations)
+
+Monitor all logs: `Get-ChildItem "C:\inetpub\wwwroot\Flight-Points\Logs\**\*.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 20 FullName,LastWriteTime`
+
+### Test Website Error Alerting
+Use this safe admin-only endpoint to test email + error file logging:
+1. Log in as `snco` or `admin` and copy JWT token.
+2. Send test request:
+  ```powershell
+  Invoke-RestMethod -Method Post -Uri "http://localhost:3001/api/test-error-alert" -Headers @{ Authorization = "Bearer <JWT_TOKEN>" }
+  ```
+3. Expected result: HTTP 500 response, email alert sent, and entry appended to `\Logs\Server\server-errors-YYYY-MM-DD.log`.
 
 ### Deploy failure email alerts (server setup)
 Use this exact checklist on the Windows server where `auto-deploy.ps1` runs:
@@ -119,9 +168,8 @@ Use this exact checklist on the Windows server where `auto-deploy.ps1` runs:
   - File upload (`POST /api/upload`) now requires authentication, validates MIME type (JPEG/PNG/GIF/WebP/PDF/TXT), enforces 5 MB limit, uses randomized filenames
   - `POST /api/upload/ticket-evidence` alias added to match client-side `api.uploadTicketEvidence` endpoint
   - `express.json()` limited to 1 MB to prevent request body abuse
-- **Deploy Email Alerting** (2026-03-09): `auto-deploy.ps1` now writes `data/deploy-status.json` on success/failure and sends email on deploy failure via SMTP (configured via `SMTP_TO`, `SMTP_FROM`, `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in `.env.local`). Email includes error details, commit info, last commit message, troubleshooting steps, and log file location.
-- **Deploy Status in Integrity Tab** (2026-03-09): `GET /api/integrity-check` and `/api/integrity-check/count` now include Deployment category. If the last deploy failed, a prominent pulsing red banner appears at the top of the Integrity tab with full error details, timestamp, and troubleshooting information. The tab badge count increases to reflect the failure.
-- **Test Deploy Email** (2026-03-09): `test-deploy-email.ps1` script added at repo root to verify SMTP configuration without triggering actual deploy failures. Run `.\test-deploy-email.ps1` to test email settings.
+- **Deploy Email Alerting** (2026-03-09): `auto-deploy.ps1` now writes `data/deploy-status.json` on success/failure and sends email on deploy failure via SMTP (configured via `SMTP_TO`, `SMTP_FROM`, `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in `.env.local`).
+- **Deploy Status in Integrity Tab** (2026-03-09): `GET /api/integrity-check` and `/api/integrity-check/count` now include Deployment category. If the last deploy failed, a prominent pulsing red banner appears at the top of the Integrity tab and the tab badge count increases.
 
 ---
 

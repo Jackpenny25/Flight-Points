@@ -46,8 +46,16 @@ app.set('trust proxy', 1);
 
 const DATA_DIR = path.join(__dirname, '../data');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+const CENTRAL_LOG_ROOT = process.env.LOG_ROOT || 'C:\\inetpub\\wwwroot\\Flight-Points\\Logs';
+const SERVER_LOG_DIR = path.join(CENTRAL_LOG_ROOT, 'Server');
+const SERVER_ERROR_LOG_FILE = path.join(SERVER_LOG_DIR, `server-errors-${new Date().toISOString().slice(0, 10)}.log`);
 // Ensure directories exist
 [DATA_DIR, UPLOADS_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
+[SERVER_LOG_DIR].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -133,6 +141,182 @@ if (!JWT_SECRET || JWT_SECRET === 'changeme') {
   process.exit(1);
 }
 
+// ========== EMAIL ALERTING (FOR LIMITS AND ERRORS) ==========
+function getSmtpConfig() {
+  return {
+    to: process.env.SMTP_TO || '',
+    from: process.env.SMTP_FROM || '',
+    server: process.env.SMTP_SERVER || '',
+    port: Number(process.env.SMTP_PORT || 587),
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+  };
+}
+
+function isEmailConfigured(): boolean {
+  const cfg = getSmtpConfig();
+  return !!(cfg.to && cfg.from && cfg.server);
+}
+
+async function sendAlertEmail(subject: string, body: string): Promise<void> {
+  if (!isEmailConfigured()) {
+    console.log('[Email] Alerting not configured. Skipping email.');
+    return;
+  }
+  try {
+    const nodemailer = await import('nodemailer');
+    const cfg = getSmtpConfig();
+    const transporter = nodemailer.default.createTransport({
+      host: cfg.server,
+      port: cfg.port,
+      secure: cfg.port === 465,
+      auth: cfg.user && cfg.pass ? { user: cfg.user, pass: cfg.pass } : undefined,
+    });
+    await transporter.sendMail({
+      from: cfg.from,
+      to: cfg.to,
+      subject,
+      text: body,
+    });
+    console.log(`[Email] Alert sent: "${subject}"`);
+  } catch (err) {
+    console.error('[Email] Failed to send alert:', err);
+  }
+}
+
+// ========== USAGE RATE LIMITING (ATTENDANCE & POINTS) ==========
+interface UsageTracker {
+  [userId: string]: {
+    attendanceBulk: { count: number; date: string };
+    points: { totalPoints: number; date: string };
+  };
+}
+
+const usageTracker: UsageTracker = {};
+
+function getToday(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+function getUserUsage(userId: string) {
+  if (!usageTracker[userId]) {
+    usageTracker[userId] = {
+      attendanceBulk: { count: 0, date: getToday() },
+      points: { totalPoints: 0, date: getToday() },
+    };
+  }
+  const usage = usageTracker[userId];
+  // Reset if date changed
+  const today = getToday();
+  if (usage.attendanceBulk.date !== today) {
+    usage.attendanceBulk = { count: 0, date: today };
+  }
+  if (usage.points.date !== today) {
+    usage.points = { totalPoints: 0, date: today };
+  }
+  return usage;
+}
+
+function checkAttendanceLimit(user: UserJwtPayload): { allowed: boolean; message?: string; remaining?: number } {
+  const role = (user.role || '').toLowerCase();
+  if (!['snco', 'admin', 'pointgiver', 'staff'].includes(role)) {
+    return { allowed: false, message: 'You do not have permission to submit attendance' };
+  }
+
+  const usage = getUserUsage(user.id);
+  const maxReports = role === 'snco' || role === 'admin' ? 5 : 1;
+  const current = usage.attendanceBulk.count;
+
+  if (current >= maxReports) {
+    return {
+      allowed: false,
+      message: `Attendance limit reached. You have submitted ${current}/${maxReports} reports today.`,
+    };
+  }
+
+  return {
+    allowed: true,
+    remaining: maxReports - current - 1,
+  };
+}
+
+function checkPointsLimit(user: UserJwtPayload, pointsValue: number): { allowed: boolean; message?: string; remaining?: number } {
+  const role = (user.role || '').toLowerCase();
+  if (!['snco', 'admin', 'staff', 'pointgiver'].includes(role)) {
+    return { allowed: false, message: 'You do not have permission to give points' };
+  }
+
+  const usage = getUserUsage(user.id);
+  const maxPoints = role === 'snco' || role === 'admin' ? 30 : 20;
+  const current = usage.points.totalPoints;
+  const projected = current + pointsValue;
+
+  if (projected > maxPoints) {
+    return {
+      allowed: false,
+      message: `Points limit exceeded. You can give a maximum of ${maxPoints} points per day. You have already given ${current} points.`,
+    };
+  }
+
+  return {
+    allowed: true,
+    remaining: maxPoints - projected,
+  };
+}
+
+function incrementAttendanceCount(userId: string): void {
+  const usage = getUserUsage(userId);
+  usage.attendanceBulk.count++;
+}
+
+function incrementPointsCount(userId: string, points: number): void {
+  const usage = getUserUsage(userId);
+  usage.points.totalPoints += points;
+}
+
+async function notifyAdminOfLimitReached(
+  user: UserJwtPayload,
+  limitType: 'attendance' | 'points',
+  details: string
+): Promise<void> {
+  const subject = `[Flight-Points] User limit reached - ${limitType}`;
+  const body = `
+User: ${user.name} (${user.email})
+Role: ${user.role}
+Limit Type: ${limitType}
+Details: ${details}
+Time: ${new Date().toISOString()}
+`;
+  await sendAlertEmail(subject, body);
+}
+
+// Middleware to catch unhandled errors and send alerts
+function globalErrorHandler(
+  err: any,
+  req: express.Request,
+  res: express.Response,
+  next: NextFunction
+): void {
+  console.error('[Error]', err?.message || err);
+  
+  // Don't alert on client errors; only on server errors (5xx)
+  if (res.statusCode >= 500) {
+    const errorBody = `
+ERROR ALERT
+Server: ${req.hostname}
+Path: ${req.method} ${req.path}
+Error: ${err?.message || String(err)}
+Stack: ${err?.stack || 'No stack trace'}
+Time: ${new Date().toISOString()}
+`;
+    sendAlertEmail('[Flight-Points] Server Error Alert', errorBody).catch(e => console.error('Failed to send error alert:', e));
+  }
+
+  res.status(res.statusCode >= 400 ? res.statusCode : 500).json({
+    error: 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { detail: err?.message }),
+  });
+}
 
 // Middleware to require authentication
 function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
@@ -1047,6 +1231,14 @@ app.post('/api/points', requireAuth, async (req: AuthRequest, res: Response) => 
       return res.status(400).json({ error: 'cadetName, points, and reason are required' });
     }
 
+    // Check points limit
+    const pointsLimitCheck = checkPointsLimit(req.user!, parseFloat(pointsValue));
+    if (!pointsLimitCheck.allowed) {
+      // Notify admin
+      await notifyAdminOfLimitReached(req.user!, 'points', `${req.user?.name} tried to give ${pointsValue} points but hit daily limit`);
+      return res.status(429).json({ error: pointsLimitCheck.message });
+    }
+
     // Block giving points to NCOs
     const ncoCheck = await query(
       'SELECT is_nco, flight FROM cadets WHERE LOWER(name) = LOWER($1) LIMIT 1',
@@ -1110,6 +1302,9 @@ app.post('/api/points', requireAuth, async (req: AuthRequest, res: Response) => 
       ]
     );
 
+    // Increment usage counter
+    incrementPointsCount(req.user!.id, parseFloat(pointsValue));
+
     const row = result.rows[0];
     res.status(201).json({
       id: row.id,
@@ -1120,6 +1315,7 @@ app.post('/api/points', requireAuth, async (req: AuthRequest, res: Response) => 
       points: row.points,
       type: row.type,
       givenBy: row.given_by,
+      pointsRemaining: pointsLimitCheck.remaining,
     });
   } catch (error) {
     console.error('Error in POST /api/points:', error);
@@ -1516,11 +1712,19 @@ app.put('/api/attendance/:id/status', requireAuth, requireRole(['snco', 'admin',
 });
 
 // POST /api/attendance/bulk — create a bulk attendance session with individual records
-app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'pointgiver']), async (req, res) => {
+app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'pointgiver']), async (req: AuthRequest, res) => {
   try {
     const { entries, date, flightFilter } = req.body;
     if (!entries || !Array.isArray(entries) || entries.length === 0) {
       return res.status(400).json({ error: 'entries array is required' });
+    }
+
+    // Check attendance limit
+    const attendanceLimitCheck = checkAttendanceLimit(req.user!);
+    if (!attendanceLimitCheck.allowed) {
+      // Notify admin
+      await notifyAdminOfLimitReached(req.user!, 'attendance', `${req.user?.name} tried to submit attendance but hit daily limit`);
+      return res.status(429).json({ error: attendanceLimitCheck.message });
     }
 
     const user = (req as any).user;
@@ -1577,6 +1781,9 @@ app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'poi
         }
       }
     }
+
+    // Increment usage counter for attendance
+    incrementAttendanceCount(req.user!.id);
 
     res.status(201).json({
       id: bulkId,
@@ -2684,6 +2891,14 @@ app.get('/api/deploy-status', requireAuth, requireRole(['snco', 'admin']), async
   }
 });
 
+// ========== ALERT TEST ENDPOINT (admin/snco only) ==========
+// Triggers a controlled 500 error so email alert + server error log can be validated.
+app.post('/api/test-error-alert', requireAuth, requireRole(['snco', 'admin']), (req: AuthRequest, _res: Response, next: NextFunction) => {
+  const err: any = new Error(`Intentional test error triggered by ${req.user?.name || 'unknown'}`);
+  err.statusCode = 500;
+  next(err);
+});
+
 // Serve static files from the dist folder
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -2694,6 +2909,66 @@ app.use((req, res, next) => {
     return next();
   }
   res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
+
+// Global error handler - catches 5xx errors and notifies admins
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  const statusCode = err.statusCode || 500;
+  const errorMsg = err.message || 'Internal Server Error';
+  const stack = err.stack || '';
+  const timestamp = new Date().toISOString();
+  const endpoint = (req as any).path || req.url;
+  const method = req.method;
+  const user = (req as AuthRequest).user?.name || 'unknown';
+
+  const errorLogEntry = [
+    `[${timestamp}] ${statusCode} ${method} ${endpoint}`,
+    `User: ${user}`,
+    `IP: ${req.ip}`,
+    `Error: ${errorMsg}`,
+    `Stack:`,
+    stack || '(no stack)',
+    '---',
+  ].join('\n');
+  try {
+    fs.appendFileSync(SERVER_ERROR_LOG_FILE, `${errorLogEntry}\n`);
+  } catch (logErr) {
+    console.error('Failed to write server error log file:', logErr);
+  }
+
+  // Log the error
+  console.error(`[${timestamp}] Error (${statusCode}):`, errorMsg);
+  if (stack) {
+    console.error('Stack:', stack.split('\n').slice(0, 5).join('\n'));
+  }
+
+  // Send email alert for 5xx errors
+  if (statusCode >= 500 && isEmailConfigured()) {
+    const emailBody = `
+Website Error Alert
+===================
+Timestamp: ${timestamp}
+Status: ${statusCode}
+Error: ${errorMsg}
+Endpoint: ${method} ${endpoint}
+User: ${user}
+IP: ${req.ip}
+
+Stack Trace:
+${stack.split('\n').slice(0, 10).join('\n')}
+    `.trim();
+
+    sendAlertEmail(`[Flight Points] Website Error: ${statusCode} ${errorMsg}`, emailBody).catch(e => {
+      console.error('Failed to send error alert email:', e);
+    });
+  }
+
+  // Return error response (don't expose stack to client in production)
+  const clientMsg = process.env.NODE_ENV === 'production' 
+    ? 'Internal server error. Admins have been notified.'
+    : errorMsg;
+  
+  res.status(statusCode).json({ error: clientMsg });
 });
 
 // Start server

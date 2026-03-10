@@ -18,7 +18,11 @@ param(
 
 $ErrorActionPreference = "Continue"
 $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$LogFile = Join-Path $ProjectDir "auto-deploy.log"
+$LogRoot = "C:\inetpub\wwwroot\Flight-Points\Logs\Deploy"
+if (!(Test-Path $LogRoot)) {
+    New-Item -ItemType Directory -Path $LogRoot -Force | Out-Null
+}
+$LogFile = Join-Path $LogRoot "auto-deploy-$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
 $Branch = "main"
 $MutexName = "Global\FlightPoints-AutoDeploy"
 $script:SingleInstanceMutex = $null
