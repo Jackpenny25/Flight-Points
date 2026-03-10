@@ -20,7 +20,7 @@ $KeepDays = 30
 
 # DATABASE BACKUP
 $EnableDatabaseBackup = $true
-$EnvFilePath = '.\.env.local'
+$EnvFilePath = Join-Path $PSScriptRoot '.env.local'
 # Leave blank to auto-detect from Program Files, or set full path e.g. 'C:\Program Files\PostgreSQL\18\bin\pg_dump.exe'
 $PgDumpPath = ''
 
