@@ -46,8 +46,16 @@ app.set('trust proxy', 1);
 
 const DATA_DIR = path.join(__dirname, '../data');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+const CENTRAL_LOG_ROOT = process.env.LOG_ROOT || 'C:\\inetpub\\wwwroot\\Flight-Points\\Logs';
+const SERVER_LOG_DIR = path.join(CENTRAL_LOG_ROOT, 'Server');
+const SERVER_ERROR_LOG_FILE = path.join(SERVER_LOG_DIR, `server-errors-${new Date().toISOString().slice(0, 10)}.log`);
 // Ensure directories exist
 [DATA_DIR, UPLOADS_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
+[SERVER_LOG_DIR].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -2883,6 +2891,14 @@ app.get('/api/deploy-status', requireAuth, requireRole(['snco', 'admin']), async
   }
 });
 
+// ========== ALERT TEST ENDPOINT (admin/snco only) ==========
+// Triggers a controlled 500 error so email alert + server error log can be validated.
+app.post('/api/test-error-alert', requireAuth, requireRole(['snco', 'admin']), (req: AuthRequest, _res: Response, next: NextFunction) => {
+  const err: any = new Error(`Intentional test error triggered by ${req.user?.name || 'unknown'}`);
+  err.statusCode = 500;
+  next(err);
+});
+
 // Serve static files from the dist folder
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -2900,22 +2916,38 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   const statusCode = err.statusCode || 500;
   const errorMsg = err.message || 'Internal Server Error';
   const stack = err.stack || '';
+  const timestamp = new Date().toISOString();
+  const endpoint = (req as any).path || req.url;
+  const method = req.method;
+  const user = (req as AuthRequest).user?.name || 'unknown';
+
+  const errorLogEntry = [
+    `[${timestamp}] ${statusCode} ${method} ${endpoint}`,
+    `User: ${user}`,
+    `IP: ${req.ip}`,
+    `Error: ${errorMsg}`,
+    `Stack:`,
+    stack || '(no stack)',
+    '---',
+  ].join('\n');
+  try {
+    fs.appendFileSync(SERVER_ERROR_LOG_FILE, `${errorLogEntry}\n`);
+  } catch (logErr) {
+    console.error('Failed to write server error log file:', logErr);
+  }
 
   // Log the error
-  console.error(`[${new Date().toISOString()}] Error (${statusCode}):`, errorMsg);
+  console.error(`[${timestamp}] Error (${statusCode}):`, errorMsg);
   if (stack) {
     console.error('Stack:', stack.split('\n').slice(0, 5).join('\n'));
   }
 
   // Send email alert for 5xx errors
   if (statusCode >= 500 && isEmailConfigured()) {
-    const endpoint = (req as any).path || req.url;
-    const method = req.method;
-    const user = (req as AuthRequest).user?.name || 'unknown';
     const emailBody = `
 Website Error Alert
 ===================
-Timestamp: ${new Date().toISOString()}
+Timestamp: ${timestamp}
 Status: ${statusCode}
 Error: ${errorMsg}
 Endpoint: ${method} ${endpoint}
