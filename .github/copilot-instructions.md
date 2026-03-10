@@ -20,6 +20,30 @@ Always test using `npm run build` at the end of any large changes. If you break 
 - Auto-deploy setup: run `setup-auto-deploy.ps1` as Administrator on server.
 - `.env.local` must contain `DATABASE_URL`, `JWT_SECRET`, and `ADMIN_PIN` (6 digits).
 
+### Server & Cloudflare Tunnel Automation
+Use `start-server-and-tunnel.ps1` to run both `npm run server` and `cloudflared tunnel` with auto-restart:
+- **Run manually:** `.\start-server-and-tunnel.ps1` in PowerShell (repo root)
+- **Run on server startup:** Register as Scheduled Task (Administrator PowerShell): 
+  ```powershell
+  $TaskName = "Flight-Points_Server_Tunnel"
+  $ScriptPath = "C:\Users\Admin\...\Flight-Points\start-server-and-tunnel.ps1"
+  $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`""
+  $Trigger = New-ScheduledTaskTrigger -AtStartup
+  Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -RunLevel Highest
+  ```
+- **Logs:** Both services log to `C:\inetpub\wwwroot\Flight-Points\Logs\Server` and `Logs\Tunnel` with timestamps
+- **Monitor:** Tail logs in PowerShell: `Get-Content -Path "C:\inetpub\wwwroot\Flight-Points\Logs\Server\*.log" -Wait -Tail 20`
+- **Stop:** Press Ctrl+C in the PowerShell window; gracefully shuts down both services
+
+### Centralized Log Locations
+All Flight-Points logs go to `C:\inetpub\wwwroot\Flight-Points\Logs\`:
+- **Server** (`\Logs\Server\`): Express.js server output (started by start-server-and-tunnel.ps1)
+- **Tunnel** (`\Logs\Tunnel\`): Cloudflare tunnel output (started by start-server-and-tunnel.ps1)
+- **Deploy** (`\Logs\Deploy\`): auto-deploy.ps1 logs (deployment checks, git pull, build output)
+- **Backup** (`\Logs\Backup\`): server-backup.ps1 logs (database and file backup operations)
+
+Monitor all logs: `Get-Content -Path "C:\inetpub\wwwroot\Flight-Points\Logs\**\*.log" -Wait -Tail 20`
+
 ### Deploy failure email alerts (server setup)
 Use this exact checklist on the Windows server where `auto-deploy.ps1` runs:
 

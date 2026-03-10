@@ -13,6 +13,9 @@ $ErrorActionPreference = 'Stop'
 # ---------- CONFIGURATION (EDIT THESE) ----------
 $BackupName = 'flight-points'
 $BackupRoot = 'C:\inetpub\wwwroot\Flight-Points\Backups'
+$LogDir = 'C:\inetpub\wwwroot\Flight-Points\Logs\Backup'
+$LogFile = Join-Path $LogDir "backup-$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
+if (!(Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
 $KeepDays = 30
 
 # DATABASE BACKUP
@@ -64,7 +67,7 @@ if ($EnableDatabaseBackup -and [string]::IsNullOrWhiteSpace($PgDumpPath)) {
         throw "pg_dump not found. Set `$PgDumpPath in the CONFIGURATION section to the full path of pg_dump.exe"
     }
 
-    Write-Host "Auto-detected pg_dump: $PgDumpPath"
+Write-Log "Auto-detected pg_dump: $PgDumpPath"
 }
 
 function Get-DatabaseUrlFromEnvFile {
@@ -93,6 +96,17 @@ function Get-DatabaseUrlFromEnvFile {
     }
 
     return $value
+}
+
+function Write-Log {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message
+    )
+    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $line = "[$timestamp] $Message"
+    Write-Host $line
+    Add-Content -Path $LogFile -Value $line -ErrorAction SilentlyContinue
 }
 
 function New-SafeName {
@@ -128,11 +142,11 @@ if ($EnableFileBackup -and -not (Test-Path -Path $fileBackupRoot)) {
     New-Item -ItemType Directory -Path $fileBackupRoot -Force | Out-Null
 }
 
-Write-Host "Starting backup: $BackupName"
-Write-Host "Backup root: $BackupRoot"
+Write-Log "Starting backup: $BackupName"
+Write-Log "Backup root: $BackupRoot"
 
 if ($EnableDatabaseBackup) {
-    Write-Host 'Running PostgreSQL backup...'
+    Write-Log 'Running PostgreSQL backup...'
 
     $databaseUrl = Get-DatabaseUrlFromEnvFile -FilePath $EnvFilePath
     $dbFilePath = Join-Path $dbBackupRoot ("$BackupName-db-$timestamp.dump")
@@ -142,7 +156,7 @@ if ($EnableDatabaseBackup) {
         throw "pg_dump failed with exit code $LASTEXITCODE"
     }
 
-    Write-Host "Database backup complete: $dbFilePath"
+    Write-Log "Database backup complete: $dbFilePath"
 }
 
 if ($EnableFileBackup) {
@@ -156,7 +170,7 @@ if ($EnableFileBackup) {
 
     New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
 
-    Write-Host 'Running file/folder backup...'
+    Write-Log 'Running file/folder backup...'
 
     $copiedCount = 0
     foreach ($source in $BackupSources) {
@@ -174,7 +188,7 @@ if ($EnableFileBackup) {
         $targetPath = Join-Path $stagingDir $targetName
 
         Copy-Item -Path $source -Destination $targetPath -Recurse -Force
-        Write-Host "Backed up: $source"
+        Write-Log "Backed up: $source"
         $copiedCount++
     }
 
@@ -190,10 +204,10 @@ if ($EnableFileBackup) {
 
         Compress-Archive -Path (Join-Path $stagingDir '*') -DestinationPath $zipPath -Force
         Remove-Item -Path $stagingDir -Recurse -Force
-        Write-Host "File backup complete: $zipPath"
+        Write-Log "File backup complete: $zipPath"
     } else {
         Move-Item -Path $stagingDir -Destination $backupDir -Force
-        Write-Host "File backup complete: $backupDir"
+        Write-Log "File backup complete: $backupDir"
     }
 }
 
@@ -215,4 +229,4 @@ if ($KeepDays -gt 0) {
     }
 }
 
-Write-Host 'Done.'
+Write-Log 'Done.'
