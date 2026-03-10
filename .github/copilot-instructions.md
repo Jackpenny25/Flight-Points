@@ -119,8 +119,9 @@ Use this exact checklist on the Windows server where `auto-deploy.ps1` runs:
   - File upload (`POST /api/upload`) now requires authentication, validates MIME type (JPEG/PNG/GIF/WebP/PDF/TXT), enforces 5 MB limit, uses randomized filenames
   - `POST /api/upload/ticket-evidence` alias added to match client-side `api.uploadTicketEvidence` endpoint
   - `express.json()` limited to 1 MB to prevent request body abuse
-- **Deploy Email Alerting** (2026-03-09): `auto-deploy.ps1` now writes `data/deploy-status.json` on success/failure and sends email on deploy failure via SMTP (configured via `SMTP_TO`, `SMTP_FROM`, `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in `.env.local`).
-- **Deploy Status in Integrity Tab** (2026-03-09): `GET /api/integrity-check` and `/api/integrity-check/count` now include Deployment category. If the last deploy failed, a prominent pulsing red banner appears at the top of the Integrity tab and the tab badge count increases.
+- **Deploy Email Alerting** (2026-03-09): `auto-deploy.ps1` now writes `data/deploy-status.json` on success/failure and sends email on deploy failure via SMTP (configured via `SMTP_TO`, `SMTP_FROM`, `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in `.env.local`). Email includes error details, commit info, last commit message, troubleshooting steps, and log file location.
+- **Deploy Status in Integrity Tab** (2026-03-09): `GET /api/integrity-check` and `/api/integrity-check/count` now include Deployment category. If the last deploy failed, a prominent pulsing red banner appears at the top of the Integrity tab with full error details, timestamp, and troubleshooting information. The tab badge count increases to reflect the failure.
+- **Test Deploy Email** (2026-03-09): `test-deploy-email.ps1` script added at repo root to verify SMTP configuration without triggering actual deploy failures. Run `.\test-deploy-email.ps1` to test email settings.
 
 ---
 

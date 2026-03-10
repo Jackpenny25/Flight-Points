@@ -262,17 +262,54 @@ function Send-DeployFailureEmail {
         return
     }
     try {
-        $subject = "[Flight-Points] Auto-Deploy FAILED — $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+        # Get current commit info for context
+        Push-Location $ProjectDir
+        $currentCommit = (& git rev-parse --short HEAD 2>&1).Trim()
+        $currentBranch = (& git rev-parse --abbrev-ref HEAD 2>&1).Trim()
+        $lastCommitMsg = (& git log -1 --pretty=%B 2>&1).Trim()
+        Pop-Location
+        
+        $subject = "[Flight-Points] Auto-Deploy FAILED - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
         $body = @"
-Flight-Points Auto-Deploy has failed.
+========================================
+FLIGHT-POINTS AUTO-DEPLOY FAILURE
+========================================
 
-Time:    $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-Server:  $env:COMPUTERNAME
-Branch:  $Branch
-Error:   $ErrorMessage
+Time:     $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+Server:   $env:COMPUTERNAME
+Branch:   $currentBranch
+Commit:   $currentCommit
 
-Check the deploy log at: $LogFile
-Integrity tab on the website will also show this failure.
+ERROR DETAILS:
+$ErrorMessage
+
+LAST COMMIT MESSAGE:
+$lastCommitMsg
+
+========================================
+WHAT TO DO NEXT:
+========================================
+
+1. Check the deploy log on the server:
+   $LogFile
+
+2. View the failure in the web app:
+   - Log in to Flight-Points
+   - Go to the Integrity tab
+   - Red banner will show the error
+
+3. Common fixes:
+   - TypeScript errors: Fix code and push
+   - npm install failed: Check package.json
+   - Service restart failed: Check if port 3001 is blocked
+
+4. Manual deploy (if needed):
+   - RDP to the server
+   - Run: Deploy.bat
+
+========================================
+
+This is an automated message from the Flight-Points deployment system.
 "@
         $mailParams = @{
             To         = $script:SmtpTo
