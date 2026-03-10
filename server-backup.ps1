@@ -18,6 +18,27 @@ $LogFile = Join-Path $LogDir "backup-$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').l
 if (!(Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
 $KeepDays = 30
 
+function Write-Log {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message
+    )
+    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $line = "[$timestamp] $Message"
+    Write-Host $line
+    Add-Content -Path $LogFile -Value $line -ErrorAction SilentlyContinue
+}
+
+if (!(Test-Path $LogFile)) {
+    New-Item -ItemType File -Path $LogFile -Force | Out-Null
+}
+
+trap {
+    $errText = $_ | Out-String
+    Write-Log "ERROR: $errText"
+    throw
+}
+
 # DATABASE BACKUP
 $EnableDatabaseBackup = $true
 $EnvFilePath = Join-Path $PSScriptRoot '.env.local'
@@ -34,6 +55,9 @@ $BackupSources = @(
     'C:\Path\To\AnotherFolder'
 )
 # -----------------------------------------------
+
+Write-Log "Backup script started. PSScriptRoot=$PSScriptRoot"
+Write-Log "Using env file path: $EnvFilePath"
 
 # Auto-detect pg_dump if not explicitly set
 if ($EnableDatabaseBackup -and [string]::IsNullOrWhiteSpace($PgDumpPath)) {
@@ -64,6 +88,7 @@ if ($EnableDatabaseBackup -and [string]::IsNullOrWhiteSpace($PgDumpPath)) {
     }
 
     if ([string]::IsNullOrWhiteSpace($PgDumpPath)) {
+        Write-Log "ERROR: pg_dump not found in PATH or default PostgreSQL install locations"
         throw "pg_dump not found. Set `$PgDumpPath in the CONFIGURATION section to the full path of pg_dump.exe"
     }
 
@@ -96,17 +121,6 @@ function Get-DatabaseUrlFromEnvFile {
     }
 
     return $value
-}
-
-function Write-Log {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message
-    )
-    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    $line = "[$timestamp] $Message"
-    Write-Host $line
-    Add-Content -Path $LogFile -Value $line -ErrorAction SilentlyContinue
 }
 
 function New-SafeName {
