@@ -46,16 +46,36 @@ app.set('trust proxy', 1);
 
 const DATA_DIR = path.join(__dirname, '../data');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
-const CENTRAL_LOG_ROOT = process.env.LOG_ROOT || 'C:\\inetpub\\wwwroot\\Flight-Points\\Logs';
-const SERVER_LOG_DIR = path.join(CENTRAL_LOG_ROOT, 'Server');
+const DEFAULT_CENTRAL_LOG_ROOT = 'C:\\inetpub\\wwwroot\\Flight-Points\\Logs';
+const LOCAL_LOG_ROOT = path.join(projectRoot, 'Logs');
+
+function resolveServerLogDir() {
+  const preferredRoot = process.env.LOG_ROOT || DEFAULT_CENTRAL_LOG_ROOT;
+  const preferredServerDir = path.join(preferredRoot, 'Server');
+  try {
+    if (!fs.existsSync(preferredServerDir)) {
+      fs.mkdirSync(preferredServerDir, { recursive: true });
+    }
+    return preferredServerDir;
+  } catch (error) {
+    const fallbackServerDir = path.join(LOCAL_LOG_ROOT, 'Server');
+    try {
+      if (!fs.existsSync(fallbackServerDir)) {
+        fs.mkdirSync(fallbackServerDir, { recursive: true });
+      }
+      console.warn(`Log root '${preferredRoot}' is not writable. Falling back to '${LOCAL_LOG_ROOT}'.`);
+      return fallbackServerDir;
+    } catch (fallbackError) {
+      console.error('Unable to create either preferred or fallback server log directories.', error, fallbackError);
+      return preferredServerDir;
+    }
+  }
+}
+
+const SERVER_LOG_DIR = resolveServerLogDir();
 const SERVER_ERROR_LOG_FILE = path.join(SERVER_LOG_DIR, `server-errors-${new Date().toISOString().slice(0, 10)}.log`);
 // Ensure directories exist
 [DATA_DIR, UPLOADS_DIR].forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-});
-[SERVER_LOG_DIR].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
