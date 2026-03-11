@@ -240,38 +240,31 @@ function checkAttendanceLimit(user: UserJwtPayload): { allowed: boolean; message
   };
 }
 
-function checkPointsLimit(user: UserJwtPayload, pointsValue: number): { allowed: boolean; message?: string; remaining?: number } {
+function checkPointsLimit(user: UserJwtPayload, pointsValue: number): { allowed: boolean; message?: string } {
   const role = (user.role || '').toLowerCase();
   if (!['snco', 'admin', 'staff', 'pointgiver'].includes(role)) {
     return { allowed: false, message: 'You do not have permission to give points' };
   }
 
-  const usage = getUserUsage(user.id);
-  const maxPoints = role === 'snco' || role === 'admin' ? 30 : 20;
-  const current = usage.points.totalPoints;
-  const projected = current + pointsValue;
+  if (!Number.isFinite(pointsValue)) {
+    return { allowed: false, message: 'Points value must be a valid number' };
+  }
 
-  if (projected > maxPoints) {
+  const maxPointsPerEntry = role === 'snco' || role === 'admin' ? 30 : 20;
+
+  if (Math.abs(pointsValue) > maxPointsPerEntry) {
     return {
       allowed: false,
-      message: `Points limit exceeded. You can give a maximum of ${maxPoints} points per day. You have already given ${current} points.`,
+      message: `Points limit exceeded. You can give a maximum of ${maxPointsPerEntry} points in a single entry.`,
     };
   }
 
-  return {
-    allowed: true,
-    remaining: maxPoints - projected,
-  };
+  return { allowed: true };
 }
 
 function incrementAttendanceCount(userId: string): void {
   const usage = getUserUsage(userId);
   usage.attendanceBulk.count++;
-}
-
-function incrementPointsCount(userId: string, points: number): void {
-  const usage = getUserUsage(userId);
-  usage.points.totalPoints += points;
 }
 
 async function notifyAdminOfLimitReached(
@@ -437,14 +430,17 @@ const PASSWORD_WORDS = [
 ];
 
 function generatePassword(): string {
-  const w1 = PASSWORD_WORDS[Math.floor(Math.random() * PASSWORD_WORDS.length)];
-  let w2 = PASSWORD_WORDS[Math.floor(Math.random() * PASSWORD_WORDS.length)];
+  const shortWords = PASSWORD_WORDS.filter((w) => w.length <= 5);
+  const sourceWords = shortWords.length >= 2 ? shortWords : PASSWORD_WORDS;
+
+  const w1 = sourceWords[Math.floor(Math.random() * sourceWords.length)];
+  let w2 = sourceWords[Math.floor(Math.random() * sourceWords.length)];
   // Avoid same word twice
   while (w2 === w1) {
-    w2 = PASSWORD_WORDS[Math.floor(Math.random() * PASSWORD_WORDS.length)];
+    w2 = sourceWords[Math.floor(Math.random() * sourceWords.length)];
   }
   const num = Math.floor(Math.random() * 90) + 10; // 10-99
-  return `${w1}-${w2}-${num}`;
+  return `${w1}${w2}${num}`;
 }
 
 function generateUsername(name: string): string {
@@ -1231,11 +1227,13 @@ app.post('/api/points', requireAuth, async (req: AuthRequest, res: Response) => 
       return res.status(400).json({ error: 'cadetName, points, and reason are required' });
     }
 
+    const numericPoints = parseFloat(pointsValue);
+
     // Check points limit
-    const pointsLimitCheck = checkPointsLimit(req.user!, parseFloat(pointsValue));
+    const pointsLimitCheck = checkPointsLimit(req.user!, numericPoints);
     if (!pointsLimitCheck.allowed) {
       // Notify admin
-      await notifyAdminOfLimitReached(req.user!, 'points', `${req.user?.name} tried to give ${pointsValue} points but hit daily limit`);
+      await notifyAdminOfLimitReached(req.user!, 'points', `${req.user?.name} tried to give ${pointsValue} points but exceeded per-entry limit`);
       return res.status(429).json({ error: pointsLimitCheck.message });
     }
 
@@ -1296,14 +1294,11 @@ app.post('/api/points', requireAuth, async (req: AuthRequest, res: Response) => 
         date || new Date().toISOString(),
         flight || '',
         reason,
-        parseFloat(pointsValue),
+        numericPoints,
         type || 'general',
         givenBy || req.user?.name || 'unknown',
       ]
     );
-
-    // Increment usage counter
-    incrementPointsCount(req.user!.id, parseFloat(pointsValue));
 
     const row = result.rows[0];
     res.status(201).json({
@@ -1315,7 +1310,6 @@ app.post('/api/points', requireAuth, async (req: AuthRequest, res: Response) => 
       points: row.points,
       type: row.type,
       givenBy: row.given_by,
-      pointsRemaining: pointsLimitCheck.remaining,
     });
   } catch (error) {
     console.error('Error in POST /api/points:', error);

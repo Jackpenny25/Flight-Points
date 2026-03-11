@@ -139,7 +139,7 @@ Use this exact checklist on the Windows server where `auto-deploy.ps1` runs:
 ## Auth & Accounts
 - Self-signup removed. Admins (snco) create accounts in the "Accounts" tab.
 - Usernames stored as `{username}@flightpoints.local` in `email` column. Login accepts just username.
-- Passwords: Word-Word-Number format (e.g. Eagle-Bravo-47).
+- Passwords: Two short words + number format (e.g. EagleBolt47).
 - `app_users.cadet_id` links to `cadets.id`. JWT includes `cadetId` and `flight` from linked cadet.
 - Admin PIN is env-based (6 digits in `.env.local`), verified server-side, restricted to snco.
 - Dashboard logo click (snco) opens PIN dialog; correct PIN activates admin mode (logo switches to logo-black.jpg).
@@ -168,6 +168,8 @@ Use this exact checklist on the Windows server where `auto-deploy.ps1` runs:
   - File upload (`POST /api/upload`) now requires authentication, validates MIME type (JPEG/PNG/GIF/WebP/PDF/TXT), enforces 5 MB limit, uses randomized filenames
   - `POST /api/upload/ticket-evidence` alias added to match client-side `api.uploadTicketEvidence` endpoint
   - `express.json()` limited to 1 MB to prevent request body abuse
+- **Password Format Update** (2026-03-11): Admin-created and reset passwords now use two short words plus a 2-digit number with no separators (e.g. `EagleBolt47`).
+- **Admin PIN Client Leak Fix** (2026-03-11): `PointsManager` no longer reads `VITE_ADMIN_PIN` or validates PIN in-browser. Admin unlock now uses server-side `POST /api/admin/verify-pin` only.
 - **Deploy Email Alerting** (2026-03-09): `auto-deploy.ps1` now writes `data/deploy-status.json` on success/failure and sends email on deploy failure via SMTP (configured via `SMTP_TO`, `SMTP_FROM`, `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in `.env.local`).
 - **Deploy Status in Integrity Tab** (2026-03-09): `GET /api/integrity-check` and `/api/integrity-check/count` now include Deployment category. If the last deploy failed, a prominent pulsing red banner appears at the top of the Integrity tab and the tab badge count increases.
 

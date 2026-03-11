@@ -44,10 +44,10 @@ Usernames should be **derived from the cadet's name** in a predictable, readable
 
 Generate a **secure, human-readable** password:
 
-- Format: `Word-Word-Number` (e.g. `Eagle-Bravo-47`, `Delta-Storm-83`)
+- Format: `WordWordNumber` (e.g. `EagleBolt47`, `DeltaStorm83`)
 - Use a curated word list of ~100 simple, memorable words (aviation/military themed where possible: Alpha, Bravo, Charlie, Delta, Eagle, Falcon, Hawk, Sierra, Tango, Victor, etc.)
 - The number is 2 digits (10–99).
-- This gives roughly 100 × 100 × 90 = 900,000 combinations — sufficient for a local/squadron app.
+- This gives roughly $N \times (N-1) \times 90$ combinations (where $N$ is the short-word list size) — sufficient for a local/squadron app.
 - The password is displayed ONCE to the admin at creation time, then stored as a bcrypt hash.
 - If the admin loses the password, they can use a "Reset Password" action to generate a new one.
 
@@ -72,7 +72,7 @@ Generate a **secure, human-readable** password:
 2. Check if an `app_users` record already exists with this `cadet_id`. If so, return 409 Conflict with a message like "This cadet already has an account" and include the existing username.
 3. Generate the username from the cadet's name (see rules above).
 4. Check for username collisions in `app_users` (by email pattern `{username}@flightpoints.local`).
-5. Generate the password (Word-Word-Number format).
+5. Generate the password (WordWordNumber format).
 6. Hash the password with bcrypt (cost 10).
 7. Insert into `app_users`:
    - `id`: `crypto.randomUUID()`
@@ -90,7 +90,7 @@ Generate a **secure, human-readable** password:
   "account": {
     "id": "new-user-uuid",
     "username": "john.smith",
-    "password": "Eagle-Bravo-47",
+    "password": "EagleBolt47",
     "name": "John Smith",
     "role": "cadet",
     "flight": "2"
@@ -111,7 +111,7 @@ Generate a **secure, human-readable** password:
 
 **Server logic:**
 1. Look up the user in `app_users`. Return 404 if not found.
-2. Generate a new password (same Word-Word-Number format).
+2. Generate a new password (same WordWordNumber format).
 3. Hash and update `password_hash` in `app_users`.
 4. Return the new plaintext password.
 
@@ -119,7 +119,7 @@ Generate a **secure, human-readable** password:
 ```json
 {
   "username": "john.smith",
-  "password": "Falcon-Delta-29"
+  "password": "FalconDelta29"
 }
 ```
 
@@ -145,7 +145,7 @@ Add a new Card section at the **top** of the Signups tab titled **"Create Accoun
 │                                                  │
 │  ┌─ Credentials (shown after creation) ────────┐ │
 │  │  Username: john.smith          [📋 Copy]    │ │
-│  │  Password: Eagle-Bravo-47     [📋 Copy]    │ │
+│  │  Password: EagleBolt47        [📋 Copy]    │ │
 │  │                                              │ │
 │  │  [📋 Copy Both]  [Print Slip]               │ │
 │  │                                              │ │
@@ -176,7 +176,7 @@ Add a new Card section at the **top** of the Signups tab titled **"Create Accoun
 
 ### Copy Functionality:
 - "Copy" buttons use `navigator.clipboard.writeText()`.
-- "Copy Both" copies: `Username: john.smith\nPassword: Eagle-Bravo-47`.
+- "Copy Both" copies: `Username: john.smith\nPassword: EagleBolt47`.
 - Show a brief toast: "Copied to clipboard".
 
 ### Print Slip (optional, nice-to-have):
@@ -185,7 +185,7 @@ Add a new Card section at the **top** of the Signups tab titled **"Create Accoun
   Flight Points — Your Login Details
   ──────────────────────────────────
   Username: john.smith
-  Password: Eagle-Bravo-47
+  Password: EagleBolt47
   
   Log in at: flightpoints.uk
   Change your password after first login.
@@ -223,7 +223,7 @@ LIMIT 1
 - **Password visibility:** The plaintext password is only returned once in the API response. It is never stored or retrievable after creation.
 - **HTTPS:** The app runs over HTTPS (flightpoints.uk), so credentials in transit are encrypted.
 - **Rate limiting:** The create-account endpoint inherits `requireAuth` + role checks. No additional rate limiting needed since only admins can call it.
-- **Brute force:** The login endpoint already has `authLimiter`. The generated passwords (900K+ combinations) are sufficient for a squadron-level app.
+- **Brute force:** The login endpoint already has `authLimiter`. The generated passwords have a large combination space and are sufficient for a squadron-level app.
 - **No email verification needed:** These are admin-provisioned accounts; the email is synthetic (`@flightpoints.local`).
 
 ---

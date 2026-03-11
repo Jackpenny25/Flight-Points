@@ -31,11 +31,6 @@ interface PointsManagerProps {
 }
 
 export function PointsManager({ userRole }: PointsManagerProps) {
-  const ADMIN_PIN = (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_ADMIN_PIN : '') || '';
-  const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
-    typeof window !== 'undefined' && sessionStorage.getItem('adminPinVerified') === 'true'
-  );
-
   const [points, setPoints] = useState<Point[]>([]);
   const [cadets, setCadets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,30 +53,48 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     flight: '',
   });
 
-  const ensureAdminPin = () => {
+  const ensureAdminPin = async (): Promise<boolean> => {
     if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
-    if (userRole === 'snco') {
-      sessionStorage.setItem('adminPinVerified', 'true');
-      setAdminUnlocked(true);
-      return true;
-    }
-    if (!ADMIN_PIN) {
-      toast.error('Admin PIN not configured. Please sign in with an admin account.');
+
+    if (userRole !== 'snco') {
+      toast.error('Only Flight Point Leads can unlock admin actions.');
       return false;
     }
-    const pin = prompt('Enter 4-digit admin PIN');
-    if (pin === ADMIN_PIN) {
-      sessionStorage.setItem('adminPinVerified', 'true');
-      setAdminUnlocked(true);
-      toast.success('Admin PIN accepted');
-      return true;
+
+    const token = getToken();
+    if (!token) {
+      toast.error('You must be signed in to verify admin PIN.');
+      return false;
     }
-    toast.error('Incorrect PIN');
-    return false;
+
+    const pin = prompt('Enter 6-digit admin PIN');
+    if (!pin) return false;
+
+    const pinStr = String(pin).trim();
+    if (!/^\d{6}$/.test(pinStr)) {
+      toast.error('PIN must be 6 digits.');
+      return false;
+    }
+
+    try {
+      const data = await api.verifyPin(pinStr);
+      if (data?.success) {
+        sessionStorage.setItem('adminPinVerified', 'true');
+        toast.success('Admin PIN accepted');
+        return true;
+      }
+
+      const err = String(data?.message || data?.error || 'Incorrect PIN');
+      toast.error(err);
+      return false;
+    } catch (e: any) {
+      toast.error(String(e?.message || e || 'Failed to verify PIN'));
+      return false;
+    }
   };
 
-  const handleLogoClick = () => {
-    ensureAdminPin();
+  const handleLogoClick = async () => {
+    await ensureAdminPin();
   };
 
   // Fetch points from API
@@ -295,7 +308,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
   };
 
   const handleDeletePoint = async (pointId: string) => {
-    if (!ensureAdminPin()) return;
+    if (!(await ensureAdminPin())) return;
     if (!confirm('Are you sure you want to delete this point entry?')) {
       return;
     }
@@ -329,7 +342,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
   };
 
   const handleUpdatePoint = async () => {
-    if (!ensureAdminPin()) return;
+    if (!(await ensureAdminPin())) return;
     if (!editingId) return;
     if (editValues.points === '') {
       toast.error('Points value is required');
@@ -359,7 +372,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
   };
 
   const handleClearCadetPoints = async (cadetName: string) => {
-    if (!ensureAdminPin()) return;
+    if (!(await ensureAdminPin())) return;
     if (!confirm(`Clear all points for ${cadetName}?`)) return;
     try {
       // You may need to implement this endpoint in your local API
