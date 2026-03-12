@@ -139,13 +139,13 @@ function Resolve-GitIndexLock {
 
 function Test-TcpPort {
     param(
-        [string]$Host,
+        [string]$HostName,
         [int]$Port,
         [int]$TimeoutMs = 1500
     )
     try {
         $client = New-Object System.Net.Sockets.TcpClient
-        $iar = $client.BeginConnect($Host, $Port, $null, $null)
+        $iar = $client.BeginConnect($HostName, $Port, $null, $null)
         $connected = $iar.AsyncWaitHandle.WaitOne($TimeoutMs, $false)
         if (-not $connected) {
             $client.Close()
@@ -168,7 +168,7 @@ function Wait-OriginServiceReady {
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
-        if ((Test-TcpPort -Host "127.0.0.1" -Port $Port) -or (Test-TcpPort -Host "localhost" -Port $Port)) {
+        if ((Test-TcpPort -HostName "127.0.0.1" -Port $Port) -or (Test-TcpPort -HostName "localhost" -Port $Port)) {
             return $true
         }
         Start-Sleep -Seconds 1
