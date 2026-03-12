@@ -110,15 +110,15 @@ interface SlideTheme {
 }
 
 const SLIDE_THEMES: SlideTheme[] = [
-  /* 1 Deep Navy + Cyan */         { bg:'#0d1b2a', accent:'#22d3ee', accentDim:'#06b6d4', text:'#e0f2fe', textMuted:'rgba(224,242,254,0.55)', headerBg:'#1b3a5c', rowEven:'rgba(34,211,238,0.08)', rowOdd:'rgba(34,211,238,0.03)', border:'rgba(34,211,238,0.2)', borderStrong:'rgba(34,211,238,0.35)', cardBg:'rgba(34,211,238,0.06)', positive:'#22d3ee', negative:'#fb923c' },
-  /* 2 Charcoal + Amber */         { bg:'#1c1917', accent:'#fbbf24', accentDim:'#d97706', text:'#fef3c7', textMuted:'rgba(254,243,199,0.55)', headerBg:'#44403c', rowEven:'rgba(251,191,36,0.08)', rowOdd:'rgba(251,191,36,0.03)', border:'rgba(251,191,36,0.2)', borderStrong:'rgba(251,191,36,0.35)', cardBg:'rgba(251,191,36,0.06)', positive:'#fbbf24', negative:'#f87171' },
-  /* 3 Cool Slate + Emerald */     { bg:'#0f172a', accent:'#34d399', accentDim:'#10b981', text:'#e2e8f0', textMuted:'rgba(226,232,240,0.55)', headerBg:'#1e3a5f', rowEven:'rgba(52,211,153,0.08)', rowOdd:'rgba(52,211,153,0.03)', border:'rgba(52,211,153,0.2)', borderStrong:'rgba(52,211,153,0.35)', cardBg:'rgba(52,211,153,0.06)', positive:'#34d399', negative:'#fb923c' },
-  /* 4 Deep Indigo + Lavender */   { bg:'#1e1b4b', accent:'#a78bfa', accentDim:'#8b5cf6', text:'#e0e7ff', textMuted:'rgba(224,231,255,0.55)', headerBg:'#312e81', rowEven:'rgba(167,139,250,0.08)', rowOdd:'rgba(167,139,250,0.03)', border:'rgba(167,139,250,0.2)', borderStrong:'rgba(167,139,250,0.35)', cardBg:'rgba(167,139,250,0.06)', positive:'#a78bfa', negative:'#fca5a5' },
-  /* 5 Dark Teal + Orange */       { bg:'#042f2e', accent:'#fb923c', accentDim:'#ea580c', text:'#ccfbf1', textMuted:'rgba(204,251,241,0.55)', headerBg:'#134e4a', rowEven:'rgba(251,146,60,0.08)', rowOdd:'rgba(251,146,60,0.03)', border:'rgba(251,146,60,0.2)', borderStrong:'rgba(251,146,60,0.35)', cardBg:'rgba(251,146,60,0.06)', positive:'#34d399', negative:'#f87171' },
-  /* 6 Dark Steel + Sky Blue */    { bg:'#111827', accent:'#38bdf8', accentDim:'#0ea5e9', text:'#f1f5f9', textMuted:'rgba(241,245,249,0.55)', headerBg:'#1f2937', rowEven:'rgba(56,189,248,0.08)', rowOdd:'rgba(56,189,248,0.03)', border:'rgba(56,189,248,0.2)', borderStrong:'rgba(56,189,248,0.35)', cardBg:'rgba(56,189,248,0.06)', positive:'#38bdf8', negative:'#fb923c' },
-  /* 7 Wine / Plum + Rose */       { bg:'#2d1b30', accent:'#f9a8d4', accentDim:'#f472b6', text:'#fce7f3', textMuted:'rgba(252,231,243,0.55)', headerBg:'#4a1942', rowEven:'rgba(249,168,212,0.08)', rowOdd:'rgba(249,168,212,0.03)', border:'rgba(249,168,212,0.2)', borderStrong:'rgba(249,168,212,0.35)', cardBg:'rgba(249,168,212,0.06)', positive:'#f9a8d4', negative:'#fb923c' },
-  /* 8 Dark Olive + Copper */      { bg:'#1a1c16', accent:'#e8a87c', accentDim:'#d4825e', text:'#ecfccb', textMuted:'rgba(236,252,203,0.55)', headerBg:'#3f3b28', rowEven:'rgba(232,168,124,0.08)', rowOdd:'rgba(232,168,124,0.03)', border:'rgba(232,168,124,0.2)', borderStrong:'rgba(232,168,124,0.35)', cardBg:'rgba(232,168,124,0.06)', positive:'#86efac', negative:'#fb923c' },
-  /* 9 Jet Black + Electric Blue */{ bg:'#0a0a0a', accent:'#60a5fa', accentDim:'#3b82f6', text:'#f1f5f9', textMuted:'rgba(241,245,249,0.55)', headerBg:'#1e293b', rowEven:'rgba(96,165,250,0.08)', rowOdd:'rgba(96,165,250,0.03)', border:'rgba(96,165,250,0.2)', borderStrong:'rgba(96,165,250,0.35)', cardBg:'rgba(96,165,250,0.06)', positive:'#60a5fa', negative:'#fca5a5' },
+  /* 1 Navy + Cyan (lightened) */          { bg:'#1a2d42', accent:'#22d3ee', accentDim:'#06b6d4', text:'#e0f2fe', textMuted:'rgba(224,242,254,0.65)', headerBg:'#264a6e', rowEven:'rgba(34,211,238,0.12)', rowOdd:'rgba(34,211,238,0.05)', border:'rgba(34,211,238,0.25)', borderStrong:'rgba(34,211,238,0.4)', cardBg:'rgba(34,211,238,0.08)', positive:'#22d3ee', negative:'#fb923c' },
+  /* 2 Emerald Light (from 3) */           { bg:'#1c2e40', accent:'#34d399', accentDim:'#10b981', text:'#e2e8f0', textMuted:'rgba(226,232,240,0.65)', headerBg:'#2a4a6a', rowEven:'rgba(52,211,153,0.12)', rowOdd:'rgba(52,211,153,0.05)', border:'rgba(52,211,153,0.25)', borderStrong:'rgba(52,211,153,0.4)', cardBg:'rgba(52,211,153,0.08)', positive:'#34d399', negative:'#fb923c' },
+  /* 3 Slate + Emerald (lightened) */      { bg:'#1a2844', accent:'#34d399', accentDim:'#10b981', text:'#e2e8f0', textMuted:'rgba(226,232,240,0.65)', headerBg:'#2c4872', rowEven:'rgba(52,211,153,0.12)', rowOdd:'rgba(52,211,153,0.05)', border:'rgba(52,211,153,0.25)', borderStrong:'rgba(52,211,153,0.4)', cardBg:'rgba(52,211,153,0.08)', positive:'#34d399', negative:'#fb923c' },
+  /* 4 Sky Blue Light (from 6) */          { bg:'#1c2638', accent:'#38bdf8', accentDim:'#0ea5e9', text:'#f1f5f9', textMuted:'rgba(241,245,249,0.65)', headerBg:'#2a3d55', rowEven:'rgba(56,189,248,0.12)', rowOdd:'rgba(56,189,248,0.05)', border:'rgba(56,189,248,0.25)', borderStrong:'rgba(56,189,248,0.4)', cardBg:'rgba(56,189,248,0.08)', positive:'#38bdf8', negative:'#fb923c' },
+  /* 5 Teal + Orange (lightened) */        { bg:'#0e3f3e', accent:'#fb923c', accentDim:'#ea580c', text:'#ccfbf1', textMuted:'rgba(204,251,241,0.65)', headerBg:'#1e5e5a', rowEven:'rgba(251,146,60,0.12)', rowOdd:'rgba(251,146,60,0.05)', border:'rgba(251,146,60,0.25)', borderStrong:'rgba(251,146,60,0.4)', cardBg:'rgba(251,146,60,0.08)', positive:'#34d399', negative:'#f87171' },
+  /* 6 Steel + Sky Blue (lightened) */     { bg:'#1a2538', accent:'#38bdf8', accentDim:'#0ea5e9', text:'#f1f5f9', textMuted:'rgba(241,245,249,0.65)', headerBg:'#2d4156', rowEven:'rgba(56,189,248,0.12)', rowOdd:'rgba(56,189,248,0.05)', border:'rgba(56,189,248,0.25)', borderStrong:'rgba(56,189,248,0.4)', cardBg:'rgba(56,189,248,0.08)', positive:'#38bdf8', negative:'#fb923c' },
+  /* 7 Cyan Light (from 1) */              { bg:'#1c3248', accent:'#22d3ee', accentDim:'#06b6d4', text:'#e0f2fe', textMuted:'rgba(224,242,254,0.65)', headerBg:'#28506e', rowEven:'rgba(34,211,238,0.12)', rowOdd:'rgba(34,211,238,0.05)', border:'rgba(34,211,238,0.25)', borderStrong:'rgba(34,211,238,0.4)', cardBg:'rgba(34,211,238,0.08)', positive:'#22d3ee', negative:'#fb923c' },
+  /* 8 Orange Light (from 5) */            { bg:'#162e2e', accent:'#fb923c', accentDim:'#ea580c', text:'#ccfbf1', textMuted:'rgba(204,251,241,0.65)', headerBg:'#204846', rowEven:'rgba(251,146,60,0.12)', rowOdd:'rgba(251,146,60,0.05)', border:'rgba(251,146,60,0.25)', borderStrong:'rgba(251,146,60,0.4)', cardBg:'rgba(251,146,60,0.08)', positive:'#34d399', negative:'#f87171' },
+  /* 9 Electric Blue (lightened) */        { bg:'#141824', accent:'#60a5fa', accentDim:'#3b82f6', text:'#f1f5f9', textMuted:'rgba(241,245,249,0.65)', headerBg:'#253550', rowEven:'rgba(96,165,250,0.12)', rowOdd:'rgba(96,165,250,0.05)', border:'rgba(96,165,250,0.25)', borderStrong:'rgba(96,165,250,0.4)', cardBg:'rgba(96,165,250,0.08)', positive:'#60a5fa', negative:'#fca5a5' },
 ];
 
 /* ─── Font ─── */
@@ -177,6 +177,8 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
   const [slide, setSlide] = useState(0);
   const [paused, setPaused] = useState(false);
   const [barVisible, setBarVisible] = useState(true);
+  const [prevSlide, setPrevSlide] = useState<number | null>(null);
+  const [transitioning, setTransitioning] = useState(false);
   const barTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ── Data ── */
@@ -203,6 +205,16 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
     return () => clearInterval(id);
   }, [fetchData]);
 
+  /* ── Slide change with transition ── */
+  const goToSlide = useCallback((next: number) => {
+    setSlide(prev => {
+      setPrevSlide(prev);
+      setTransitioning(true);
+      setTimeout(() => { setTransitioning(false); setPrevSlide(null); }, 600);
+      return next;
+    });
+  }, []);
+
   /* ── Auto-advance ── */
   useEffect(() => {
     if (paused || loading) return;
@@ -219,16 +231,16 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
       }
     }
     
-    const id = setTimeout(() => setSlide(s => (s + 1) % SLIDE_COUNT), duration);
+    const id = setTimeout(() => goToSlide((slide + 1) % SLIDE_COUNT), duration);
     return () => clearTimeout(id);
-  }, [paused, loading, slideDurations, slide, data, leaderboardScrollMultiplier]);
+  }, [paused, loading, slideDurations, slide, data, leaderboardScrollMultiplier, goToSlide]);
 
   /* ── Keyboard ── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { exitAndClose(); }
-      else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { setSlide(s => (s + 1) % SLIDE_COUNT); }
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { setSlide(s => (s - 1 + SLIDE_COUNT) % SLIDE_COUNT); }
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { goToSlide((slide + 1) % SLIDE_COUNT); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { goToSlide((slide - 1 + SLIDE_COUNT) % SLIDE_COUNT); }
       else if (e.key === ' ') { e.preventDefault(); setPaused(p => !p); }
     };
     window.addEventListener('keydown', handler);
@@ -299,10 +311,14 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
 
   return (
     <div style={S.container}>
-      {/* Current slide */}
-      <div key={slide} style={S.slideWrap}>{slides[slide]}</div>
-
-      {/* Bottom control bar — auto-hides after 3s of inactivity */}
+      {/* Previous slide (fading out) */}
+      {prevSlide !== null && transitioning && (
+        <div style={{ ...S.slideWrap, position: 'absolute' as const, top: 0, left: 0, animation: 'pres-fadeOut 0.6s ease-out forwards', zIndex: 1 }}>
+          {slides[prevSlide]}
+        </div>
+      )}
+      {/* Current slide (fading in) */}
+      <div key={slide} style={{ ...S.slideWrap, animation: transitioning ? 'pres-fadeIn 0.6s ease-out' : 'none', zIndex: 2 }}>{slides[slide]}</div>
       <div style={{
         ...S.bar,
         transform: barVisible ? 'translateY(0)' : 'translateY(100%)',
@@ -312,7 +328,7 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
         <div style={S.barInner}>
           <button
             style={S.barBtn}
-            onClick={() => setSlide(s => (s - 1 + SLIDE_COUNT) % SLIDE_COUNT)}
+            onClick={() => goToSlide((slide - 1 + SLIDE_COUNT) % SLIDE_COUNT)}
             title="Previous slide (←)"
           >
             ◀
@@ -326,7 +342,7 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
           </button>
           <button
             style={S.barBtn}
-            onClick={() => setSlide(s => (s + 1) % SLIDE_COUNT)}
+            onClick={() => goToSlide((slide + 1) % SLIDE_COUNT)}
             title="Next slide (→)"
           >
             ▶
@@ -337,7 +353,7 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
             {Array.from({ length: SLIDE_COUNT }).map((_, i) => (
               <button
                 key={i}
-                onClick={() => setSlide(i)}
+                onClick={() => goToSlide(i)}
                 title={SLIDE_NAMES[i]}
                 style={{
                   width: i === slide ? 24 : 8,
@@ -1362,6 +1378,14 @@ const S: Record<string, CSSProperties> = {
 
 /* ─── Animations ─── */
 const animations = `
+  @keyframes pres-fadeIn {
+    from { opacity: 0; transform: scale(1.02); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes pres-fadeOut {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0; transform: scale(0.98); }
+  }
   @keyframes pres-fadeSlide {
     from { 
       opacity: 0; 
