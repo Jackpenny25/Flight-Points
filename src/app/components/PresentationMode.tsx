@@ -73,8 +73,8 @@ const SLIDE_COUNT = 9;
 const AUTO_ADVANCE_MS = 15000;
 const DATA_REFRESH_MS = 30000;
 
-/* ─── Theme — dark slate / gold / green ─── */
-const T = {
+/* ─── Base theme (control bar, loading, medals) ─── */
+const BASE_THEME = {
   /* Backgrounds */
   darkBg: '#2d3a45',       // dark slate
   cardBg: 'rgba(255,255,255,0.06)',
@@ -98,6 +98,28 @@ const T = {
   border: 'rgba(255,255,255,0.15)',
   borderStrong: 'rgba(255,255,255,0.25)',
 };
+
+const T = BASE_THEME;
+
+/* ─── Per-slide colour themes (accessible, high-contrast palettes) ─── */
+interface SlideTheme {
+  bg: string; accent: string; accentDim: string; text: string; textMuted: string;
+  headerBg: string; rowEven: string; rowOdd: string;
+  border: string; borderStrong: string; cardBg: string;
+  positive: string; negative: string;
+}
+
+const SLIDE_THEMES: SlideTheme[] = [
+  /* 1 Deep Navy + Cyan */         { bg:'#0d1b2a', accent:'#22d3ee', accentDim:'#06b6d4', text:'#e0f2fe', textMuted:'rgba(224,242,254,0.55)', headerBg:'#1b3a5c', rowEven:'rgba(34,211,238,0.08)', rowOdd:'rgba(34,211,238,0.03)', border:'rgba(34,211,238,0.2)', borderStrong:'rgba(34,211,238,0.35)', cardBg:'rgba(34,211,238,0.06)', positive:'#22d3ee', negative:'#fb923c' },
+  /* 2 Charcoal + Amber */         { bg:'#1c1917', accent:'#fbbf24', accentDim:'#d97706', text:'#fef3c7', textMuted:'rgba(254,243,199,0.55)', headerBg:'#44403c', rowEven:'rgba(251,191,36,0.08)', rowOdd:'rgba(251,191,36,0.03)', border:'rgba(251,191,36,0.2)', borderStrong:'rgba(251,191,36,0.35)', cardBg:'rgba(251,191,36,0.06)', positive:'#fbbf24', negative:'#f87171' },
+  /* 3 Cool Slate + Emerald */     { bg:'#0f172a', accent:'#34d399', accentDim:'#10b981', text:'#e2e8f0', textMuted:'rgba(226,232,240,0.55)', headerBg:'#1e3a5f', rowEven:'rgba(52,211,153,0.08)', rowOdd:'rgba(52,211,153,0.03)', border:'rgba(52,211,153,0.2)', borderStrong:'rgba(52,211,153,0.35)', cardBg:'rgba(52,211,153,0.06)', positive:'#34d399', negative:'#fb923c' },
+  /* 4 Deep Indigo + Lavender */   { bg:'#1e1b4b', accent:'#a78bfa', accentDim:'#8b5cf6', text:'#e0e7ff', textMuted:'rgba(224,231,255,0.55)', headerBg:'#312e81', rowEven:'rgba(167,139,250,0.08)', rowOdd:'rgba(167,139,250,0.03)', border:'rgba(167,139,250,0.2)', borderStrong:'rgba(167,139,250,0.35)', cardBg:'rgba(167,139,250,0.06)', positive:'#a78bfa', negative:'#fca5a5' },
+  /* 5 Dark Teal + Orange */       { bg:'#042f2e', accent:'#fb923c', accentDim:'#ea580c', text:'#ccfbf1', textMuted:'rgba(204,251,241,0.55)', headerBg:'#134e4a', rowEven:'rgba(251,146,60,0.08)', rowOdd:'rgba(251,146,60,0.03)', border:'rgba(251,146,60,0.2)', borderStrong:'rgba(251,146,60,0.35)', cardBg:'rgba(251,146,60,0.06)', positive:'#34d399', negative:'#f87171' },
+  /* 6 Dark Steel + Sky Blue */    { bg:'#111827', accent:'#38bdf8', accentDim:'#0ea5e9', text:'#f1f5f9', textMuted:'rgba(241,245,249,0.55)', headerBg:'#1f2937', rowEven:'rgba(56,189,248,0.08)', rowOdd:'rgba(56,189,248,0.03)', border:'rgba(56,189,248,0.2)', borderStrong:'rgba(56,189,248,0.35)', cardBg:'rgba(56,189,248,0.06)', positive:'#38bdf8', negative:'#fb923c' },
+  /* 7 Wine / Plum + Rose */       { bg:'#2d1b30', accent:'#f9a8d4', accentDim:'#f472b6', text:'#fce7f3', textMuted:'rgba(252,231,243,0.55)', headerBg:'#4a1942', rowEven:'rgba(249,168,212,0.08)', rowOdd:'rgba(249,168,212,0.03)', border:'rgba(249,168,212,0.2)', borderStrong:'rgba(249,168,212,0.35)', cardBg:'rgba(249,168,212,0.06)', positive:'#f9a8d4', negative:'#fb923c' },
+  /* 8 Dark Olive + Copper */      { bg:'#1a1c16', accent:'#e8a87c', accentDim:'#d4825e', text:'#ecfccb', textMuted:'rgba(236,252,203,0.55)', headerBg:'#3f3b28', rowEven:'rgba(232,168,124,0.08)', rowOdd:'rgba(232,168,124,0.03)', border:'rgba(232,168,124,0.2)', borderStrong:'rgba(232,168,124,0.35)', cardBg:'rgba(232,168,124,0.06)', positive:'#86efac', negative:'#fb923c' },
+  /* 9 Jet Black + Electric Blue */{ bg:'#0a0a0a', accent:'#60a5fa', accentDim:'#3b82f6', text:'#f1f5f9', textMuted:'rgba(241,245,249,0.55)', headerBg:'#1e293b', rowEven:'rgba(96,165,250,0.08)', rowOdd:'rgba(96,165,250,0.03)', border:'rgba(96,165,250,0.2)', borderStrong:'rgba(96,165,250,0.35)', cardBg:'rgba(96,165,250,0.06)', positive:'#60a5fa', negative:'#fca5a5' },
+];
 
 /* ─── Font ─── */
 const FONT = "'Aptos', 'Calibri', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
@@ -264,15 +286,15 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
 
   /* ── Slides ── */
   const slides = [
-    <SlideFlightPoints key="fp" data={data} />,
-    <SlidePodiumAndMonth key="pm" data={data} stats={stats} />,
-    <SlideLeaderboard key="lb" data={data} leaderboardScrollMultiplier={leaderboardScrollMultiplier} />,
-    <SlideRisingStars key="rs" stats={stats} />,
-    <SlideFlightRace key="fr" data={data} />,
-    <SlideWeeklyComparison key="wc" stats={stats} />,
-    <SlideAttendanceStreaks key="as" stats={stats} />,
-    <SlideRecentPoints key="rp" data={data} />,
-    <SlideRewards key="rw" rewards={rewards} />,
+    <SlideFlightPoints key="fp" data={data} theme={SLIDE_THEMES[0]} />,
+    <SlidePodiumAndMonth key="pm" data={data} stats={stats} theme={SLIDE_THEMES[1]} />,
+    <SlideLeaderboard key="lb" data={data} leaderboardScrollMultiplier={leaderboardScrollMultiplier} theme={SLIDE_THEMES[2]} />,
+    <SlideRisingStars key="rs" stats={stats} theme={SLIDE_THEMES[3]} />,
+    <SlideFlightRace key="fr" data={data} theme={SLIDE_THEMES[4]} />,
+    <SlideWeeklyComparison key="wc" stats={stats} theme={SLIDE_THEMES[5]} />,
+    <SlideAttendanceStreaks key="as" stats={stats} theme={SLIDE_THEMES[6]} />,
+    <SlideRecentPoints key="rp" data={data} theme={SLIDE_THEMES[7]} />,
+    <SlideRewards key="rw" rewards={rewards} theme={SLIDE_THEMES[8]} />,
   ];
 
   return (
@@ -347,7 +369,8 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 1 — Flight Points Summary
    ═══════════════════════════════════════════════════════════════ */
-function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
+function SlideFlightPoints({ data, theme }: { data: LeaderboardData | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   if (!data) return null;
   const flights = [...(data.flightLeaderboard || [])].sort((a, b) => flightSortKey(a.flight) - flightSortKey(b.flight));
   const cadet = data.winningCadet;
@@ -376,6 +399,7 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
             rows={flights.map(f => [flightLabel(f.flight), String(f.points)])}
             aligns={['left', 'right']}
             fontSize={34}
+            theme={theme}
           />
         </div>
 
@@ -390,6 +414,7 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
                 rows={[[cadet.name, String(cadet.points)]]}
                 aligns={['left', 'right']}
                 fontSize={34}
+                theme={theme}
               />
             </div>
           )}
@@ -399,6 +424,7 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
               rows={[[flightLabel(flight.flight), String(flight.points)]]}
               aligns={['left', 'right']}
               fontSize={34}
+              theme={theme}
             />
           )}
         </div>
@@ -411,7 +437,8 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
    SLIDE 2 — Top 3 Podium + Flight of the Month (combined)
    1st place = tallest podium. Handles joint winners (ties).
    ═══════════════════════════════════════════════════════════════ */
-function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; stats: PresentationStats | null }) {
+function SlidePodiumAndMonth({ data, stats, theme }: { data: LeaderboardData | null; stats: PresentationStats | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   if (!data) return null;
 
   const entries = data.detailedLeaderboard && data.detailedLeaderboard.length > 0
@@ -586,7 +613,8 @@ function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; st
    SLIDE 3 — Complete Leaderboard
    Single table by default; splits if > 20 cadets.
    ═══════════════════════════════════════════════════════════════ */
-function SlideLeaderboard({ data, leaderboardScrollMultiplier = 1 }: { data: LeaderboardData | null; leaderboardScrollMultiplier?: number }) {
+function SlideLeaderboard({ data, leaderboardScrollMultiplier = 1, theme }: { data: LeaderboardData | null; leaderboardScrollMultiplier?: number; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   if (!data) return null;
 
   const entries: LeaderboardEntry[] = data.detailedLeaderboard && data.detailedLeaderboard.length > 0
@@ -633,14 +661,14 @@ function SlideLeaderboard({ data, leaderboardScrollMultiplier = 1 }: { data: Lea
             borderRadius: 8, overflow: 'hidden',
             maxHeight: 'calc(100vh - 180px)',
           }}>
-            <PPTable headers={headers} rows={toRows(left, 1)} aligns={aligns} fontSize={fontSize} compact />
+            <PPTable headers={headers} rows={toRows(left, 1)} aligns={aligns} fontSize={fontSize} compact theme={theme} />
           </div>
           {right.length > 0 && (
             <div style={{
               borderRadius: 8, overflow: 'hidden',
               maxHeight: 'calc(100vh - 180px)',
             }}>
-              <PPTable headers={headers} rows={toRows(right, half + 1)} aligns={aligns} fontSize={fontSize} compact />
+              <PPTable headers={headers} rows={toRows(right, half + 1)} aligns={aligns} fontSize={fontSize} compact theme={theme} />
             </div>
           )}
         </div>
@@ -670,7 +698,7 @@ function SlideLeaderboard({ data, leaderboardScrollMultiplier = 1 }: { data: Lea
         <div style={{
           animation: `tableScroll ${scrollDuration}s linear forwards`,
         }}>
-          <PPTable headers={headers} rows={toRows(entries, 1)} aligns={aligns} fontSize={fontSize} />
+          <PPTable headers={headers} rows={toRows(entries, 1)} aligns={aligns} fontSize={fontSize} theme={theme} />
         </div>
       </div>
     </div>
@@ -680,7 +708,8 @@ function SlideLeaderboard({ data, leaderboardScrollMultiplier = 1 }: { data: Lea
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 4 — Rising Stars (top gainers this week)
    ═══════════════════════════════════════════════════════════════ */
-function SlideRisingStars({ stats }: { stats: PresentationStats | null }) {
+function SlideRisingStars({ stats, theme }: { stats: PresentationStats | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   // Use monthly risers if available, else fall back to weekly
   const stars = (stats as any)?.risingCadets?.length > 0
     ? (stats as any).risingCadets as Array<{ name: string; flight: string; monthPoints: number }>
@@ -778,7 +807,8 @@ function SlideRisingStars({ stats }: { stats: PresentationStats | null }) {
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 5 — Flight Race (sorted by most points at top)
    ═══════════════════════════════════════════════════════════════ */
-function SlideFlightRace({ data }: { data: LeaderboardData | null }) {
+function SlideFlightRace({ data, theme }: { data: LeaderboardData | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   if (!data) return null;
   const flights = [...(data.flightLeaderboard || [])]
     .filter(f => f.flight?.toLowerCase() !== 'hq')
@@ -844,7 +874,8 @@ function SlideFlightRace({ data }: { data: LeaderboardData | null }) {
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 6 — Weekly Comparison (this week vs last week)
    ═══════════════════════════════════════════════════════════════ */
-function SlideWeeklyComparison({ stats }: { stats: PresentationStats | null }) {
+function SlideWeeklyComparison({ stats, theme }: { stats: PresentationStats | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   const thisWeek = stats?.thisWeekFlights || [];
   const lastWeek = stats?.lastWeekFlights || [];
 
@@ -942,7 +973,8 @@ function SlideWeeklyComparison({ stats }: { stats: PresentationStats | null }) {
    SLIDE 7 — Attendance Streaks
    Shows current streaks and the record holder(s) for longest streak.
    ═══════════════════════════════════════════════════════════════ */
-function SlideAttendanceStreaks({ stats }: { stats: PresentationStats | null }) {
+function SlideAttendanceStreaks({ stats, theme }: { stats: PresentationStats | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   const streaks = stats?.attendanceStreaks || [];
   const top = streaks.slice(0, 8);
 
@@ -1063,7 +1095,8 @@ function SlideAttendanceStreaks({ stats }: { stats: PresentationStats | null }) 
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 8 — Recent Points
    ═══════════════════════════════════════════════════════════════ */
-function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
+function SlideRecentPoints({ data, theme }: { data: LeaderboardData | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   if (!data) return null;
   const recent = data.recentPoints.slice(0, 10);
 
@@ -1086,6 +1119,7 @@ function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
           ])}
           aligns={['left', 'left', 'left', 'right']}
           fontSize={22}
+          theme={theme}
         />
       </div>
     </div>
@@ -1095,7 +1129,8 @@ function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 9 — Rewards (from database)
    ═══════════════════════════════════════════════════════════════ */
-function SlideRewards({ rewards }: { rewards: Reward[] }) {
+function SlideRewards({ rewards, theme }: { rewards: Reward[]; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   const now = Date.now();
   const activeRewards = rewards.filter(r => {
     if (!r.endsAt) return true;
@@ -1124,6 +1159,7 @@ function SlideRewards({ rewards }: { rewards: Reward[] }) {
             ])}
             aligns={['left', 'left', 'left']}
             fontSize={24}
+            theme={theme}
           />
         </div>
       )}
@@ -1140,13 +1176,16 @@ function PPTable({
   aligns,
   fontSize = 22,
   compact = false,
+  theme,
 }: {
   headers: string[];
   rows: string[][];
   aligns?: Array<'left' | 'center' | 'right'>;
   fontSize?: number;
   compact?: boolean;
+  theme?: SlideTheme;
 }) {
+  const T = theme ? { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative } : BASE_THEME;
   const pad = compact ? '6px 12px' : '14px 18px';
 
   return (
