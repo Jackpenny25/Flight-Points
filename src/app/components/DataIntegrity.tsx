@@ -132,25 +132,36 @@ export function DataIntegrity({ accessToken }: DataIntegrityProps) {
   return (
     <div className="space-y-6">
       {/* Deploy Failure Banner */}
-      {checks.some(c => c.category === 'Deployment' && c.status === 'fail') && (
-        <Alert className="bg-red-100 border-red-400 border-2 animate-pulse">
-          <Rocket className="size-5 text-red-700" />
-          <AlertTitle className="text-red-900 font-bold text-lg">Deployment Failed!</AlertTitle>
-          <AlertDescription className="text-red-800">
-            The last auto-deploy failed. The live site may be running an outdated version.
-            Check the deploy log on the server or contact the system administrator.
-            <br />
-            <span className="font-mono text-sm mt-1 block">
-              {checks.find(c => c.category === 'Deployment' && c.status === 'fail')?.message}
-            </span>
-            {checks.find(c => c.category === 'Deployment' && c.status === 'fail')?.details && (
-              <span className="font-mono text-xs mt-1 block text-red-700">
-                Error: {checks.find(c => c.category === 'Deployment' && c.status === 'fail')?.details}
-              </span>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
+      {checks.some(c => c.category === 'Deployment' && c.status === 'fail') && (() => {
+        const failCheck = checks.find(c => c.category === 'Deployment' && c.status === 'fail');
+        return (
+          <Alert className="bg-red-100 border-red-400 border-2 animate-pulse">
+            <Rocket className="size-5 text-red-700" />
+            <AlertTitle className="text-red-900 font-bold text-lg">🚨 Deployment Failed!</AlertTitle>
+            <AlertDescription className="text-red-800 space-y-2">
+              <p className="font-semibold">
+                The last auto-deploy failed. The live site may be running an outdated version.
+              </p>
+              <div className="bg-red-50 border border-red-300 rounded-md p-3 mt-2">
+                <p className="font-mono text-sm text-red-900 mb-2">
+                  📅 {failCheck?.message}
+                </p>
+                {failCheck?.details && (
+                  <div className="mt-2 pt-2 border-t border-red-300">
+                    <p className="text-xs font-semibold text-red-900 mb-1">Error Details:</p>
+                    <p className="font-mono text-xs text-red-800 bg-white p-2 rounded border border-red-200 whitespace-pre-wrap break-all">
+                      {failCheck.details}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm mt-3">
+                ℹ️ Check the deploy log at <code className="bg-red-200 px-1 py-0.5 rounded text-xs">auto-deploy.log</code> on the server for full details.
+              </p>
+            </AlertDescription>
+          </Alert>
+        );
+      })()}
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
