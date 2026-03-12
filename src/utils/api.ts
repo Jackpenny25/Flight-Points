@@ -1,7 +1,7 @@
 // src/utils/api.ts
 import { getToken, logout } from './auth';
 
-const API_URL = 'https://flightpoints.uk/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://flightpoints.uk/api';
 
 async function parseJsonSafe(response: Response) {
   const text = await response.text();

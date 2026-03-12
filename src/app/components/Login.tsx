@@ -50,7 +50,7 @@ export function Login({ onLogin, sessionMessage }: LoginProps) {
       console.error('Sign in error:', err);
       let displayError = err.message || 'Failed to sign in. Please try again.';
       if (displayError.includes('Login failed')) {
-        displayError = `Invalid login credentials. Please check your username and password, or ask Sgt Penny J for your account details.`;
+        displayError = `Invalid login credentials. Please check your username and password, or ask your Flight Point Lead for your account details.`;
       }
       setError(displayError);
     } finally {
@@ -108,7 +108,7 @@ export function Login({ onLogin, sessionMessage }: LoginProps) {
               {loading ? 'Signing In...' : 'Sign In'}
             </Button>
             <p className="text-xs text-center text-muted-foreground mt-2">
-              Need an account? Ask Sgt Penny J or your flight point giver.
+              Need an account? Ask your Flight Point Lead or your flight point giver.
             </p>
           </form>
         </CardContent>

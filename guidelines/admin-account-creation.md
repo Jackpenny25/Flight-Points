@@ -31,10 +31,10 @@ CREATE INDEX IF NOT EXISTS idx_app_users_cadet_id ON app_users (cadet_id);
 
 Usernames should be **derived from the cadet's name** in a predictable, readable format:
 
-1. Take the cadet's full name from the cadets table (e.g. "John Smith").
-2. Convert to lowercase, strip special characters, replace spaces with dots: `john.smith`.
-3. If a collision exists in `app_users`, append a number: `john.smith2`, `john.smith3`, etc.
-4. For HQ/staff members who have a rank (e.g. "Fg Off", name "Jane Doe"), the username is still just the name: `jane.doe` (rank is NOT included in the username).
+1. Take the cadet's full name from the cadets table (e.g. "Sample Cadet").
+2. Convert to lowercase, strip special characters, replace spaces with dots: `sample.cadet`.
+3. If a collision exists in `app_users`, append a number: `sample.cadet2`, `sample.cadet3`, etc.
+4. For HQ/staff members who have a rank (e.g. "Fg Off", name "Sample HQ"), the username is still just the name: `sample.hq` (rank is NOT included in the username).
 5. Username max length: 30 characters.
 6. The generated username doubles as the user's `email` field in `app_users` (since the login system already supports username-based login via `api.lookupEmail`). Alternatively, store it as `{username}@flightpoints.local` to keep the email field valid — **decision: use `{username}@flightpoints.local`** so the email column stays consistent but the user logs in with just the username part.
 
@@ -89,9 +89,9 @@ Generate a **secure, human-readable** password:
 {
   "account": {
     "id": "new-user-uuid",
-    "username": "john.smith",
+    "username": "sample.cadet",
     "password": "EagleBolt47",
-    "name": "John Smith",
+    "name": "Sample Cadet",
     "role": "cadet",
     "flight": "2"
   }
@@ -118,7 +118,7 @@ Generate a **secure, human-readable** password:
 **Response:**
 ```json
 {
-  "username": "john.smith",
+  "username": "sample.cadet",
   "password": "FalconDelta29"
 }
 ```
@@ -144,7 +144,7 @@ Add a new Card section at the **top** of the Signups tab titled **"Create Accoun
 │  [Create Account]                                │
 │                                                  │
 │  ┌─ Credentials (shown after creation) ────────┐ │
-│  │  Username: john.smith          [📋 Copy]    │ │
+│  │  Username: sample.cadet        [📋 Copy]    │ │
 │  │  Password: EagleBolt47        [📋 Copy]    │ │
 │  │                                              │ │
 │  │  [📋 Copy Both]  [Print Slip]               │ │
@@ -176,7 +176,7 @@ Add a new Card section at the **top** of the Signups tab titled **"Create Accoun
 
 ### Copy Functionality:
 - "Copy" buttons use `navigator.clipboard.writeText()`.
-- "Copy Both" copies: `Username: john.smith\nPassword: EagleBolt47`.
+- "Copy Both" copies: `Username: sample.cadet\nPassword: EagleBolt47`.
 - Show a brief toast: "Copied to clipboard".
 
 ### Print Slip (optional, nice-to-have):
@@ -184,7 +184,7 @@ Add a new Card section at the **top** of the Signups tab titled **"Create Accoun
   ```
   Flight Points — Your Login Details
   ──────────────────────────────────
-  Username: john.smith
+  Username: sample.cadet
   Password: EagleBolt47
   
   Log in at: flightpoints.uk
@@ -240,7 +240,7 @@ const PASSWORD_WORDS = [
   'Xray', 'Yankee', 'Zulu', 'Eagle', 'Falcon', 'Hawk', 'Storm', 'Thunder',
   'Phoenix', 'Viper', 'Cobra', 'Tiger', 'Mustang', 'Raptor', 'Shadow',
   'Arrow', 'Blaze', 'Comet', 'Dagger', 'Flare', 'Granite', 'Horizon',
-  'Iron', 'Javelin', 'Knight', 'Lance', 'Meteor', 'Noble', 'Onyx',
+  'Iron', 'Javelin', 'Kodiak', 'Lance', 'Meteor', 'Noble', 'Onyx',
   'Patriot', 'Quartz', 'Rocket', 'Sabre', 'Titan', 'Unity', 'Valor',
   'Warrior', 'Zenith', 'Bolt', 'Crest', 'Dawn', 'Ember', 'Frost',
   'Gale', 'Haven', 'Ivory', 'Jade', 'Kindle', 'Lunar', 'Marvel',

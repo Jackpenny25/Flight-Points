@@ -431,8 +431,8 @@ export function PointsManager({ userRole }: PointsManagerProps) {
               <Textarea
                 id="names"
                 placeholder={isPointGiver
-                  ? `Enter names from your flight (${formatFlight(userFlight || '')})\ne.g., John Smith, Jane Doe`
-                  : 'Enter one or more names (separated by commas or new lines)\ne.g., John Smith, Jane Doe'}
+                  ? `Enter names from your flight (${formatFlight(userFlight || '')})\ne.g., Surname A, Surname B`
+                  : 'Enter one or more names (separated by commas or new lines)\ne.g., Surname A, Surname B'}
                 value={multipleNames}
                 onChange={(e) => setMultipleNames(e.target.value)}
                 required

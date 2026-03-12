@@ -490,13 +490,13 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 <>
                   An admin has requested that you change your username to follow the correct format.
                   <br /><br />
-                  <strong>Required format:</strong> "Surname Initial" (e.g., Smith J, Penny J)
+                  <strong>Required format:</strong> "Surname Initial" (e.g., Surname A)
                 </>
               ) : (
                 <>
                   An admin has suggested a corrected version of your username.
                   <br /><br />
-                  <strong>Suggested format:</strong> "Surname Initial" (e.g., Smith J, Penny J)
+                  <strong>Suggested format:</strong> "Surname Initial" (e.g., Surname A)
                 </>
               )}
             </DialogDescription>

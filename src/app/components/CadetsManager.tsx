@@ -577,7 +577,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                       <Label htmlFor="cadet-name">Full Name</Label>
                       <Input
                         id="cadet-name"
-                        placeholder="John Smith"
+                        placeholder="Surname Initial"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         required

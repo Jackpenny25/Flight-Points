@@ -11,18 +11,18 @@
 -- we'll need to map them manually or use a default value.
 
 -- Option 1: Update all JWT tokens to a specific user name (RECOMMENDED)
--- Replace 'Jack Penny' with your actual name
+-- Replace 'YOUR_NAME' with your actual name
 UPDATE points 
-SET given_by = 'Jack Penny', 
+SET given_by = 'YOUR_NAME', 
     updated_at = NOW()
 WHERE given_by LIKE 'ey%';
 
 UPDATE attendance 
-SET submitted_by = 'Jack Penny'
+SET submitted_by = 'YOUR_NAME'
 WHERE submitted_by LIKE 'ey%';
 
 UPDATE attendance_bulks 
-SET submitted_by = 'Jack Penny'
+SET submitted_by = 'YOUR_NAME'
 WHERE submitted_by LIKE 'ey%';
 
 -- Option 2: If you want to mark them as unknown instead:
@@ -44,17 +44,17 @@ SELECT
     'Points' as table_name,
     COUNT(*) as records_updated
 FROM points 
-WHERE given_by = 'Jack Penny' 
+WHERE given_by = 'YOUR_NAME' 
   AND updated_at > NOW() - INTERVAL '1 minute'
 UNION ALL
 SELECT 
     'Attendance' as table_name,
     COUNT(*) as records_updated
 FROM attendance 
-WHERE submitted_by = 'Jack Penny'
+WHERE submitted_by = 'YOUR_NAME'
 UNION ALL
 SELECT 
     'Attendance Bulks' as table_name,
     COUNT(*) as records_updated
 FROM attendance_bulks 
-WHERE submitted_by = 'Jack Penny';
+WHERE submitted_by = 'YOUR_NAME';
