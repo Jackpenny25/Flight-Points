@@ -9,5 +9,4 @@ If you are interested in using this software please contact the repository owner
 - Do not attempt to run or deploy this software.
 - Do not share or distribute this repository or any of its contents.
 
-Repository owner: add an official contact email in the repo when ready.
-
+Repository owner:Jack Penny - help@flightpoints.uk
