@@ -11,9 +11,10 @@ import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
 interface LoginProps {
   onLogin: (accessToken: string, user: any) => void;
+  sessionMessage?: string;
 }
 
-export function Login({ onLogin }: LoginProps) {
+export function Login({ onLogin, sessionMessage }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -93,6 +94,11 @@ export function Login({ onLogin }: LoginProps) {
                 required
               />
             </div>
+            {sessionMessage && (
+              <div className="text-sm text-amber-900 bg-amber-100 border border-amber-300 p-3 rounded">
+                {sessionMessage}
+              </div>
+            )}
             {error && (
               <div className="text-sm text-red-600 bg-red-50 p-3 rounded">
                 {error}
