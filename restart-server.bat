@@ -49,4 +49,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
    Write-Host 'Press any key to close...' -ForegroundColor Gray; ^
    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')"
 
+pause
 exit /b
