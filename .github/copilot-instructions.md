@@ -62,10 +62,14 @@ Monitor all logs: `Get-ChildItem "C:\inetpub\wwwroot\Flight-Points\Logs\**\*.log
 
 ### Test Website Error Alerting
 Use this safe admin-only endpoint to test email + error file logging:
-1. Log in as `snco` or `admin` and copy JWT token.
+1. Get a fresh JWT token for an `snco` or `admin` account:
+  ```powershell
+  $loginBody = @{ email = "<username>@flightpoints.local"; password = "<password>" } | ConvertTo-Json
+  $token = (Invoke-RestMethod -Method Post -Uri "http://localhost:3001/api/auth/login" -ContentType "application/json" -Body $loginBody).token
+  ```
 2. Send test request:
   ```powershell
-  Invoke-RestMethod -Method Post -Uri "http://localhost:3001/api/test-error-alert" -Headers @{ Authorization = "Bearer <JWT_TOKEN>" }
+  Invoke-RestMethod -Method Post -Uri "http://localhost:3001/api/test-error-alert" -Headers @{ Authorization = "Bearer $token" }
   ```
 3. Expected result: HTTP 500 response, email alert sent, and entry appended to `\Logs\Server\server-errors-YYYY-MM-DD.log`.
 
