@@ -171,6 +171,7 @@ Use this exact checklist on the Windows server where `auto-deploy.ps1` runs:
 - **Password Format Update** (2026-03-11): Admin-created and reset passwords now use two short words plus a 2-digit number with no separators (e.g. `EagleBolt47`).
 - **Admin PIN Client Leak Fix** (2026-03-11): `PointsManager` no longer reads `VITE_ADMIN_PIN` or validates PIN in-browser. Admin unlock now uses server-side `POST /api/admin/verify-pin` only.
 - **Deploy Email Alerting** (2026-03-09): `auto-deploy.ps1` now writes `data/deploy-status.json` on success/failure and sends email on deploy failure via SMTP (configured via `SMTP_TO`, `SMTP_FROM`, `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in `.env.local`).
+- **Server Uptime Email Alerting** (2026-03-16): `start-server-and-tunnel.ps1` now sends SMTP alerts for server status transitions: `SERVER DOWN` (API/tunnel/website unreachable), `SERVER RECOVERED / WEBSITE BACK ONLINE` (after outage), and `SERVER RESTARTED / ONLINE` (on startup). It persists state in `data/uptime-status.json` to avoid duplicate alerts and include downtime duration in recovery emails.
 - **Deploy Status in Integrity Tab** (2026-03-09): `GET /api/integrity-check` and `/api/integrity-check/count` now include Deployment category. If the last deploy failed, a prominent pulsing red banner appears at the top of the Integrity tab and the tab badge count increases.
 
 ---
