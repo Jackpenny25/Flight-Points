@@ -1215,7 +1215,37 @@ app.get('/api/test', (req, res) => {
   res.json({ message: 'Server is working!' });
 });
 
-// ========== HEALTH CHECK ENDPOINT ==========\n// Checks: server is up, database is reachable, disk has space\napp.get('/api/health', async (req, res) => {\n  const checks: Record<string, { ok: boolean; detail?: string }> = {};\n\n  // DB check\n  try {\n    const dbResult = await query('SELECT 1 AS alive');\n    checks.db = { ok: dbResult.rows.length > 0, detail: 'PostgreSQL reachable' };\n  } catch (err: any) {\n    checks.db = { ok: false, detail: err?.message || 'DB unreachable' };\n  }\n\n  // Disk check (data dir)\n  try {\n    const testFile = path.join(DATA_DIR, '.health-check-' + Date.now());\n    fs.writeFileSync(testFile, 'ok');\n    fs.unlinkSync(testFile);\n    checks.disk = { ok: true, detail: 'Data directory writable' };\n  } catch (err: any) {\n    checks.disk = { ok: false, detail: err?.message || 'Disk write failed' };\n  }\n\n  // Uptime\n  checks.uptime = { ok: true, detail: `${Math.floor(process.uptime())}s` };\n\n  // Memory\n  const memUsage = process.memoryUsage();\n  const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);\n  const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);\n  checks.memory = { ok: heapUsedMB < 512, detail: `${heapUsedMB}MB / ${heapTotalMB}MB heap` };\n\n  const allOk = Object.values(checks).every(c => c.ok);\n  res.status(allOk ? 200 : 503).json({ status: allOk ? 'healthy' : 'unhealthy', checks });\n});
+// ========== HEALTH CHECK ENDPOINT ==========
+// Checks: server is up, database is reachable, disk has space
+app.get('/api/health', async (req, res) => {
+  const checks: Record<string, { ok: boolean; detail?: string }> = {};
+
+  try {
+    const dbResult = await query('SELECT 1 AS alive');
+    checks.db = { ok: dbResult.rows.length > 0, detail: 'PostgreSQL reachable' };
+  } catch (err: any) {
+    checks.db = { ok: false, detail: err?.message || 'DB unreachable' };
+  }
+
+  try {
+    const testFile = path.join(DATA_DIR, '.health-check-' + Date.now());
+    fs.writeFileSync(testFile, 'ok');
+    fs.unlinkSync(testFile);
+    checks.disk = { ok: true, detail: 'Data directory writable' };
+  } catch (err: any) {
+    checks.disk = { ok: false, detail: err?.message || 'Disk write failed' };
+  }
+
+  checks.uptime = { ok: true, detail: `${Math.floor(process.uptime())}s` };
+
+  const memUsage = process.memoryUsage();
+  const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+  const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+  checks.memory = { ok: heapUsedMB < 512, detail: `${heapUsedMB}MB / ${heapTotalMB}MB heap` };
+
+  const allOk = Object.values(checks).every((check) => check.ok);
+  res.status(allOk ? 200 : 503).json({ status: allOk ? 'healthy' : 'unhealthy', checks });
+});
 
 // ========== REVISION HISTORY ==========
 // Auto-create revision_history table on startup
@@ -1230,16 +1260,102 @@ async function ensureRevisionHistorySchema() {
           record_id UUID NOT NULL,
           action VARCHAR NOT NULL,
           changed_by VARCHAR NOT NULL,
+          changed_by_role VARCHAR,
           changed_at TIMESTAMP DEFAULT NOW(),
+          changed_fields JSONB,
+          change_summary TEXT,
           before_data JSONB,
           after_data JSONB
         )
       `);
+      await query('ALTER TABLE revision_history ADD COLUMN IF NOT EXISTS changed_by_role VARCHAR');
+      await query('ALTER TABLE revision_history ADD COLUMN IF NOT EXISTS changed_fields JSONB');
+      await query('ALTER TABLE revision_history ADD COLUMN IF NOT EXISTS change_summary TEXT');
       await query('CREATE INDEX IF NOT EXISTS idx_revision_history_record ON revision_history (record_type, record_id)');
       await query('CREATE INDEX IF NOT EXISTS idx_revision_history_changed_at ON revision_history (changed_at DESC)');
+
+      const existingRows = await query(
+        `SELECT id, action, before_data, after_data, changed_by_role, changed_fields, change_summary
+         FROM revision_history
+         WHERE changed_by_role IS NULL OR changed_fields IS NULL OR change_summary IS NULL`
+      );
+
+      for (const row of existingRows.rows) {
+        const details = buildRevisionDetails(row.action, row.before_data, row.after_data);
+        await query(
+          `UPDATE revision_history
+           SET changed_by_role = COALESCE(changed_by_role, $2),
+               changed_fields = COALESCE(changed_fields, $3::jsonb),
+               change_summary = COALESCE(change_summary, $4)
+           WHERE id = $1`,
+          [
+            row.id,
+            'unknown',
+            JSON.stringify(details.changedFields),
+            details.summary,
+          ]
+        );
+      }
     })().catch(err => { revisionSchemaReady = null; throw err; });
   }
   return revisionSchemaReady;
+}
+
+function normalizeRevisionValue(value: any): string {
+  if (value === null) return 'null';
+  if (value === undefined) return 'empty';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function buildRevisionDetails(
+  action: 'create' | 'update' | 'delete',
+  beforeData: Record<string, any> | null,
+  afterData: Record<string, any> | null,
+): { changedFields: string[]; summary: string } {
+  const beforeObject = beforeData && typeof beforeData === 'object' ? beforeData : {};
+  const afterObject = afterData && typeof afterData === 'object' ? afterData : {};
+  const keys = Array.from(new Set([...Object.keys(beforeObject), ...Object.keys(afterObject)])).sort();
+  const changedFields = keys.filter((key) => {
+    const beforeValue = beforeObject[key];
+    const afterValue = afterObject[key];
+    return JSON.stringify(beforeValue) !== JSON.stringify(afterValue);
+  });
+
+  if (action === 'create') {
+    const listed = changedFields.slice(0, 5).join(', ');
+    const extra = changedFields.length > 5 ? ` +${changedFields.length - 5} more` : '';
+    return {
+      changedFields,
+      summary: changedFields.length > 0 ? `Created record with fields: ${listed}${extra}` : 'Created record',
+    };
+  }
+
+  if (action === 'delete') {
+    const listed = changedFields.slice(0, 5).join(', ');
+    const extra = changedFields.length > 5 ? ` +${changedFields.length - 5} more` : '';
+    return {
+      changedFields,
+      summary: changedFields.length > 0 ? `Deleted record. Previous fields: ${listed}${extra}` : 'Deleted record',
+    };
+  }
+
+  const fieldSummaries = changedFields.slice(0, 3).map((key) => {
+    const beforeValue = normalizeRevisionValue(beforeObject[key]);
+    const afterValue = normalizeRevisionValue(afterObject[key]);
+    return `${key}: ${beforeValue} -> ${afterValue}`;
+  });
+  const extra = changedFields.length > 3 ? ` +${changedFields.length - 3} more field(s)` : '';
+
+  return {
+    changedFields,
+    summary: fieldSummaries.length > 0 ? `${fieldSummaries.join('; ')}${extra}` : 'Updated record with no detected field differences',
+  };
 }
 
 async function recordRevision(
@@ -1247,20 +1363,25 @@ async function recordRevision(
   recordId: string,
   action: 'create' | 'update' | 'delete',
   changedBy: string,
+  changedByRole: string,
   beforeData: any | null,
   afterData: any | null,
 ): Promise<void> {
   try {
     await ensureRevisionHistorySchema();
+    const details = buildRevisionDetails(action, beforeData, afterData);
     await query(
-      `INSERT INTO revision_history (id, record_type, record_id, action, changed_by, before_data, after_data)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `INSERT INTO revision_history (id, record_type, record_id, action, changed_by, changed_by_role, changed_fields, change_summary, before_data, after_data)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)`,
       [
         crypto.randomUUID(),
         recordType,
         recordId,
         action,
         changedBy,
+        changedByRole,
+        JSON.stringify(details.changedFields),
+        details.summary,
         beforeData ? JSON.stringify(beforeData) : null,
         afterData ? JSON.stringify(afterData) : null,
       ]
@@ -1284,7 +1405,10 @@ app.get('/api/revision-history/:type/:id', requireAuth, requireRole(['snco', 'ad
       recordId: r.record_id,
       action: r.action,
       changedBy: r.changed_by,
+      changedByRole: r.changed_by_role,
       changedAt: r.changed_at,
+      changedFields: r.changed_fields,
+      changeSummary: r.change_summary,
       beforeData: r.before_data,
       afterData: r.after_data,
     })));
@@ -1431,7 +1555,7 @@ app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), asyn
 
     // Record revision history for tracked types
     if (['points', 'attendance', 'cadets', 'rewards'].includes(normalized)) {
-      await recordRevision(normalized, req.params.id, 'update', req.user?.name || 'unknown', beforeData, result.rows[0]);
+      await recordRevision(normalized, req.params.id, 'update', req.user?.name || 'unknown', req.user?.role || 'unknown', beforeData, result.rows[0]);
     }
 
     res.json(mapToClient(normalized, result.rows[0]));
@@ -1461,7 +1585,7 @@ app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), a
 
     // Record revision history for tracked types
     if (['points', 'attendance', 'cadets', 'rewards'].includes(normalized)) {
-      await recordRevision(normalized, req.params.id, 'delete', req.user?.name || 'unknown', beforeData, null);
+      await recordRevision(normalized, req.params.id, 'delete', req.user?.name || 'unknown', req.user?.role || 'unknown', beforeData, null);
     }
 
     res.json({ success: true });
@@ -1560,7 +1684,7 @@ app.post('/api/points', pointsLimiter, requireAuth, async (req: AuthRequest, res
 
     const row = result.rows[0];
 
-    await recordRevision('points', id, 'create', req.user?.name || 'unknown', null, row);
+    await recordRevision('points', id, 'create', req.user?.name || 'unknown', req.user?.role || 'unknown', null, row);
 
     res.status(201).json({
       id: row.id,
@@ -1872,7 +1996,7 @@ app.put('/api/attendance/:id/status', requireAuth, requireRole(['snco', 'admin',
     const updated = updatedResult.rows[0];
 
     // Record attendance status change in revision history
-    await recordRevision('attendance', id, 'update', req.user?.name || 'unknown',
+    await recordRevision('attendance', id, 'update', req.user?.name || 'unknown', req.user?.role || 'unknown',
       { status: existing.status, cadet_name: existing.cadet_name, date: existing.date },
       { status: updated.status, cadet_name: updated.cadet_name, date: updated.date }
     );
