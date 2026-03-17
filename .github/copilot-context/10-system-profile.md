@@ -6,6 +6,7 @@
 - Database: PostgreSQL via DATABASE_URL in .env.local
 - Auth: JWT (7d), bcrypt, role-based access
 - Hosting: Windows Server + Cloudflare Tunnel + domain flightpoints.uk
+- Dependency updates: Dependabot monthly, grouped updates, low PR cap
 
 ## Roles
 - snco: full admin features
@@ -25,6 +26,10 @@
 - JWT_SECRET
 - ADMIN_PIN
 - SMTP_TO, SMTP_FROM, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASS (alerts)
+
+## Repo safety
+- No secrets in repo or context files
+- Keep all credentials/env values out of markdown and code comments
 
 ## High-level architecture notes
 - Generic CRUD route family: /api/data/:type

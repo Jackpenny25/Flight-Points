@@ -16,6 +16,11 @@
 8. Post-deploy smoke test: GET http://localhost:3001/api/health (3 attempts)
 9. If smoke fails: rollback to previous commit + reinstall + rebuild + restart
 
+## Verified endpoint behavior (2026-03-17)
+- /api/test returns: { message: "Server is working!" }
+- /api/health returns status + checks (db, disk, uptime, memory)
+- If /api/test works but /api/health returns 404, the running code is stale or route registration is broken and redeploy is required
+
 ## Monitoring/logs
 - Primary log root on server: C:\inetpub\wwwroot\Flight-Points\Logs
 - Subfolders: Server, Tunnel, Deploy, Backup
@@ -39,3 +44,7 @@
 - Confirm scheduled task account can read .env.local
 - Confirm outbound SMTP allowed by firewall/network
 - Use app password when provider requires it
+
+## API auth troubleshooting quick checks
+- "Invalid or expired token" usually means placeholder token was used or token expired
+- Generate a fresh token via POST /api/auth/login before testing protected routes

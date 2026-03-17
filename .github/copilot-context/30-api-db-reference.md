@@ -40,10 +40,19 @@
 - tickets: issue tracking and evidence link
 - revision_history: immutable change audit trail
 
+## Revision history columns of interest
+- record_type, record_id, action, changed_by, changed_at
+- changed_by_role
+- changed_fields
+- change_summary
+- before_data, after_data
+
 ## Revision logging coverage
 - Logged now:
   - PUT /api/data/:type/:id
   - DELETE /api/data/:type/:id
+  - POST /api/points
   - PUT /api/attendance/:id/status
-- Not yet logged:
-  - POST /api/points create (recommended next)
+
+## Operator pitfall
+- TypeScript snippets for endpoints belong in server code, not SQL tools (DBeaver) or raw PowerShell.

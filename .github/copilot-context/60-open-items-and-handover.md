@@ -1,21 +1,29 @@
 # Open Items and Handover
 
-## High-priority server item
-1. Add revision logging for point creation
-- Route: POST /api/points
-- Goal: full audit trail parity with updates/deletes
-- Suggested call: recordRevision('points', newId, 'create', userId, null, createdPoint)
+## Current state (2026-03-17)
+- Point creation revision logging is implemented
+- Health endpoint is implemented and verified
+- Auto-deploy pre-check and smoke-check pipeline is implemented
 
 ## Optional server enhancements
-2. Expand /api/health checks
+1. Expand /api/health checks
 - Add revision_history table presence check
 - Add JWT_SECRET sanity check
 - Add SMTP connectivity check if SMTP configured
 - Add tunnel process/status check if practical
 
-3. Validate alerting path end-to-end
+2. Validate alerting path end-to-end
 - Test endpoint: POST /api/test-error-alert
 - Expected: 500 response + SMTP alert + server error log entry
+
+3. Add a SQL view for readable audits (optional)
+- Suggested view: revision_history_readable
+- Include: changed_at, record_type, record_id, action, changed_by, changed_by_role, changed_fields, change_summary
+
+## Common pitfalls
+- Do not run TypeScript snippets in DBeaver/SQL editor
+- Do not use placeholder tokens for protected API tests
+- If /api/test works but /api/health returns 404, deploy code mismatch is likely
 
 ## Operational assumptions to preserve
 - No local-storage data mode

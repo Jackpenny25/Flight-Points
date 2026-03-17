@@ -27,10 +27,15 @@
 
 ## Integrity and auditing
 - revision_history table auto-created
-- recordRevision used for update/delete operations and attendance status updates
+- recordRevision used for create/update/delete and attendance status updates
+- revision history now includes readable metadata: changed_by_role, changed_fields, change_summary
 - admin endpoint to inspect revision history by type/id
 
 ## Deploy safety controls
 - Pre-deploy typecheck gate (npx tsc --noEmit)
 - Post-deploy health smoke test (3 attempts)
 - Auto rollback to previous commit on smoke failure
+
+## Dependency update noise control
+- Dependabot changed to monthly checks
+- Open PR cap reduced to 2

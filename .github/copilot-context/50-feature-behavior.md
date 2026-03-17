@@ -29,6 +29,10 @@
 - Badge polling every 2 minutes
 - Badge sources: tickets, accounts, integrity, rewards, points recent count
 
+## Revision history readability
+- Audit rows are intended to show who changed what, not only before/after JSON blobs
+- Preferred review fields: changed_by, changed_by_role, action, changed_fields, change_summary, changed_at
+
 ## Cadets UI behavior
 - Alphabetical ordering within flights
 - HQ displayed separately

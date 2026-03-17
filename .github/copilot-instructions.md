@@ -7,8 +7,12 @@ Dont commit yourself as it confuses me.
 
 **ADD YOUR IMPORTANT NOTES HERE:**
 - When Running "npm run server" dont wait for it to respond as this is on a different device to the server and all of the info. I may use ctl + c to stop it but please stop it after a while.
+
 - No secrets should be stored in this repo and escpially in this file as it is public(Same for the other context files) dont add anything that can make the website vulnerable.
-- 
+
+- Please update this file with ANY infomation and update the other context files with any important information you think is relevant to the project. This is the single source of truth for the project and should be updated with any learnings and decisions.
+
+-UPDATE AFTER EVERY MESSAGE AND ANY RELEVANT INFO that will be useful for future development and handover. This is the single source of truth for the project and should be updated with any learnings and decisions.
 
 ---
 
@@ -90,12 +94,12 @@ Always test using `npm run build` and `npm run server` at the end of large chang
 | **CORS** | Whitelist: localhost:5173/3001 (dev), flightpoints.uk + api.flightpoints.uk (prod) |
 | **CSP** | Helmet headers; self → defaultSrc, scriptSrc, styleSrc, imgSrc. fonts.googleapis.com + gstatic.com allowed. |
 | **Health Check** | `GET /api/health`: DB, disk, uptime, memory. Returns 200 (healthy) or 503 (degraded) |
-| **Revision History** | Table: record_type, record_id, action, changed_by, changed_at, before_data, after_data. Logged on PUT/DELETE `/api/data/:type/:id` and PUT `/api/attendance/:id/status`. View: `GET /api/revision-history/:type/:id` (admin). |
+| **Revision History** | Table includes record_type, record_id, action, changed_by, changed_by_role, changed_at, changed_fields, change_summary, before_data, after_data. Logged on POST `/api/points`, PUT/DELETE `/api/data/:type/:id`, and PUT `/api/attendance/:id/status`. View: `GET /api/revision-history/:type/:id` (admin). |
 | **ConfirmDialog** | Reusable component; typed-confirm input; affected count for destructive actions |
 | **Effective Permissions** | Admin-visible role/permission matrix (5 roles × 8 areas). In Integrity tab. |
 | **Pre-Deploy Check** | `npx tsc --noEmit` after npm install. Aborts if fails. |
 | **Post-Deploy Test** | Health check 3×, 5s apart. On fail: auto-rollback to previous commit. |
-| **Dependabot** | Weekly npm scanning; grouped minor/patch PRs |
+| **Dependabot** | Monthly npm scanning; grouped minor/patch PRs; open PR limit = 2 |
 
 ---
 
@@ -127,16 +131,19 @@ Always test using `npm run build` and `npm run server` at the end of large chang
 
 ⚠️ **Action needed:**
 
-1. **Revision History on Point Creation** — Currently only logs on PUT/DELETE `/api/data/:type/:id` and PUT `/api/attendance/:id/status`. Add `recordRevision('create')` to `POST /api/points` for full audit trail of all point awards.
+1. **Health Check Enhancement** (optional) — Current: DB, disk, uptime, memory. Could add: revision_history table check, JWT_SECRET validation, SMTP connectivity, tunnel status.
 
-2. **Health Check Enhancement** (optional) — Current: DB, disk, uptime, memory. Could add: revision_history table check, JWT_SECRET validation, SMTP connectivity, tunnel status.
-
-3. **Test Error Alert Endpoint** — Verify `/api/test-error-alert` works:
+2. **Test Error Alert Endpoint** — Verify `/api/test-error-alert` works:
    ```powershell
    $token = (Invoke-RestMethod -Uri http://localhost:3001/api/auth/login -Method Post -ContentType application/json -Body (@{ email = "user@flightpoints.local"; password = "pass" } | ConvertTo-Json)).token
    Invoke-RestMethod -Uri http://localhost:3001/api/test-error-alert -Method Post -Headers @{ Authorization = "Bearer $token" }
    ```
    Expected: HTTP 500, email alert, log entry in `Logs\Server\server-errors-YYYY-MM-DD.log`.
+
+3. **Operator Pitfalls**
+   - TypeScript snippets belong in `server/server.ts`, not DBeaver SQL editors.
+   - Protected routes require a real fresh JWT; placeholder tokens will fail with "Invalid or expired token".
+   - If `/api/test` works but `/api/health` returns 404, deployed code and running process are mismatched; redeploy and restart service.
 
 ---
 

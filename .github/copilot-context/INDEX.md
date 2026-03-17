@@ -19,7 +19,7 @@ Do not read this by default. Open only when normal instructions are insufficient
 - 30-api-db-reference.md: API patterns, key endpoints, table map.
 - 40-security-history-and-decisions.md: Security hardening and rationale timeline.
 - 50-feature-behavior.md: Product behavior details by module.
-- 60-open-items-and-handover.md: Remaining server-side actions and validation checklist.
+- 60-open-items-and-handover.md: Remaining server-side actions, pitfalls, and validation checklist.
 
 ## Maintenance
 - Keep concise; append only important facts.
