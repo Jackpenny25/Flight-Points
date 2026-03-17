@@ -1559,6 +1559,9 @@ app.post('/api/points', pointsLimiter, requireAuth, async (req: AuthRequest, res
     );
 
     const row = result.rows[0];
+
+    await recordRevision('points', id, 'create', req.user?.name || 'unknown', null, row);
+
     res.status(201).json({
       id: row.id,
       cadetName: row.cadet_name,
