@@ -1,7 +1,7 @@
 // src/utils/api.ts
-import { getToken } from './auth';
+import { getToken, logout } from './auth';
 
-const API_URL = 'https://flightpoints.uk/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://flightpoints.uk/api';
 
 async function parseJsonSafe(response: Response) {
   const text = await response.text();
@@ -16,14 +16,27 @@ async function parseJsonSafe(response: Response) {
   }
 }
 
-function fetchWithAuth(url: string, options: RequestInit = {}) {
+async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const token = getToken();
   const headers = {
     ...(options.headers || {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     'Content-Type': 'application/json',
   };
-  return fetch(`${API_URL}${url}`, { ...options, headers });
+  const response = await fetch(`${API_URL}${url}`, { ...options, headers });
+
+  if (response.status === 401) {
+    logout();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('flightpoints:auth-expired', {
+        detail: {
+          message: 'Your session has expired or you have been signed out. Please log in again.',
+        },
+      }));
+    }
+  }
+
+  return response;
 }
 
 // Data interfaces

@@ -73,8 +73,8 @@ const SLIDE_COUNT = 9;
 const AUTO_ADVANCE_MS = 15000;
 const DATA_REFRESH_MS = 30000;
 
-/* ─── Theme — dark slate / gold / green ─── */
-const T = {
+/* ─── Base theme (control bar, loading, medals) ─── */
+const BASE_THEME = {
   /* Backgrounds */
   darkBg: '#2d3a45',       // dark slate
   cardBg: 'rgba(255,255,255,0.06)',
@@ -98,6 +98,28 @@ const T = {
   border: 'rgba(255,255,255,0.15)',
   borderStrong: 'rgba(255,255,255,0.25)',
 };
+
+const T = BASE_THEME;
+
+/* ─── Per-slide colour themes (accessible, high-contrast palettes) ─── */
+interface SlideTheme {
+  bg: string; accent: string; accentDim: string; text: string; textMuted: string;
+  headerBg: string; rowEven: string; rowOdd: string;
+  border: string; borderStrong: string; cardBg: string;
+  positive: string; negative: string;
+}
+
+const SLIDE_THEMES: SlideTheme[] = [
+  /* 1 Navy + Cyan (lightened) */          { bg:'#1a2d42', accent:'#22d3ee', accentDim:'#06b6d4', text:'#e0f2fe', textMuted:'rgba(224,242,254,0.65)', headerBg:'#264a6e', rowEven:'rgba(34,211,238,0.12)', rowOdd:'rgba(34,211,238,0.05)', border:'rgba(34,211,238,0.25)', borderStrong:'rgba(34,211,238,0.4)', cardBg:'rgba(34,211,238,0.08)', positive:'#22d3ee', negative:'#fb923c' },
+  /* 2 Emerald Light (from 3) */           { bg:'#1c2e40', accent:'#34d399', accentDim:'#10b981', text:'#e2e8f0', textMuted:'rgba(226,232,240,0.65)', headerBg:'#2a4a6a', rowEven:'rgba(52,211,153,0.12)', rowOdd:'rgba(52,211,153,0.05)', border:'rgba(52,211,153,0.25)', borderStrong:'rgba(52,211,153,0.4)', cardBg:'rgba(52,211,153,0.08)', positive:'#34d399', negative:'#fb923c' },
+  /* 3 Slate + Emerald (lightened) */      { bg:'#1a2844', accent:'#34d399', accentDim:'#10b981', text:'#e2e8f0', textMuted:'rgba(226,232,240,0.65)', headerBg:'#2c4872', rowEven:'rgba(52,211,153,0.12)', rowOdd:'rgba(52,211,153,0.05)', border:'rgba(52,211,153,0.25)', borderStrong:'rgba(52,211,153,0.4)', cardBg:'rgba(52,211,153,0.08)', positive:'#34d399', negative:'#fb923c' },
+  /* 4 Sky Blue Light (from 6) */          { bg:'#1c2638', accent:'#38bdf8', accentDim:'#0ea5e9', text:'#f1f5f9', textMuted:'rgba(241,245,249,0.65)', headerBg:'#2a3d55', rowEven:'rgba(56,189,248,0.12)', rowOdd:'rgba(56,189,248,0.05)', border:'rgba(56,189,248,0.25)', borderStrong:'rgba(56,189,248,0.4)', cardBg:'rgba(56,189,248,0.08)', positive:'#38bdf8', negative:'#fb923c' },
+  /* 5 Teal + Orange (lightened) */        { bg:'#0e3f3e', accent:'#fb923c', accentDim:'#ea580c', text:'#ccfbf1', textMuted:'rgba(204,251,241,0.65)', headerBg:'#1e5e5a', rowEven:'rgba(251,146,60,0.12)', rowOdd:'rgba(251,146,60,0.05)', border:'rgba(251,146,60,0.25)', borderStrong:'rgba(251,146,60,0.4)', cardBg:'rgba(251,146,60,0.08)', positive:'#34d399', negative:'#f87171' },
+  /* 6 Steel + Sky Blue (lightened) */     { bg:'#1a2538', accent:'#38bdf8', accentDim:'#0ea5e9', text:'#f1f5f9', textMuted:'rgba(241,245,249,0.65)', headerBg:'#2d4156', rowEven:'rgba(56,189,248,0.12)', rowOdd:'rgba(56,189,248,0.05)', border:'rgba(56,189,248,0.25)', borderStrong:'rgba(56,189,248,0.4)', cardBg:'rgba(56,189,248,0.08)', positive:'#38bdf8', negative:'#fb923c' },
+  /* 7 Cyan Light (from 1) */              { bg:'#1c3248', accent:'#22d3ee', accentDim:'#06b6d4', text:'#e0f2fe', textMuted:'rgba(224,242,254,0.65)', headerBg:'#28506e', rowEven:'rgba(34,211,238,0.12)', rowOdd:'rgba(34,211,238,0.05)', border:'rgba(34,211,238,0.25)', borderStrong:'rgba(34,211,238,0.4)', cardBg:'rgba(34,211,238,0.08)', positive:'#22d3ee', negative:'#fb923c' },
+  /* 8 Orange Light (from 5) */            { bg:'#162e2e', accent:'#fb923c', accentDim:'#ea580c', text:'#ccfbf1', textMuted:'rgba(204,251,241,0.65)', headerBg:'#204846', rowEven:'rgba(251,146,60,0.12)', rowOdd:'rgba(251,146,60,0.05)', border:'rgba(251,146,60,0.25)', borderStrong:'rgba(251,146,60,0.4)', cardBg:'rgba(251,146,60,0.08)', positive:'#34d399', negative:'#f87171' },
+  /* 9 Electric Blue (lightened) */        { bg:'#141824', accent:'#60a5fa', accentDim:'#3b82f6', text:'#f1f5f9', textMuted:'rgba(241,245,249,0.65)', headerBg:'#253550', rowEven:'rgba(96,165,250,0.12)', rowOdd:'rgba(96,165,250,0.05)', border:'rgba(96,165,250,0.25)', borderStrong:'rgba(96,165,250,0.4)', cardBg:'rgba(96,165,250,0.08)', positive:'#60a5fa', negative:'#fca5a5' },
+];
 
 /* ─── Font ─── */
 const FONT = "'Aptos', 'Calibri', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
@@ -155,6 +177,8 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
   const [slide, setSlide] = useState(0);
   const [paused, setPaused] = useState(false);
   const [barVisible, setBarVisible] = useState(true);
+  const [prevSlide, setPrevSlide] = useState<number | null>(null);
+  const [transitioning, setTransitioning] = useState(false);
   const barTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ── Data ── */
@@ -181,6 +205,16 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
     return () => clearInterval(id);
   }, [fetchData]);
 
+  /* ── Slide change with transition ── */
+  const goToSlide = useCallback((next: number) => {
+    setSlide(prev => {
+      setPrevSlide(prev);
+      setTransitioning(true);
+      setTimeout(() => { setTransitioning(false); setPrevSlide(null); }, 600);
+      return next;
+    });
+  }, []);
+
   /* ── Auto-advance ── */
   useEffect(() => {
     if (paused || loading) return;
@@ -197,16 +231,16 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
       }
     }
     
-    const id = setTimeout(() => setSlide(s => (s + 1) % SLIDE_COUNT), duration);
+    const id = setTimeout(() => goToSlide((slide + 1) % SLIDE_COUNT), duration);
     return () => clearTimeout(id);
-  }, [paused, loading, slideDurations, slide, data, leaderboardScrollMultiplier]);
+  }, [paused, loading, slideDurations, slide, data, leaderboardScrollMultiplier, goToSlide]);
 
   /* ── Keyboard ── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { exitAndClose(); }
-      else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { setSlide(s => (s + 1) % SLIDE_COUNT); }
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { setSlide(s => (s - 1 + SLIDE_COUNT) % SLIDE_COUNT); }
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { goToSlide((slide + 1) % SLIDE_COUNT); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { goToSlide((slide - 1 + SLIDE_COUNT) % SLIDE_COUNT); }
       else if (e.key === ' ') { e.preventDefault(); setPaused(p => !p); }
     };
     window.addEventListener('keydown', handler);
@@ -264,23 +298,27 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
 
   /* ── Slides ── */
   const slides = [
-    <SlideFlightPoints key="fp" data={data} />,
-    <SlidePodiumAndMonth key="pm" data={data} stats={stats} />,
-    <SlideLeaderboard key="lb" data={data} leaderboardScrollMultiplier={leaderboardScrollMultiplier} />,
-    <SlideRisingStars key="rs" stats={stats} />,
-    <SlideFlightRace key="fr" data={data} />,
-    <SlideWeeklyComparison key="wc" stats={stats} />,
-    <SlideAttendanceStreaks key="as" stats={stats} />,
-    <SlideRecentPoints key="rp" data={data} />,
-    <SlideRewards key="rw" rewards={rewards} />,
+    <SlideFlightPoints key="fp" data={data} theme={SLIDE_THEMES[0]} />,
+    <SlidePodiumAndMonth key="pm" data={data} stats={stats} theme={SLIDE_THEMES[1]} />,
+    <SlideLeaderboard key="lb" data={data} leaderboardScrollMultiplier={leaderboardScrollMultiplier} theme={SLIDE_THEMES[2]} />,
+    <SlideRisingStars key="rs" stats={stats} theme={SLIDE_THEMES[3]} />,
+    <SlideFlightRace key="fr" data={data} theme={SLIDE_THEMES[4]} />,
+    <SlideWeeklyComparison key="wc" stats={stats} theme={SLIDE_THEMES[5]} />,
+    <SlideAttendanceStreaks key="as" stats={stats} theme={SLIDE_THEMES[6]} />,
+    <SlideRecentPoints key="rp" data={data} theme={SLIDE_THEMES[7]} />,
+    <SlideRewards key="rw" rewards={rewards} theme={SLIDE_THEMES[8]} />,
   ];
 
   return (
     <div style={S.container}>
-      {/* Current slide */}
-      <div key={slide} style={S.slideWrap}>{slides[slide]}</div>
-
-      {/* Bottom control bar — auto-hides after 3s of inactivity */}
+      {/* Previous slide (fading out) */}
+      {prevSlide !== null && transitioning && (
+        <div style={{ ...S.slideWrap, position: 'absolute' as const, top: 0, left: 0, animation: 'pres-fadeOut 0.6s ease-out forwards', zIndex: 1 }}>
+          {slides[prevSlide]}
+        </div>
+      )}
+      {/* Current slide (fading in) */}
+      <div key={slide} style={{ ...S.slideWrap, animation: transitioning ? 'pres-fadeIn 0.6s ease-out' : 'none', zIndex: 2 }}>{slides[slide]}</div>
       <div style={{
         ...S.bar,
         transform: barVisible ? 'translateY(0)' : 'translateY(100%)',
@@ -290,7 +328,7 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
         <div style={S.barInner}>
           <button
             style={S.barBtn}
-            onClick={() => setSlide(s => (s - 1 + SLIDE_COUNT) % SLIDE_COUNT)}
+            onClick={() => goToSlide((slide - 1 + SLIDE_COUNT) % SLIDE_COUNT)}
             title="Previous slide (←)"
           >
             ◀
@@ -304,7 +342,7 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
           </button>
           <button
             style={S.barBtn}
-            onClick={() => setSlide(s => (s + 1) % SLIDE_COUNT)}
+            onClick={() => goToSlide((slide + 1) % SLIDE_COUNT)}
             title="Next slide (→)"
           >
             ▶
@@ -315,7 +353,7 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
             {Array.from({ length: SLIDE_COUNT }).map((_, i) => (
               <button
                 key={i}
-                onClick={() => setSlide(i)}
+                onClick={() => goToSlide(i)}
                 title={SLIDE_NAMES[i]}
                 style={{
                   width: i === slide ? 24 : 8,
@@ -347,7 +385,8 @@ export function PresentationMode({ onClose, slideDurations = [15000, 15000, 2000
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 1 — Flight Points Summary
    ═══════════════════════════════════════════════════════════════ */
-function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
+function SlideFlightPoints({ data, theme }: { data: LeaderboardData | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   if (!data) return null;
   const flights = [...(data.flightLeaderboard || [])].sort((a, b) => flightSortKey(a.flight) - flightSortKey(b.flight));
   const cadet = data.winningCadet;
@@ -376,6 +415,7 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
             rows={flights.map(f => [flightLabel(f.flight), String(f.points)])}
             aligns={['left', 'right']}
             fontSize={34}
+            theme={theme}
           />
         </div>
 
@@ -390,6 +430,7 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
                 rows={[[cadet.name, String(cadet.points)]]}
                 aligns={['left', 'right']}
                 fontSize={34}
+                theme={theme}
               />
             </div>
           )}
@@ -399,6 +440,7 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
               rows={[[flightLabel(flight.flight), String(flight.points)]]}
               aligns={['left', 'right']}
               fontSize={34}
+              theme={theme}
             />
           )}
         </div>
@@ -411,7 +453,8 @@ function SlideFlightPoints({ data }: { data: LeaderboardData | null }) {
    SLIDE 2 — Top 3 Podium + Flight of the Month (combined)
    1st place = tallest podium. Handles joint winners (ties).
    ═══════════════════════════════════════════════════════════════ */
-function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; stats: PresentationStats | null }) {
+function SlidePodiumAndMonth({ data, stats, theme }: { data: LeaderboardData | null; stats: PresentationStats | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   if (!data) return null;
 
   const entries = data.detailedLeaderboard && data.detailedLeaderboard.length > 0
@@ -586,7 +629,8 @@ function SlidePodiumAndMonth({ data, stats }: { data: LeaderboardData | null; st
    SLIDE 3 — Complete Leaderboard
    Single table by default; splits if > 20 cadets.
    ═══════════════════════════════════════════════════════════════ */
-function SlideLeaderboard({ data, leaderboardScrollMultiplier = 1 }: { data: LeaderboardData | null; leaderboardScrollMultiplier?: number }) {
+function SlideLeaderboard({ data, leaderboardScrollMultiplier = 1, theme }: { data: LeaderboardData | null; leaderboardScrollMultiplier?: number; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   if (!data) return null;
 
   const entries: LeaderboardEntry[] = data.detailedLeaderboard && data.detailedLeaderboard.length > 0
@@ -633,14 +677,14 @@ function SlideLeaderboard({ data, leaderboardScrollMultiplier = 1 }: { data: Lea
             borderRadius: 8, overflow: 'hidden',
             maxHeight: 'calc(100vh - 180px)',
           }}>
-            <PPTable headers={headers} rows={toRows(left, 1)} aligns={aligns} fontSize={fontSize} compact />
+            <PPTable headers={headers} rows={toRows(left, 1)} aligns={aligns} fontSize={fontSize} compact theme={theme} />
           </div>
           {right.length > 0 && (
             <div style={{
               borderRadius: 8, overflow: 'hidden',
               maxHeight: 'calc(100vh - 180px)',
             }}>
-              <PPTable headers={headers} rows={toRows(right, half + 1)} aligns={aligns} fontSize={fontSize} compact />
+              <PPTable headers={headers} rows={toRows(right, half + 1)} aligns={aligns} fontSize={fontSize} compact theme={theme} />
             </div>
           )}
         </div>
@@ -670,7 +714,7 @@ function SlideLeaderboard({ data, leaderboardScrollMultiplier = 1 }: { data: Lea
         <div style={{
           animation: `tableScroll ${scrollDuration}s linear forwards`,
         }}>
-          <PPTable headers={headers} rows={toRows(entries, 1)} aligns={aligns} fontSize={fontSize} />
+          <PPTable headers={headers} rows={toRows(entries, 1)} aligns={aligns} fontSize={fontSize} theme={theme} />
         </div>
       </div>
     </div>
@@ -680,7 +724,8 @@ function SlideLeaderboard({ data, leaderboardScrollMultiplier = 1 }: { data: Lea
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 4 — Rising Stars (top gainers this week)
    ═══════════════════════════════════════════════════════════════ */
-function SlideRisingStars({ stats }: { stats: PresentationStats | null }) {
+function SlideRisingStars({ stats, theme }: { stats: PresentationStats | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   // Use monthly risers if available, else fall back to weekly
   const stars = (stats as any)?.risingCadets?.length > 0
     ? (stats as any).risingCadets as Array<{ name: string; flight: string; monthPoints: number }>
@@ -778,7 +823,8 @@ function SlideRisingStars({ stats }: { stats: PresentationStats | null }) {
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 5 — Flight Race (sorted by most points at top)
    ═══════════════════════════════════════════════════════════════ */
-function SlideFlightRace({ data }: { data: LeaderboardData | null }) {
+function SlideFlightRace({ data, theme }: { data: LeaderboardData | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   if (!data) return null;
   const flights = [...(data.flightLeaderboard || [])]
     .filter(f => f.flight?.toLowerCase() !== 'hq')
@@ -844,7 +890,8 @@ function SlideFlightRace({ data }: { data: LeaderboardData | null }) {
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 6 — Weekly Comparison (this week vs last week)
    ═══════════════════════════════════════════════════════════════ */
-function SlideWeeklyComparison({ stats }: { stats: PresentationStats | null }) {
+function SlideWeeklyComparison({ stats, theme }: { stats: PresentationStats | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   const thisWeek = stats?.thisWeekFlights || [];
   const lastWeek = stats?.lastWeekFlights || [];
 
@@ -942,7 +989,8 @@ function SlideWeeklyComparison({ stats }: { stats: PresentationStats | null }) {
    SLIDE 7 — Attendance Streaks
    Shows current streaks and the record holder(s) for longest streak.
    ═══════════════════════════════════════════════════════════════ */
-function SlideAttendanceStreaks({ stats }: { stats: PresentationStats | null }) {
+function SlideAttendanceStreaks({ stats, theme }: { stats: PresentationStats | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   const streaks = stats?.attendanceStreaks || [];
   const top = streaks.slice(0, 8);
 
@@ -1063,7 +1111,8 @@ function SlideAttendanceStreaks({ stats }: { stats: PresentationStats | null }) 
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 8 — Recent Points
    ═══════════════════════════════════════════════════════════════ */
-function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
+function SlideRecentPoints({ data, theme }: { data: LeaderboardData | null; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   if (!data) return null;
   const recent = data.recentPoints.slice(0, 10);
 
@@ -1086,6 +1135,7 @@ function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
           ])}
           aligns={['left', 'left', 'left', 'right']}
           fontSize={22}
+          theme={theme}
         />
       </div>
     </div>
@@ -1095,7 +1145,8 @@ function SlideRecentPoints({ data }: { data: LeaderboardData | null }) {
 /* ═══════════════════════════════════════════════════════════════
    SLIDE 9 — Rewards (from database)
    ═══════════════════════════════════════════════════════════════ */
-function SlideRewards({ rewards }: { rewards: Reward[] }) {
+function SlideRewards({ rewards, theme }: { rewards: Reward[]; theme: SlideTheme }) {
+  const T = { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative };
   const now = Date.now();
   const activeRewards = rewards.filter(r => {
     if (!r.endsAt) return true;
@@ -1124,6 +1175,7 @@ function SlideRewards({ rewards }: { rewards: Reward[] }) {
             ])}
             aligns={['left', 'left', 'left']}
             fontSize={24}
+            theme={theme}
           />
         </div>
       )}
@@ -1140,13 +1192,16 @@ function PPTable({
   aligns,
   fontSize = 22,
   compact = false,
+  theme,
 }: {
   headers: string[];
   rows: string[][];
   aligns?: Array<'left' | 'center' | 'right'>;
   fontSize?: number;
   compact?: boolean;
+  theme?: SlideTheme;
 }) {
+  const T = theme ? { ...BASE_THEME, darkBg: theme.bg, gold: theme.accent, goldDim: theme.accentDim, textLight: theme.text, white: theme.text, textMuted: theme.textMuted, headerBg: theme.headerBg, rowEven: theme.rowEven, rowOdd: theme.rowOdd, border: theme.border, borderStrong: theme.borderStrong, cardBg: theme.cardBg, green: theme.positive, greenDim: theme.positive + 'bb', red: theme.negative } : BASE_THEME;
   const pad = compact ? '6px 12px' : '14px 18px';
 
   return (
@@ -1323,6 +1378,14 @@ const S: Record<string, CSSProperties> = {
 
 /* ─── Animations ─── */
 const animations = `
+  @keyframes pres-fadeIn {
+    from { opacity: 0; transform: scale(1.02); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes pres-fadeOut {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0; transform: scale(0.98); }
+  }
   @keyframes pres-fadeSlide {
     from { 
       opacity: 0; 

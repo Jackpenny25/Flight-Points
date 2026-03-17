@@ -4,7 +4,7 @@ Dont commit yourself as it confuses me.
 
 Please frequently update when you learn new things about the project or make decisions. This file is intended to be a single source of truth for how to work on the project, and it should be updated as the project evolves.
 
-Always test using `npm run build` and `npm run server` at the end of any large changes. If you break something, fix it immediately. Unlwess it is broken on purpose.
+Always test using `npm run build` and `npm run server` (DONT WAIT FOR A REPSONSE AS THERE WONT BE ONE ON HERE) at the end of any large changes. If you break something, fix it immediately. Unlwess it is broken on purpose.
 
 ## Project Stack
 - **Frontend**: React + TypeScript + Vite + Tailwind CSS + shadcn/ui components
@@ -40,13 +40,14 @@ Use `start-server-and-tunnel.ps1` to run both `npm run server` and `cloudflared 
 - **Server reboot:** Scheduled Task `Flight-Points_Server_Tunnel` starts both API server and Cloudflare tunnel.
 - **API crash while script is running:** `start-server-and-tunnel.ps1` auto-restarts API.
 - **Tunnel crash while script is running:** `start-server-and-tunnel.ps1` auto-restarts tunnel.
-- **Auto-deploy checker:** separate Scheduled Task for `auto-deploy.ps1` should also be enabled.
+- **Auto-deploy checker:** separate Scheduled Task `FlightPoints-AutoDeploy` for `auto-deploy.ps1` should also be enabled.
 - **Backups:** separate Scheduled Task `FlightPoints-Weekly-Backup` runs Sundays at 03:00.
 
 Startup verification commands:
 ```powershell
-Get-ScheduledTask -TaskName "Flight-Points_Server_Tunnel","FlightPoints-Weekly-Backup"
+Get-ScheduledTask -TaskName "Flight-Points_Server_Tunnel","FlightPoints-AutoDeploy","FlightPoints-Weekly-Backup"
 Get-ScheduledTaskInfo -TaskName "Flight-Points_Server_Tunnel"
+Get-ScheduledTaskInfo -TaskName "FlightPoints-AutoDeploy"
 Get-ScheduledTaskInfo -TaskName "FlightPoints-Weekly-Backup"
 ```
 
@@ -62,10 +63,14 @@ Monitor all logs: `Get-ChildItem "C:\inetpub\wwwroot\Flight-Points\Logs\**\*.log
 
 ### Test Website Error Alerting
 Use this safe admin-only endpoint to test email + error file logging:
-1. Log in as `snco` or `admin` and copy JWT token.
+1. Get a fresh JWT token for an `snco` or `admin` account:
+  ```powershell
+  $loginBody = @{ email = "<username>@flightpoints.local"; password = "<password>" } | ConvertTo-Json
+  $token = (Invoke-RestMethod -Method Post -Uri "http://localhost:3001/api/auth/login" -ContentType "application/json" -Body $loginBody).token
+  ```
 2. Send test request:
   ```powershell
-  Invoke-RestMethod -Method Post -Uri "http://localhost:3001/api/test-error-alert" -Headers @{ Authorization = "Bearer <JWT_TOKEN>" }
+  Invoke-RestMethod -Method Post -Uri "http://localhost:3001/api/test-error-alert" -Headers @{ Authorization = "Bearer $token" }
   ```
 3. Expected result: HTTP 500 response, email alert sent, and entry appended to `\Logs\Server\server-errors-YYYY-MM-DD.log`.
 
@@ -79,7 +84,7 @@ Use this exact checklist on the Windows server where `auto-deploy.ps1` runs:
   - `SMTP_PORT=587`
   - `SMTP_USER=your-smtp-username`
   - `SMTP_PASS=your-smtp-password-or-app-password`
-2. Restart the scheduled auto-deploy task (or reboot server) so the script reloads env values.
+2. Restart the scheduled auto-deploy task `FlightPoints-AutoDeploy` (or reboot server) so the script reloads env values.
 3. Confirm task is running under an account that can read `.env.local` and write to `data/deploy-status.json`.
 4. Confirm outbound SMTP is allowed from the server (firewall/network).
 5. Trigger a test failure safely:

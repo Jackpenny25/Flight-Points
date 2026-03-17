@@ -4,12 +4,14 @@ import Dashboard from './components/Dashboard';
 import { Toaster } from './components/ui/sonner';
 import { getToken, isAuthenticated, logout, getUser } from '../utils/auth';
 
+const AUTH_EXPIRED_EVENT = 'flightpoints:auth-expired';
 
 export default function App() {
   const [authed, setAuthed] = useState(isAuthenticated());
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [accessToken, setAccessToken] = useState<string>('');
+  const [loginMessage, setLoginMessage] = useState('');
 
   useEffect(() => {
     // Clean up legacy localStorage keys on app load
@@ -33,10 +35,27 @@ export default function App() {
     setLoading(false);
   }, []);
 
+  useEffect(() => {
+    const handleAuthExpired = (event: Event) => {
+      const customEvent = event as CustomEvent<{ message?: string }>;
+      logout();
+      setCurrentUser(null);
+      setAccessToken('');
+      setAuthed(false);
+      setLoginMessage(customEvent.detail?.message || 'Please log in again.');
+    };
+
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired as EventListener);
+    return () => {
+      window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired as EventListener);
+    };
+  }, []);
+
   const handleLogin = (accessToken: string, user: any) => {
     setAccessToken(accessToken);
     setCurrentUser(user);
     setAuthed(true);
+    setLoginMessage('');
   };
 
 
@@ -61,7 +80,7 @@ export default function App() {
       {authed ? (
         <Dashboard user={currentUser} accessToken={accessToken} onLogout={handleLogout} />
       ) : (
-        <Login onLogin={handleLogin} />
+        <Login onLogin={handleLogin} sessionMessage={loginMessage} />
       )}
       <Toaster />
     </>

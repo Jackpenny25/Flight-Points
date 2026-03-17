@@ -11,9 +11,10 @@ import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
 interface LoginProps {
   onLogin: (accessToken: string, user: any) => void;
+  sessionMessage?: string;
 }
 
-export function Login({ onLogin }: LoginProps) {
+export function Login({ onLogin, sessionMessage }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -49,7 +50,7 @@ export function Login({ onLogin }: LoginProps) {
       console.error('Sign in error:', err);
       let displayError = err.message || 'Failed to sign in. Please try again.';
       if (displayError.includes('Login failed')) {
-        displayError = `Invalid login credentials. Please check your username and password, or ask Sgt Penny J for your account details.`;
+        displayError = `Invalid login credentials. Please check your username and password, or ask your Flight Point Lead for your account details.`;
       }
       setError(displayError);
     } finally {
@@ -93,6 +94,11 @@ export function Login({ onLogin }: LoginProps) {
                 required
               />
             </div>
+            {sessionMessage && (
+              <div className="text-sm text-amber-900 bg-amber-100 border border-amber-300 p-3 rounded">
+                {sessionMessage}
+              </div>
+            )}
             {error && (
               <div className="text-sm text-red-600 bg-red-50 p-3 rounded">
                 {error}
@@ -102,7 +108,7 @@ export function Login({ onLogin }: LoginProps) {
               {loading ? 'Signing In...' : 'Sign In'}
             </Button>
             <p className="text-xs text-center text-muted-foreground mt-2">
-              Need an account? Ask Sgt Penny J or your flight point giver.
+              Need an account? Ask your Flight Point Lead or your flight point giver.
             </p>
           </form>
         </CardContent>
