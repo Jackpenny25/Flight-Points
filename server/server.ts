@@ -138,15 +138,118 @@ const pinLimiter = rateLimit({
   keyGenerator: ipKeyGenerator,
 });
 
-// Security headers
+// Rate limiter for ticket creation
+const ticketLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: { error: 'Too many tickets submitted, please try again later.' },
+  keyGenerator: ipKeyGenerator,
+});
+
+// Rate limiter for points awarding
+const pointsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50,
+  message: { error: 'Too many points awarded, please try again later.' },
+  keyGenerator: ipKeyGenerator,
+});
+
+// Rate limiter for file uploads
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: { error: 'Too many file uploads, please try again later.' },
+  keyGenerator: ipKeyGenerator,
+});
+
+// ========== ACCOUNT LOCKOUT / PROGRESSIVE DELAY ==========
+interface LoginAttemptRecord {
+  failures: number;
+  lastFailure: number;
+  lockedUntil: number;
+}
+const loginAttempts = new Map<string, LoginAttemptRecord>();
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const LOGIN_ATTEMPT_WINDOW_MS = 60 * 60 * 1000;   // 1 hour — failures reset after this
+
+function getLoginAttempt(key: string): LoginAttemptRecord {
+  const existing = loginAttempts.get(key);
+  if (!existing) return { failures: 0, lastFailure: 0, lockedUntil: 0 };
+  // Reset if window expired
+  if (Date.now() - existing.lastFailure > LOGIN_ATTEMPT_WINDOW_MS) {
+    loginAttempts.delete(key);
+    return { failures: 0, lastFailure: 0, lockedUntil: 0 };
+  }
+  return existing;
+}
+
+function recordLoginFailure(key: string): { locked: boolean; retryAfterMs: number } {
+  const record = getLoginAttempt(key);
+  record.failures++;
+  record.lastFailure = Date.now();
+  if (record.failures >= LOGIN_MAX_FAILURES) {
+    record.lockedUntil = Date.now() + LOGIN_LOCKOUT_DURATION_MS;
+    loginAttempts.set(key, record);
+    return { locked: true, retryAfterMs: LOGIN_LOCKOUT_DURATION_MS };
+  }
+  // Progressive delay: 0s, 1s, 2s, 4s before lockout
+  const delayMs = Math.min(Math.pow(2, record.failures - 1) * 1000, 8000);
+  loginAttempts.set(key, record);
+  return { locked: false, retryAfterMs: delayMs };
+}
+
+function clearLoginFailures(key: string): void {
+  loginAttempts.delete(key);
+}
+
+function isAccountLocked(key: string): { locked: boolean; retryAfterMs: number } {
+  const record = getLoginAttempt(key);
+  if (record.lockedUntil > Date.now()) {
+    return { locked: true, retryAfterMs: record.lockedUntil - Date.now() };
+  }
+  // Unlock expired
+  if (record.lockedUntil > 0 && record.lockedUntil <= Date.now()) {
+    loginAttempts.delete(key);
+  }
+  return { locked: false, retryAfterMs: 0 };
+}
+
+// Security headers with Content Security Policy
 app.use(helmet({
-  contentSecurityPolicy: false, // SPA serves its own CSP via meta tags
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      connectSrc: ["'self'", 'https://flightpoints.uk', 'https://api.flightpoints.uk'],
+      objectSrc: ["'none'"],
+      frameSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  },
   crossOriginEmbedderPolicy: false,
 }));
 
 // Middleware
+// Lock CORS to exact allowed origins (no wildcards)
+const ALLOWED_ORIGINS = [
+  'https://flightpoints.uk',
+  'https://api.flightpoints.uk',
+  ...(process.env.NODE_ENV !== 'production' ? ['http://localhost:5173', 'http://localhost:3001'] : []),
+];
 app.use(cors({
-  origin: ['https://flightpoints.uk', 'https://api.flightpoints.uk'],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (server-to-server, curl, etc.)
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -362,16 +465,53 @@ app.post('/api/auth/login', authLimiter, async (req: Request, res: Response) => 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password required' });
   }
+
+  // Account lockout check (keyed by email to prevent brute-force per account)
+  const lockoutKey = String(email).trim().toLowerCase();
+  const lockStatus = isAccountLocked(lockoutKey);
+  if (lockStatus.locked) {
+    const retryMinutes = Math.ceil(lockStatus.retryAfterMs / 60000);
+    return res.status(429).json({
+      error: `Account temporarily locked due to too many failed attempts. Try again in ${retryMinutes} minute(s).`,
+      retryAfterMs: lockStatus.retryAfterMs,
+    });
+  }
+
   try {
     const result = await query('SELECT id, email, name, role, password_hash FROM app_users WHERE email = $1', [email]);
     if (result.rows.length === 0) {
+      const failResult = recordLoginFailure(lockoutKey);
+      if (failResult.locked) {
+        return res.status(429).json({
+          error: `Too many failed attempts. Account locked for 15 minutes.`,
+          retryAfterMs: failResult.retryAfterMs,
+        });
+      }
+      // Progressive delay
+      if (failResult.retryAfterMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, failResult.retryAfterMs));
+      }
       return res.status(401).json({ error: 'Invalid email or password' });
     }
     const user = result.rows[0];
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
+      const failResult = recordLoginFailure(lockoutKey);
+      if (failResult.locked) {
+        return res.status(429).json({
+          error: `Too many failed attempts. Account locked for 15 minutes.`,
+          retryAfterMs: failResult.retryAfterMs,
+        });
+      }
+      // Progressive delay
+      if (failResult.retryAfterMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, failResult.retryAfterMs));
+      }
       return res.status(401).json({ error: 'Invalid email or password' });
     }
+
+    // Successful login — clear failure record
+    clearLoginFailures(lockoutKey);
 
     // Look up linked cadet to get flight info
     let cadetId: string | null = null;
@@ -1074,6 +1214,85 @@ app.get('/api/points/recent-count', requireAuth, async (req: AuthRequest, res: R
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Server is working!' });
 });
+
+// ========== HEALTH CHECK ENDPOINT ==========\n// Checks: server is up, database is reachable, disk has space\napp.get('/api/health', async (req, res) => {\n  const checks: Record<string, { ok: boolean; detail?: string }> = {};\n\n  // DB check\n  try {\n    const dbResult = await query('SELECT 1 AS alive');\n    checks.db = { ok: dbResult.rows.length > 0, detail: 'PostgreSQL reachable' };\n  } catch (err: any) {\n    checks.db = { ok: false, detail: err?.message || 'DB unreachable' };\n  }\n\n  // Disk check (data dir)\n  try {\n    const testFile = path.join(DATA_DIR, '.health-check-' + Date.now());\n    fs.writeFileSync(testFile, 'ok');\n    fs.unlinkSync(testFile);\n    checks.disk = { ok: true, detail: 'Data directory writable' };\n  } catch (err: any) {\n    checks.disk = { ok: false, detail: err?.message || 'Disk write failed' };\n  }\n\n  // Uptime\n  checks.uptime = { ok: true, detail: `${Math.floor(process.uptime())}s` };\n\n  // Memory\n  const memUsage = process.memoryUsage();\n  const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);\n  const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);\n  checks.memory = { ok: heapUsedMB < 512, detail: `${heapUsedMB}MB / ${heapTotalMB}MB heap` };\n\n  const allOk = Object.values(checks).every(c => c.ok);\n  res.status(allOk ? 200 : 503).json({ status: allOk ? 'healthy' : 'unhealthy', checks });\n});
+
+// ========== REVISION HISTORY ==========
+// Auto-create revision_history table on startup
+let revisionSchemaReady: Promise<void> | null = null;
+async function ensureRevisionHistorySchema() {
+  if (!revisionSchemaReady) {
+    revisionSchemaReady = (async () => {
+      await query(`
+        CREATE TABLE IF NOT EXISTS revision_history (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          record_type VARCHAR NOT NULL,
+          record_id UUID NOT NULL,
+          action VARCHAR NOT NULL,
+          changed_by VARCHAR NOT NULL,
+          changed_at TIMESTAMP DEFAULT NOW(),
+          before_data JSONB,
+          after_data JSONB
+        )
+      `);
+      await query('CREATE INDEX IF NOT EXISTS idx_revision_history_record ON revision_history (record_type, record_id)');
+      await query('CREATE INDEX IF NOT EXISTS idx_revision_history_changed_at ON revision_history (changed_at DESC)');
+    })().catch(err => { revisionSchemaReady = null; throw err; });
+  }
+  return revisionSchemaReady;
+}
+
+async function recordRevision(
+  recordType: string,
+  recordId: string,
+  action: 'create' | 'update' | 'delete',
+  changedBy: string,
+  beforeData: any | null,
+  afterData: any | null,
+): Promise<void> {
+  try {
+    await ensureRevisionHistorySchema();
+    await query(
+      `INSERT INTO revision_history (id, record_type, record_id, action, changed_by, before_data, after_data)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        crypto.randomUUID(),
+        recordType,
+        recordId,
+        action,
+        changedBy,
+        beforeData ? JSON.stringify(beforeData) : null,
+        afterData ? JSON.stringify(afterData) : null,
+      ]
+    );
+  } catch (err) {
+    console.error('[RevisionHistory] Failed to record revision:', err);
+  }
+}
+
+// GET /api/revision-history/:type/:id — get revision history for a record (admin only)
+app.get('/api/revision-history/:type/:id', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
+  try {
+    await ensureRevisionHistorySchema();
+    const result = await query(
+      `SELECT * FROM revision_history WHERE record_type = $1 AND record_id = $2 ORDER BY changed_at DESC LIMIT 50`,
+      [req.params.type, req.params.id]
+    );
+    res.json(result.rows.map(r => ({
+      id: r.id,
+      recordType: r.record_type,
+      recordId: r.record_id,
+      action: r.action,
+      changedBy: r.changed_by,
+      changedAt: r.changed_at,
+      beforeData: r.before_data,
+      afterData: r.after_data,
+    })));
+  } catch (error) {
+    console.error('Error in GET /api/revision-history:', error);
+    res.status(500).json({ error: 'Failed to fetch revision history' });
+  }
+});
 // CRUD Endpoints — all data reads now require authentication
 app.get('/api/data/:type', requireAuth, async (req: AuthRequest, res) => {
   try {
@@ -1169,7 +1388,7 @@ app.post('/api/data/:type', requireAuth, requireRole(['snco', 'admin']), async (
     res.status(500).json({ error: 'Failed to create data' });
   }
 });
-app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
+app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), async (req: AuthRequest, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
@@ -1193,6 +1412,10 @@ app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), asyn
       return res.status(400).json({ error: 'No valid fields provided' });
     }
 
+    // Capture before state for revision history
+    const beforeResult = await query(`SELECT * FROM ${table} WHERE id = $1`, [req.params.id]);
+    const beforeData = beforeResult.rows.length > 0 ? beforeResult.rows[0] : null;
+
     const updates = columns.map((col, idx) => `${col} = $${idx + 1}`);
     const params = columns.map(col => data[col]);
     params.push(req.params.id);
@@ -1206,13 +1429,18 @@ app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), asyn
       return res.status(404).json({ error: 'Item not found' });
     }
 
+    // Record revision history for tracked types
+    if (['points', 'attendance', 'cadets', 'rewards'].includes(normalized)) {
+      await recordRevision(normalized, req.params.id, 'update', req.user?.name || 'unknown', beforeData, result.rows[0]);
+    }
+
     res.json(mapToClient(normalized, result.rows[0]));
   } catch (error) {
     console.error('Error in PUT /api/data/:type/:id:', error);
     res.status(500).json({ error: 'Failed to update data' });
   }
 });
-app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
+app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), async (req: AuthRequest, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
@@ -1220,10 +1448,20 @@ app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), a
     }
 
     const { table } = typeConfig[normalized];
+
+    // Capture before state for revision history
+    const beforeResult = await query(`SELECT * FROM ${table} WHERE id = $1`, [req.params.id]);
+    const beforeData = beforeResult.rows.length > 0 ? beforeResult.rows[0] : null;
+
     const result = await query(`DELETE FROM ${table} WHERE id = $1 RETURNING id`, [req.params.id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Item not found' });
+    }
+
+    // Record revision history for tracked types
+    if (['points', 'attendance', 'cadets', 'rewards'].includes(normalized)) {
+      await recordRevision(normalized, req.params.id, 'delete', req.user?.name || 'unknown', beforeData, null);
     }
 
     res.json({ success: true });
@@ -1234,7 +1472,7 @@ app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), a
 });
 
 // ========== DEDICATED POINTS ENDPOINT (allows pointgiver/staff/snco) ==========
-app.post('/api/points', requireAuth, async (req: AuthRequest, res: Response) => {
+app.post('/api/points', pointsLimiter, requireAuth, async (req: AuthRequest, res: Response) => {
   const userRole = (req.user?.role || '').toLowerCase();
   const allowedRoles = ['snco', 'admin', 'staff', 'pointgiver'];
   if (!allowedRoles.includes(userRole)) {
@@ -1629,6 +1867,12 @@ app.put('/api/attendance/:id/status', requireAuth, requireRole(['snco', 'admin',
     );
 
     const updated = updatedResult.rows[0];
+
+    // Record attendance status change in revision history
+    await recordRevision('attendance', id, 'update', req.user?.name || 'unknown',
+      { status: existing.status, cadet_name: existing.cadet_name, date: existing.date },
+      { status: updated.status, cadet_name: updated.cadet_name, date: updated.date }
+    );
 
     if (ATTENDANCE_POINTS > 0) {
       if (status === 'present') {
@@ -2358,7 +2602,7 @@ app.get('/api/integrity-check', async (req, res) => {
   }
 });
 // File upload endpoint — requires authentication, validates MIME type and size
-app.post('/api/upload', requireAuth, (req: AuthRequest, res: Response, next: NextFunction) => {
+app.post('/api/upload', uploadLimiter, requireAuth, (req: AuthRequest, res: Response, next: NextFunction) => {
   upload.single('file')(req, res, (err: any) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
@@ -2390,7 +2634,7 @@ app.post('/api/upload', requireAuth, (req: AuthRequest, res: Response, next: Nex
 });
 
 // Alias for ticket evidence uploads (matches client-side api.uploadTicketEvidence)
-app.post('/api/upload/ticket-evidence', requireAuth, (req: AuthRequest, res: Response, next: NextFunction) => {
+app.post('/api/upload/ticket-evidence', uploadLimiter, requireAuth, (req: AuthRequest, res: Response, next: NextFunction) => {
   upload.single('file')(req, res, (err: any) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
@@ -2782,7 +3026,7 @@ app.get('/api/tickets', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // POST /api/tickets — any authenticated user can submit
-app.post('/api/tickets', requireAuth, async (req: AuthRequest, res) => {
+app.post('/api/tickets', ticketLimiter, requireAuth, async (req: AuthRequest, res) => {
   try {
     await ensureTicketsSchema();
     const user = req.user!;

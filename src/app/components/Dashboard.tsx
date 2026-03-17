@@ -12,6 +12,7 @@ import { AdminPointGivers } from './AdminPointGivers';
 import { CadetsManager } from './CadetsManager';
 import { AttendanceManager } from './AttendanceManager';
 import { DataIntegrity } from './DataIntegrity';
+import { EffectivePermissions } from './EffectivePermissions';
 import { ReportsExport } from './ReportsExport';
 import { api } from '../../utils/api';
 import { logout } from '../../utils/auth';
@@ -426,7 +427,10 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               </TabsContent>
 
               <TabsContent value="integrity">
-                <DataIntegrity accessToken={accessToken} />
+                <div className="space-y-6">
+                  <DataIntegrity accessToken={accessToken} />
+                  <EffectivePermissions />
+                </div>
               </TabsContent>
 
               {adminUnlocked && (

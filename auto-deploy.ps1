@@ -350,6 +350,10 @@ function Invoke-Deploy {
         # Prevent commits from this device
         & git config --local core.hooksPath /dev/null 2>&1 | Out-Null
 
+        # Capture current commit for rollback
+        $previousCommit = (& git rev-parse HEAD 2>&1).Trim()
+        Write-Log "Previous commit: $previousCommit"
+
         # Reset any local changes
         $resetOutput = & git reset --hard 2>&1
         $resetExit = $LASTEXITCODE
@@ -387,6 +391,16 @@ function Invoke-Deploy {
             throw "npm install failed with exit code $installExit"
         }
 
+        # Pre-deploy check: TypeScript compilation
+        Write-Log "Running pre-deploy TypeScript check..."
+        $tscOutput = & npx tsc --noEmit 2>&1
+        $tscExit = $LASTEXITCODE
+        $tscOutput | Select-Object -Last 10 | ForEach-Object { Write-Log "  tsc: $_" }
+        if ($tscExit -ne 0) {
+            throw "Pre-deploy TypeScript check failed (exit code $tscExit). Aborting deployment."
+        }
+        Write-Log "Pre-deploy checks passed."
+
         # Build
         Write-Log "Running npm build..."
         $buildOutput = & npm run build 2>&1
@@ -410,6 +424,45 @@ function Invoke-Deploy {
             }
         } else {
             Write-Log "Service 'flight-points' not found. Skipping restart."
+        }
+
+        # Post-deploy smoke test: hit health endpoint
+        Write-Log "Running post-deploy smoke test..."
+        $smokeTestPassed = $false
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+                $healthResponse = Invoke-RestMethod -Uri "http://localhost:3001/api/health" -TimeoutSec 10 -ErrorAction Stop
+                if ($healthResponse.status -eq "healthy") {
+                    Write-Log "Smoke test passed: API healthy (attempt $attempt)"
+                    $smokeTestPassed = $true
+                    break
+                } else {
+                    Write-Log "Smoke test warning: API status '$($healthResponse.status)' (attempt $attempt)"
+                }
+            } catch {
+                Write-Log "Smoke test attempt $attempt failed: $_"
+            }
+            if ($attempt -lt 3) { Start-Sleep -Seconds 5 }
+        }
+
+        if (-not $smokeTestPassed) {
+            Write-Log "=== SMOKE TEST FAILED — initiating rollback to $previousCommit ==="
+            try {
+                & git reset --hard $previousCommit 2>&1 | ForEach-Object { Write-Log "  rollback git: $_" }
+                & npm install --no-fund --no-audit 2>&1 | Out-Null
+                & npm run build 2>&1 | Out-Null
+                $svc = Get-Service -Name "flight-points" -ErrorAction SilentlyContinue
+                if ($svc) {
+                    Stop-Service -Name "flight-points" -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 2
+                    Start-Service -Name "flight-points" -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 5
+                }
+                Write-Log "Rollback to $previousCommit completed."
+            } catch {
+                Write-Log "ERROR during rollback: $_"
+            }
+            throw "Post-deploy smoke test failed. Rolled back to commit $previousCommit."
         }
 
         # Get current commit hash for status report

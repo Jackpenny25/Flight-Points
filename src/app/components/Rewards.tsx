@@ -406,6 +406,9 @@ export function Rewards({ userRole }: RewardsProps) {
   };
 
   const handleModerateSuggestion = async (suggestion: Suggestion, action: 'approve' | 'reject') => {
+    if (action === 'reject') {
+      if (!confirm(`Reject and delete suggestion "${suggestion.title}"? This cannot be undone.`)) return;
+    }
     setModeratingId(suggestion.id);
     try {
       const result = await api.moderateRewardSuggestion(suggestion.id, action);
