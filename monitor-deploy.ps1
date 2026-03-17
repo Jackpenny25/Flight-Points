@@ -3,7 +3,21 @@
 # Type "check" + Enter to manually check for incoming commits.
 
 $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$LogFile = Join-Path $ProjectDir "auto-deploy.log"
+$LogRoot = "C:\inetpub\wwwroot\Flight-Points\Logs\Deploy"
+
+# Dynamically find the latest log file in the Deploy log directory
+function Get-LatestLogFile {
+    if (Test-Path $LogRoot) {
+        $latest = Get-ChildItem -Path $LogRoot -Filter "auto-deploy-*.log" -ErrorAction SilentlyContinue |
+                  Sort-Object LastWriteTime -Descending |
+                  Select-Object -First 1
+        if ($latest) { return $latest.FullName }
+    }
+    # Fallback: legacy single-file log in project dir
+    return Join-Path $ProjectDir "auto-deploy.log"
+}
+
+$LogFile = Get-LatestLogFile
 
 $Host.UI.RawUI.WindowTitle = "Flight-Points Deploy Monitor"
 
@@ -15,7 +29,10 @@ function Write-Header {
     Write-Host "  ============================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  Watching: " -NoNewline -ForegroundColor DarkGray
-    Write-Host "$LogFile" -ForegroundColor Gray
+    Write-Host "$LogRoot" -ForegroundColor Gray
+    Write-Host "  Log File: " -NoNewline -ForegroundColor DarkGray
+    $currentLog = Get-LatestLogFile
+    Write-Host (Split-Path $currentLog -Leaf) -ForegroundColor Gray
     Write-Host "  Started:  " -NoNewline -ForegroundColor DarkGray
     Write-Host "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
     Write-Host ""
@@ -208,9 +225,10 @@ Write-Header
 
 if (-not (Test-Path $LogFile)) {
     Write-Host "  Waiting for log file to be created..." -ForegroundColor Yellow
-    Write-Host "  (Is the auto-deploy task running?)" -ForegroundColor DarkGray
+    Write-Host "  (Is the auto-deploy task running? Expected: $LogRoot)" -ForegroundColor DarkGray
     while (-not (Test-Path $LogFile)) {
         Start-Sleep -Seconds 2
+        $LogFile = Get-LatestLogFile
     }
     Write-Host ""
 }
@@ -233,6 +251,16 @@ $promptShown = $false
 
 # Poll-based tail loop with keyboard input support
 while ($true) {
+    # Check if a newer log file has been created (auto-deploy restarts create new timestamped files)
+    $newerLog = Get-LatestLogFile
+    if ($newerLog -ne $LogFile) {
+        $LogFile = $newerLog
+        $lastSize = 0
+        Write-Host ""
+        Write-Host "  [New log file detected: $(Split-Path $LogFile -Leaf)]" -ForegroundColor Yellow
+        Write-Host ""
+    }
+
     # Check for new log content (non-locking read)
     try {
         $currentSize = (Get-Item $LogFile -ErrorAction SilentlyContinue).Length
