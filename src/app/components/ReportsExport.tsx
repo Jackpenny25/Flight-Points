@@ -104,7 +104,7 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
     });
   };
 
-  const filteredPoints = filterData(points);
+  const filteredPoints = filterData(points).filter((p) => p.type !== 'attendance');
   const filteredAttendance = filterData(attendance);
 
   const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
