@@ -19,6 +19,11 @@
   - points: 50 per 15 min
   - uploads: 10 per 15 min
 
+## Authorization hardening (2026-03-18)
+- Added per-account permissions in `app_users.permissions` JSONB.
+- Auth middleware now refreshes effective permissions from database on authenticated requests.
+- Key write routes now enforce action permissions (points/attendance/account management), reducing reliance on static role checks.
+
 ## Browser security policy
 - CORS allowlist only
   - Dev: localhost:5173, localhost:3001

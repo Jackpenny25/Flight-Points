@@ -5,6 +5,13 @@
 - Health endpoint is implemented and verified
 - Auto-deploy pre-check and smoke-check pipeline is implemented
 
+## Current state update (2026-03-18)
+- Per-account permission overrides implemented end-to-end:
+	- Accounts UI can edit per-user tabs/actions
+	- Server computes effective permissions and refreshes on auth requests
+	- Points/attendance/account-management key routes enforce permission actions
+	- Dashboard/TopNav/PointsManager/AttendanceManager consume effective permissions
+
 ## Optional server enhancements
 1. Expand /api/health checks
 - Add revision_history table presence check
@@ -37,3 +44,4 @@
 - Run npm run build after major changes
 - Run npm run server after major changes
 - Verify no regression in auth, points restrictions, and attendance save scope
+- Verify per-account permission overrides by changing a test user and confirming both UI visibility and backend enforcement

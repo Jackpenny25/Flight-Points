@@ -130,6 +130,8 @@ export const api = {
     fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ role }) }).then(parseJsonSafe),
   updateUsername: (userId: string, username: string) =>
     fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ username }) }).then(parseJsonSafe),
+  updateUserPermissions: (userId: string, permissions: any) =>
+    fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ permissions }) }).then(parseJsonSafe),
   deleteUser: (userId: string) =>
     fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'DELETE' }).then(parseJsonSafe),
   createAccount: (data: { cadetId: string; role?: string }) =>

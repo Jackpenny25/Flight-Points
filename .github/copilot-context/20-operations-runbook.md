@@ -48,3 +48,10 @@
 ## API auth troubleshooting quick checks
 - "Invalid or expired token" usually means placeholder token was used or token expired
 - Generate a fresh token via POST /api/auth/login before testing protected routes
+
+## Permission override validation (2026-03-18)
+- After editing account access in the Accounts tab, users should log out and log back in to refresh client-side visible tabs/actions.
+- Backend enforcement uses refreshed server-side account permissions on authenticated requests.
+- Quick smoke checks after access changes:
+	- `npm run build`
+	- `npm run server` (start briefly; do not wait indefinitely in this environment)

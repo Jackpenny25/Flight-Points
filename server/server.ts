@@ -12,11 +12,311 @@ import { query } from './db';
 
 // --- Types ---
 import type { Request, Response, NextFunction } from 'express';
+
+type PermissionTabKey =
+  | 'leaderboards'
+  | 'rewards'
+  | 'points'
+  | 'attendance'
+  | 'cadets'
+  | 'reports'
+  | 'integrity'
+  | 'tickets'
+  | 'admin'
+  | 'signups'
+  | 'presentation'
+  | 'mypoints'
+  | 'myattendance';
+
+type PermissionActionKey =
+  | 'givePoints'
+  | 'editPoints'
+  | 'deletePoints'
+  | 'markAttendance'
+  | 'editAttendance'
+  | 'deleteAttendanceSessions'
+  | 'manageCadets'
+  | 'manageAccounts'
+  | 'unlockAdmin';
+
+type PermissionTabs = Record<PermissionTabKey, boolean>;
+type PermissionActions = Record<PermissionActionKey, boolean>;
+
+interface StoredPermissionOverrides {
+  tabs?: Partial<Record<PermissionTabKey, boolean>>;
+  actions?: Partial<Record<PermissionActionKey, boolean>>;
+}
+
+interface EffectivePermissions {
+  tabs: PermissionTabs;
+  actions: PermissionActions;
+}
+
+const PERMISSION_TAB_KEYS: PermissionTabKey[] = [
+  'leaderboards',
+  'rewards',
+  'points',
+  'attendance',
+  'cadets',
+  'reports',
+  'integrity',
+  'tickets',
+  'admin',
+  'signups',
+  'presentation',
+  'mypoints',
+  'myattendance',
+];
+
+const PERMISSION_ACTION_KEYS: PermissionActionKey[] = [
+  'givePoints',
+  'editPoints',
+  'deletePoints',
+  'markAttendance',
+  'editAttendance',
+  'deleteAttendanceSessions',
+  'manageCadets',
+  'manageAccounts',
+  'unlockAdmin',
+];
+
+const ROLE_PERMISSION_DEFAULTS: Record<string, EffectivePermissions> = {
+  snco: {
+    tabs: {
+      leaderboards: true,
+      rewards: true,
+      points: true,
+      attendance: true,
+      cadets: true,
+      reports: true,
+      integrity: true,
+      tickets: true,
+      admin: true,
+      signups: true,
+      presentation: true,
+      mypoints: false,
+      myattendance: false,
+    },
+    actions: {
+      givePoints: true,
+      editPoints: true,
+      deletePoints: true,
+      markAttendance: true,
+      editAttendance: true,
+      deleteAttendanceSessions: true,
+      manageCadets: true,
+      manageAccounts: true,
+      unlockAdmin: true,
+    },
+  },
+  admin: {
+    tabs: {
+      leaderboards: true,
+      rewards: true,
+      points: true,
+      attendance: true,
+      cadets: true,
+      reports: true,
+      integrity: true,
+      tickets: true,
+      admin: true,
+      signups: true,
+      presentation: true,
+      mypoints: false,
+      myattendance: false,
+    },
+    actions: {
+      givePoints: true,
+      editPoints: true,
+      deletePoints: true,
+      markAttendance: true,
+      editAttendance: true,
+      deleteAttendanceSessions: true,
+      manageCadets: true,
+      manageAccounts: true,
+      unlockAdmin: true,
+    },
+  },
+  pointgiver: {
+    tabs: {
+      leaderboards: true,
+      rewards: true,
+      points: true,
+      attendance: true,
+      cadets: false,
+      reports: false,
+      integrity: false,
+      tickets: false,
+      admin: false,
+      signups: false,
+      presentation: false,
+      mypoints: false,
+      myattendance: false,
+    },
+    actions: {
+      givePoints: true,
+      editPoints: false,
+      deletePoints: false,
+      markAttendance: true,
+      editAttendance: true,
+      deleteAttendanceSessions: false,
+      manageCadets: false,
+      manageAccounts: false,
+      unlockAdmin: false,
+    },
+  },
+  staff: {
+    tabs: {
+      leaderboards: true,
+      rewards: true,
+      points: true,
+      attendance: false,
+      cadets: false,
+      reports: false,
+      integrity: false,
+      tickets: false,
+      admin: false,
+      signups: false,
+      presentation: false,
+      mypoints: false,
+      myattendance: false,
+    },
+    actions: {
+      givePoints: true,
+      editPoints: false,
+      deletePoints: false,
+      markAttendance: false,
+      editAttendance: false,
+      deleteAttendanceSessions: false,
+      manageCadets: false,
+      manageAccounts: false,
+      unlockAdmin: false,
+    },
+  },
+  cadet: {
+    tabs: {
+      leaderboards: true,
+      rewards: true,
+      points: false,
+      attendance: false,
+      cadets: false,
+      reports: false,
+      integrity: false,
+      tickets: true,
+      admin: false,
+      signups: false,
+      presentation: false,
+      mypoints: true,
+      myattendance: true,
+    },
+    actions: {
+      givePoints: false,
+      editPoints: false,
+      deletePoints: false,
+      markAttendance: false,
+      editAttendance: false,
+      deleteAttendanceSessions: false,
+      manageCadets: false,
+      manageAccounts: false,
+      unlockAdmin: false,
+    },
+  },
+  presentation: {
+    tabs: {
+      leaderboards: false,
+      rewards: false,
+      points: false,
+      attendance: false,
+      cadets: false,
+      reports: false,
+      integrity: false,
+      tickets: false,
+      admin: false,
+      signups: false,
+      presentation: true,
+      mypoints: false,
+      myattendance: false,
+    },
+    actions: {
+      givePoints: false,
+      editPoints: false,
+      deletePoints: false,
+      markAttendance: false,
+      editAttendance: false,
+      deleteAttendanceSessions: false,
+      manageCadets: false,
+      manageAccounts: false,
+      unlockAdmin: false,
+    },
+  },
+};
+
+function clonePermissions(input: EffectivePermissions): EffectivePermissions {
+  return {
+    tabs: { ...input.tabs },
+    actions: { ...input.actions },
+  };
+}
+
+function sanitizePermissionOverrides(raw: any): StoredPermissionOverrides {
+  const output: StoredPermissionOverrides = {};
+  if (!raw || typeof raw !== 'object') return output;
+
+  if (raw.tabs && typeof raw.tabs === 'object') {
+    output.tabs = {};
+    for (const key of PERMISSION_TAB_KEYS) {
+      if (typeof raw.tabs[key] === 'boolean') {
+        output.tabs[key] = raw.tabs[key];
+      }
+    }
+  }
+
+  if (raw.actions && typeof raw.actions === 'object') {
+    output.actions = {};
+    for (const key of PERMISSION_ACTION_KEYS) {
+      if (typeof raw.actions[key] === 'boolean') {
+        output.actions[key] = raw.actions[key];
+      }
+    }
+  }
+
+  return output;
+}
+
+function getRoleDefaultPermissions(role: string): EffectivePermissions {
+  const normalized = String(role || '').toLowerCase();
+  return clonePermissions(ROLE_PERMISSION_DEFAULTS[normalized] || ROLE_PERMISSION_DEFAULTS.cadet);
+}
+
+function getEffectivePermissions(role: string, overridesRaw: any): EffectivePermissions {
+  const effective = getRoleDefaultPermissions(role);
+  const overrides = sanitizePermissionOverrides(overridesRaw);
+
+  if (overrides.tabs) {
+    for (const key of PERMISSION_TAB_KEYS) {
+      if (typeof overrides.tabs[key] === 'boolean') {
+        effective.tabs[key] = overrides.tabs[key] as boolean;
+      }
+    }
+  }
+
+  if (overrides.actions) {
+    for (const key of PERMISSION_ACTION_KEYS) {
+      if (typeof overrides.actions[key] === 'boolean') {
+        effective.actions[key] = overrides.actions[key] as boolean;
+      }
+    }
+  }
+
+  return effective;
+}
+
 interface UserJwtPayload {
   id: string;
   email: string;
   name: string;
   role: string;
+  permissions?: EffectivePermissions;
   iat?: number;
   exp?: number;
 }
@@ -341,10 +641,11 @@ function getUserUsage(userId: string) {
 }
 
 function checkAttendanceLimit(user: UserJwtPayload): { allowed: boolean; message?: string; remaining?: number } {
-  const role = (user.role || '').toLowerCase();
-  if (!['snco', 'admin', 'pointgiver', 'staff'].includes(role)) {
+  if (!hasActionPermission(user, 'markAttendance')) {
     return { allowed: false, message: 'You do not have permission to submit attendance' };
   }
+
+  const role = (user.role || '').toLowerCase();
 
   const usage = getUserUsage(user.id);
   const maxReports = role === 'snco' || role === 'admin' ? 5 : 1;
@@ -364,10 +665,11 @@ function checkAttendanceLimit(user: UserJwtPayload): { allowed: boolean; message
 }
 
 function checkPointsLimit(user: UserJwtPayload, pointsValue: number): { allowed: boolean; message?: string } {
-  const role = (user.role || '').toLowerCase();
-  if (!['snco', 'admin', 'staff', 'pointgiver'].includes(role)) {
+  if (!hasActionPermission(user, 'givePoints')) {
     return { allowed: false, message: 'You do not have permission to give points' };
   }
+
+  const role = (user.role || '').toLowerCase();
 
   if (!Number.isFinite(pointsValue)) {
     return { allowed: false, message: 'Points value must be a valid number' };
@@ -435,14 +737,35 @@ Time: ${new Date().toISOString()}
 }
 
 // Middleware to require authentication
-function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
+async function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers['authorization'];
   if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
   const token = authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Missing token' });
   try {
-    const user = jwt.verify(token, JWT_SECRET) as UserJwtPayload;
-    req.user = user;
+    const tokenUser = jwt.verify(token, JWT_SECRET) as UserJwtPayload;
+
+    let effectiveRole = tokenUser.role;
+    let effectivePermissions = getEffectivePermissions(tokenUser.role, tokenUser.permissions);
+
+    try {
+      const latest = await query(
+        'SELECT role, permissions FROM app_users WHERE id = $1 LIMIT 1',
+        [tokenUser.id]
+      );
+      if (latest.rows.length > 0) {
+        effectiveRole = latest.rows[0].role || effectiveRole;
+        effectivePermissions = getEffectivePermissions(effectiveRole, latest.rows[0].permissions);
+      }
+    } catch {
+      // If lookup fails, continue with token role/permissions so auth remains available.
+    }
+
+    req.user = {
+      ...tokenUser,
+      role: effectiveRole,
+      permissions: effectivePermissions,
+    };
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
@@ -457,6 +780,18 @@ function requireRole(allowedRoles: string[]) {
     }
     next();
   };
+}
+
+function hasActionPermission(user: UserJwtPayload | undefined, action: PermissionActionKey): boolean {
+  if (!user) return false;
+  const effective = user.permissions || getEffectivePermissions(user.role, null);
+  return effective.actions[action] === true;
+}
+
+function hasTabPermission(user: UserJwtPayload | undefined, tab: PermissionTabKey): boolean {
+  if (!user) return false;
+  const effective = user.permissions || getEffectivePermissions(user.role, null);
+  return effective.tabs[tab] === true;
 }
 
 // POST /api/auth/login
@@ -478,7 +813,7 @@ app.post('/api/auth/login', authLimiter, async (req: Request, res: Response) => 
   }
 
   try {
-    const result = await query('SELECT id, email, name, role, password_hash FROM app_users WHERE email = $1', [email]);
+    const result = await query('SELECT id, email, name, role, password_hash, permissions FROM app_users WHERE email = $1', [email]);
     if (result.rows.length === 0) {
       const failResult = recordLoginFailure(lockoutKey);
       if (failResult.locked) {
@@ -531,12 +866,15 @@ app.post('/api/auth/login', authLimiter, async (req: Request, res: Response) => 
       // cadet_id column may not exist yet — skip
     }
 
+    const effectivePermissions = getEffectivePermissions(user.role, user.permissions);
+
     // Create JWT
     const token = jwt.sign({
       id: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
+      permissions: effectivePermissions,
       cadetId: cadetId || undefined,
       cadetName: cadetId ? user.name : undefined,
       flight: userFlight || undefined,
@@ -559,15 +897,11 @@ app.get('/api/auth/me', requireAuth, async (req: AuthRequest, res: Response) => 
 });
 
 function hasSignupAdminRole(user?: UserJwtPayload) {
-  if (!user) return false;
-  const role = (user.role || '').toLowerCase();
-  return role === 'snco' || role === 'admin';
+  return hasActionPermission(user, 'manageAccounts');
 }
 
 function hasAdminPinRole(user?: UserJwtPayload) {
-  if (!user) return false;
-  const role = String(user.role || '').toLowerCase().trim();
-  return role === 'snco' || role === 'flight point lead' || role === 'flight_point_lead';
+  return hasActionPermission(user, 'unlockAdmin');
 }
 
 // ========== ADMIN ACCOUNT CREATION HELPERS ==========
@@ -621,6 +955,7 @@ async function ensureAdminAccountSchema() {
     adminSchemaInitPromise = (async () => {
       await query('ALTER TABLE app_users ADD COLUMN IF NOT EXISTS created_by TEXT');
       await query('ALTER TABLE app_users ADD COLUMN IF NOT EXISTS cadet_id UUID REFERENCES cadets(id) ON DELETE SET NULL');
+      await query('ALTER TABLE app_users ADD COLUMN IF NOT EXISTS permissions JSONB');
       await query('CREATE INDEX IF NOT EXISTS idx_app_users_cadet_id ON app_users (cadet_id)');
     })().catch((error) => {
       adminSchemaInitPromise = null;
@@ -667,12 +1002,13 @@ app.get('/api/auth/users', requireAuth, async (req: AuthRequest, res: Response) 
   }
   try {
     await ensureAdminAccountSchema();
-    const result = await query('SELECT id, email, name, role, cadet_id, created_by, created_at FROM app_users ORDER BY name ASC');
+    const result = await query('SELECT id, email, name, role, cadet_id, created_by, created_at, permissions FROM app_users ORDER BY name ASC');
     const users = result.rows.map((u) => ({
       id: u.id,
       email: u.email,
       name: u.name,
       role: u.role,
+      permissions: getEffectivePermissions(u.role, u.permissions),
       cadetId: u.cadet_id,
       createdBy: u.created_by,
       createdAt: u.created_at,
@@ -692,7 +1028,7 @@ app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Respon
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
-    const { role, name, username } = req.body || {};
+    const { role, name, username, permissions } = req.body || {};
     const updates: string[] = [];
     const params: any[] = [];
 
@@ -726,13 +1062,18 @@ app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Respon
       params.push(newEmail);
       updates.push(`email = $${params.length}`);
     }
+    if (permissions !== undefined) {
+      const cleanPermissions = sanitizePermissionOverrides(permissions);
+      params.push(JSON.stringify(cleanPermissions));
+      updates.push(`permissions = $${params.length}::jsonb`);
+    }
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No update fields provided' });
     }
 
     params.push(req.params.id);
     const result = await query(
-      `UPDATE app_users SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING id, email, name, role`,
+      `UPDATE app_users SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING id, email, name, role, permissions`,
       params
     );
 
@@ -744,6 +1085,7 @@ app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Respon
     return res.json({
       user: {
         ...user,
+        permissions: getEffectivePermissions(user.role, user.permissions),
         username: user.email.includes('@') ? user.email.split('@')[0] : user.email,
       },
     });
@@ -1187,7 +1529,7 @@ app.get('/api/rewards/active-count', async (req: Request, res: Response) => {
 app.get('/api/points/recent-count', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
-    if (!user || !['snco', 'staff', 'pointgiver'].includes(user.role)) {
+    if (!user || !hasActionPermission(user, 'givePoints')) {
       return res.json({ count: 0 });
     }
     
@@ -1467,11 +1809,23 @@ app.get('/api/data/:type/:id', requireAuth, async (req: AuthRequest, res) => {
     res.status(500).json({ error: 'Failed to fetch item' });
   }
 });
-app.post('/api/data/:type', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
+app.post('/api/data/:type', requireAuth, async (req: AuthRequest, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
       return res.status(400).json({ error: 'Unsupported data type' });
+    }
+
+    if (normalized === 'points') {
+      if (!hasActionPermission(req.user, 'givePoints')) {
+        return res.status(403).json({ error: 'You do not have permission to create points' });
+      }
+    } else if (normalized === 'attendance') {
+      if (!hasActionPermission(req.user, 'markAttendance')) {
+        return res.status(403).json({ error: 'You do not have permission to create attendance' });
+      }
+    } else if (!hasActionPermission(req.user, 'manageCadets')) {
+      return res.status(403).json({ error: 'You do not have permission to create this record type' });
     }
 
     // Block giving points to NCOs via the generic endpoint too
@@ -1512,11 +1866,23 @@ app.post('/api/data/:type', requireAuth, requireRole(['snco', 'admin']), async (
     res.status(500).json({ error: 'Failed to create data' });
   }
 });
-app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), async (req: AuthRequest, res) => {
+app.put('/api/data/:type/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
       return res.status(400).json({ error: 'Unsupported data type' });
+    }
+
+    if (normalized === 'points') {
+      if (!hasActionPermission(req.user, 'editPoints')) {
+        return res.status(403).json({ error: 'You do not have permission to edit points' });
+      }
+    } else if (normalized === 'attendance') {
+      if (!hasActionPermission(req.user, 'editAttendance')) {
+        return res.status(403).json({ error: 'You do not have permission to edit attendance' });
+      }
+    } else if (!hasActionPermission(req.user, 'manageCadets')) {
+      return res.status(403).json({ error: 'You do not have permission to edit this record type' });
     }
 
     // Ensure rewards schema columns exist before updating
@@ -1564,11 +1930,23 @@ app.put('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), asyn
     res.status(500).json({ error: 'Failed to update data' });
   }
 });
-app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), async (req: AuthRequest, res) => {
+app.delete('/api/data/:type/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
     const normalized = normalizeType(req.params.type);
     if (!normalized) {
       return res.status(400).json({ error: 'Unsupported data type' });
+    }
+
+    if (normalized === 'points') {
+      if (!hasActionPermission(req.user, 'deletePoints')) {
+        return res.status(403).json({ error: 'You do not have permission to delete points' });
+      }
+    } else if (normalized === 'attendance') {
+      if (!hasActionPermission(req.user, 'deleteAttendanceSessions')) {
+        return res.status(403).json({ error: 'You do not have permission to delete attendance' });
+      }
+    } else if (!hasActionPermission(req.user, 'manageCadets')) {
+      return res.status(403).json({ error: 'You do not have permission to delete this record type' });
     }
 
     const { table } = typeConfig[normalized];
@@ -1597,11 +1975,10 @@ app.delete('/api/data/:type/:id', requireAuth, requireRole(['snco', 'admin']), a
 
 // ========== DEDICATED POINTS ENDPOINT (allows pointgiver/staff/snco) ==========
 app.post('/api/points', pointsLimiter, requireAuth, async (req: AuthRequest, res: Response) => {
-  const userRole = (req.user?.role || '').toLowerCase();
-  const allowedRoles = ['snco', 'admin', 'staff', 'pointgiver'];
-  if (!allowedRoles.includes(userRole)) {
+  if (!hasActionPermission(req.user, 'givePoints')) {
     return res.status(403).json({ error: 'You do not have permission to give points' });
   }
+  const userRole = (req.user?.role || '').toLowerCase();
 
   try {
     const { cadetName, flight, points: pointsValue, reason, type, date, givenBy } = req.body || {};
@@ -1962,8 +2339,12 @@ app.get('/api/attendance/bulk/:id/records', requireAuth, async (req, res) => {
 });
 
 // PUT /api/attendance/:id/status — update a saved attendance status and sync attendance points
-app.put('/api/attendance/:id/status', requireAuth, requireRole(['snco', 'admin', 'pointgiver']), async (req: AuthRequest, res) => {
+app.put('/api/attendance/:id/status', requireAuth, async (req: AuthRequest, res) => {
   try {
+    if (!hasActionPermission(req.user, 'editAttendance')) {
+      return res.status(403).json({ error: 'You do not have permission to edit attendance' });
+    }
+
     const { id } = req.params;
     const status = String(req.body?.status || '').toLowerCase();
 
@@ -2097,8 +2478,12 @@ app.put('/api/attendance/:id/status', requireAuth, requireRole(['snco', 'admin',
 });
 
 // POST /api/attendance/bulk — create a bulk attendance session with individual records
-app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'pointgiver']), async (req: AuthRequest, res) => {
+app.post('/api/attendance/bulk', requireAuth, async (req: AuthRequest, res) => {
   try {
+    if (!hasActionPermission(req.user, 'markAttendance')) {
+      return res.status(403).json({ error: 'You do not have permission to submit attendance' });
+    }
+
     const { entries, date, flightFilter } = req.body;
     if (!entries || !Array.isArray(entries) || entries.length === 0) {
       return res.status(400).json({ error: 'entries array is required' });
@@ -2185,8 +2570,12 @@ app.post('/api/attendance/bulk', requireAuth, requireRole(['snco', 'admin', 'poi
 });
 
 // DELETE /api/attendance/bulk/:id — delete a bulk session and its records
-app.delete('/api/attendance/bulk/:id', requireAuth, requireRole(['snco', 'admin']), async (req, res) => {
+app.delete('/api/attendance/bulk/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
+    if (!hasActionPermission(req.user, 'deleteAttendanceSessions')) {
+      return res.status(403).json({ error: 'You do not have permission to delete attendance sessions' });
+    }
+
     const { id } = req.params;
     await query('DELETE FROM attendance WHERE bulk_id = $1', [id]);
     await query('DELETE FROM attendance_bulks WHERE id = $1', [id]);

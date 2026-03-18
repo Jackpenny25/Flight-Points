@@ -16,6 +16,14 @@ type Props = {
   active?: string
   onSelect?: (tab: string) => void
   showAdmin?: boolean
+  canViewLeaderboards?: boolean
+  canViewRewards?: boolean
+  canViewTickets?: boolean
+  canViewReports?: boolean
+  canViewIntegrity?: boolean
+  canViewPresentation?: boolean
+  canViewAdmin?: boolean
+  canViewSignups?: boolean
   canGivePoints?: boolean
   canMarkAttendance?: boolean
   canManageCadets?: boolean
@@ -28,7 +36,7 @@ type Props = {
   accessToken?: string | null
 }
 
-export default function TopNav({ active, onSelect, showAdmin, canGivePoints, canMarkAttendance, canManageCadets, isPresentationRole, adminPendingCount, ticketsCount, integrityCheckCount, rewardsCount, pointsCount, accessToken }: Props) {
+export default function TopNav({ active, onSelect, showAdmin, canViewLeaderboards = true, canViewRewards = true, canViewTickets = false, canViewReports = false, canViewIntegrity = false, canViewPresentation = false, canViewAdmin = false, canViewSignups = false, canGivePoints, canMarkAttendance, canManageCadets, isPresentationRole, adminPendingCount, ticketsCount, integrityCheckCount, rewardsCount, pointsCount, accessToken }: Props) {
   const handleClick = (key: string) => {
     // prefer prop handler, but keep event dispatch for backward compatibility
     if (onSelect) onSelect(key)
@@ -63,17 +71,17 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
 
   // Filter items based on permissions and add badge counts
   const visibleItems = items.filter((item) => {
-    // Leaderboards is always visible
-    if (item.key === 'leaderboards') return true
-    // Rewards is always visible
-    if (item.key === 'rewards') return true
+    if (item.key === 'leaderboards') return canViewLeaderboards
+    if (item.key === 'rewards') return canViewRewards
     // Points visible if canGivePoints; Attendance only if canMarkAttendance
     if (item.key === 'points') return canGivePoints
     if (item.key === 'attendance') return canMarkAttendance
     // Tickets and Reports should be placed into the admin group when admin UI is shown
-    if (item.key === 'tickets' || item.key === 'reports') return canManageCadets && !showAdmin
+    if (item.key === 'tickets') return canViewTickets && !showAdmin
+    if (item.key === 'reports') return canViewReports && !showAdmin
     // Cadets and Integrity require canManageCadets
-    if (item.key === 'cadets' || item.key === 'integrity') return canManageCadets
+    if (item.key === 'cadets') return canManageCadets
+    if (item.key === 'integrity') return canViewIntegrity
     return false
   }).map(item => {
     if (item.key === 'tickets' && ticketsCount && ticketsCount > 0) {
@@ -95,17 +103,19 @@ export default function TopNav({ active, onSelect, showAdmin, canGivePoints, can
   const allItems = showAdmin 
     ? [
         ...visibleItems, 
-        { key: 'admin', label: 'NCOs', icon: Shield },
-        ...(ticketsCount && ticketsCount > 0 
-          ? [{ key: 'tickets', label: 'Tickets', icon: FileText, badgeCount: ticketsCount }]
-          : [{ key: 'tickets', label: 'Tickets', icon: FileText }]
-        ),
-        { key: 'reports', label: 'Reports', icon: FileText },
-        { key: 'presentation', label: 'Presentation', icon: Presentation },
-        ...(adminPendingCount && adminPendingCount > 0 
-          ? [{ key: 'signups', label: 'Accounts', icon: Users, badgeCount: adminPendingCount }]
-          : [{ key: 'signups', label: 'Accounts', icon: Users }]
-        )
+        ...(canViewAdmin ? [{ key: 'admin', label: 'NCOs', icon: Shield }] : []),
+        ...(canViewTickets
+          ? (ticketsCount && ticketsCount > 0
+            ? [{ key: 'tickets', label: 'Tickets', icon: FileText, badgeCount: ticketsCount }]
+            : [{ key: 'tickets', label: 'Tickets', icon: FileText }])
+          : []),
+        ...(canViewReports ? [{ key: 'reports', label: 'Reports', icon: FileText }] : []),
+        ...(canViewPresentation ? [{ key: 'presentation', label: 'Presentation', icon: Presentation }] : []),
+        ...(canViewSignups
+          ? (adminPendingCount && adminPendingCount > 0
+            ? [{ key: 'signups', label: 'Accounts', icon: Users, badgeCount: adminPendingCount }]
+            : [{ key: 'signups', label: 'Accounts', icon: Users }])
+          : [])
       ] 
     : visibleItems
 

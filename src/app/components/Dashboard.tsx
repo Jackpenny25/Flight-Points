@@ -25,6 +25,7 @@ import { TicketsAdmin } from './TicketsAdmin';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { Rewards } from './Rewards';
 import { PresentationEditor } from './PresentationEditor';
+import { getEffectivePermissions } from '../../utils/permissions';
 // PresentationMode is launched from within PresentationEditor
 
 interface DashboardProps {
@@ -35,7 +36,9 @@ interface DashboardProps {
 
 export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const userRole = user?.user_metadata?.role || 'cadet';
-  const canUseAdminPin = ['snco', 'flight point lead', 'flight_point_lead'].includes(String(userRole).toLowerCase());
+  const effectivePermissions = getEffectivePermissions(userRole, user?.user_metadata?.permissions || {});
+
+  const canUseAdminPin = effectivePermissions.actions.unlockAdmin;
   const userName = user?.user_metadata?.name || user?.email || 'User';
   // Map internal role values to user-facing labels
   const displayRole = userRole === 'snco'
@@ -50,14 +53,44 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const cadetName = user?.user_metadata?.cadetName;
   const suggestedName = user?.user_metadata?.suggestedName;
   const requireNameChange = user?.user_metadata?.requireNameChange === true;
-  
-  const canGivePoints = userRole === 'pointgiver' || userRole === 'snco' || userRole === 'staff';
-  const canMarkAttendance = userRole === 'pointgiver' || userRole === 'snco';
-  const canManageCadets = userRole === 'snco';
+
+  const canViewLeaderboards = effectivePermissions.tabs.leaderboards;
+  const canViewRewards = effectivePermissions.tabs.rewards;
+  const canViewPoints = effectivePermissions.tabs.points;
+  const canViewAttendance = effectivePermissions.tabs.attendance;
+  const canViewCadets = effectivePermissions.tabs.cadets;
+  const canViewReports = effectivePermissions.tabs.reports;
+  const canViewIntegrity = effectivePermissions.tabs.integrity;
+  const canViewTickets = effectivePermissions.tabs.tickets;
+  const canViewAdmin = effectivePermissions.tabs.admin;
+  const canViewSignups = effectivePermissions.tabs.signups;
+  const canViewPresentation = effectivePermissions.tabs.presentation;
+  const canViewMyPoints = effectivePermissions.tabs.mypoints;
+  const canViewMyAttendance = effectivePermissions.tabs.myattendance;
+
+  const canGivePoints = effectivePermissions.actions.givePoints;
+  const canEditPoints = effectivePermissions.actions.editPoints;
+  const canDeletePoints = effectivePermissions.actions.deletePoints;
+  const canMarkAttendance = effectivePermissions.actions.markAttendance;
+  const canEditAttendance = effectivePermissions.actions.editAttendance;
+  const canDeleteAttendanceSessions = effectivePermissions.actions.deleteAttendanceSessions;
+  const canManageCadets = effectivePermissions.actions.manageCadets;
+  const canManageAccounts = effectivePermissions.actions.manageAccounts;
+
+  const adminFeatureEnabled = canManageCadets || canViewAdmin || canViewSignups || canViewReports || canViewIntegrity || canViewPresentation || canViewTickets;
 
   // tabCount not currently used; remove to avoid premature reference
 
-  const [activeTab, setActiveTab] = useState<string>(userRole === 'presentation' ? 'presentation' : 'leaderboards');
+  const initialTab = canViewPresentation && userRole === 'presentation'
+    ? 'presentation'
+    : canViewLeaderboards
+      ? 'leaderboards'
+      : canViewRewards
+        ? 'rewards'
+        : canViewTickets
+          ? 'tickets'
+          : 'leaderboards';
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [adminPendingCount, setAdminPendingCount] = useState<number>(0);
   const [ticketsCount, setTicketsCount] = useState<number>(0);
   const [integrityCheckCount, setIntegrityCheckCount] = useState<number>(0);
@@ -85,9 +118,19 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         if (!tab) return;
 
         // verify permissions before switching
-        if (tab === 'points' && !canGivePoints) return;
-        if (tab === 'attendance' && !canGivePoints) return;
-        if ((tab === 'cadets' || tab === 'reports' || tab === 'integrity') && !canManageCadets) return;
+        if (tab === 'leaderboards' && !canViewLeaderboards) return;
+        if (tab === 'rewards' && !canViewRewards) return;
+        if (tab === 'points' && !canViewPoints) return;
+        if (tab === 'attendance' && !canViewAttendance) return;
+        if (tab === 'tickets' && !canViewTickets) return;
+        if (tab === 'cadets' && !canViewCadets) return;
+        if (tab === 'reports' && !canViewReports) return;
+        if (tab === 'integrity' && !canViewIntegrity) return;
+        if (tab === 'admin' && !canViewAdmin) return;
+        if (tab === 'signups' && !canViewSignups) return;
+        if (tab === 'presentation' && !canViewPresentation) return;
+        if (tab === 'mypoints' && !canViewMyPoints) return;
+        if (tab === 'myattendance' && !canViewMyAttendance) return;
 
         setActiveTab(tab);
       } catch (err) {
@@ -97,7 +140,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
 
     window.addEventListener('navigateTab', handler as EventListener);
     return () => window.removeEventListener('navigateTab', handler as EventListener);
-  }, [canGivePoints, canManageCadets]);
+  }, [canViewLeaderboards, canViewRewards, canViewPoints, canViewAttendance, canViewTickets, canViewCadets, canViewReports, canViewIntegrity, canViewAdmin, canViewSignups, canViewPresentation, canViewMyPoints, canViewMyAttendance]);
 
   // Admin unlock indicator + logo click unlock
   const [adminUnlocked, setAdminUnlocked] = useState<boolean>(
@@ -157,7 +200,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
 
   // Poll open tickets count for Flight Point Leads/Staff to show a badge on the Tickets tab
   useEffect(() => {
-    if (!canManageCadets) return;
+    if (!canViewTickets) return;
     let timer: any;
     const fetchCount = async () => {
       try {
@@ -170,11 +213,11 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     fetchCount();
     timer = setInterval(fetchCount, 120000);
     return () => clearInterval(timer);
-  }, [canManageCadets, accessToken]);
+  }, [canViewTickets, accessToken]);
 
   // Poll integrity check count for Flight Point Leads to show a badge on the Integrity tab
   useEffect(() => {
-    if (!canManageCadets) return;
+    if (!canViewIntegrity) return;
     let timer: any;
     const fetchCount = async () => {
       try {
@@ -187,7 +230,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     fetchCount();
     timer = setInterval(fetchCount, 120000);
     return () => clearInterval(timer);
-  }, [canManageCadets, accessToken]);
+  }, [canViewIntegrity, accessToken]);
 
   // Poll active rewards count for all users to show a badge on the Rewards tab
   useEffect(() => {
@@ -207,7 +250,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
 
   // Poll recent points count for point givers/SNOs to show a badge on the Points tab
   useEffect(() => {
-    if (!canGivePoints) return;
+    if (!canViewPoints) return;
     let timer: any;
     const fetchCount = async () => {
       try {
@@ -220,7 +263,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     fetchCount();
     timer = setInterval(fetchCount, 120000);
     return () => clearInterval(timer);
-  }, [canGivePoints, accessToken]);
+  }, [canViewPoints, accessToken]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50">
@@ -300,16 +343,24 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
           <TopNav 
             active={activeTab} 
             onSelect={(t) => setActiveTab(t)} 
-            showAdmin={canManageCadets && adminUnlocked}
+            showAdmin={adminFeatureEnabled && adminUnlocked}
+            canViewLeaderboards={canViewLeaderboards}
+            canViewRewards={canViewRewards}
+            canViewTickets={canViewTickets}
+            canViewReports={canViewReports}
+            canViewIntegrity={canViewIntegrity}
+            canViewPresentation={canViewPresentation}
+            canViewAdmin={canViewAdmin}
+            canViewSignups={canViewSignups}
             canGivePoints={canGivePoints}
             canMarkAttendance={canMarkAttendance}
             canManageCadets={canManageCadets}
             isPresentationRole={userRole === 'presentation'}
-            adminPendingCount={adminUnlocked && canManageCadets ? adminPendingCount : 0}
-            ticketsCount={canManageCadets ? ticketsCount : 0}
-            integrityCheckCount={canManageCadets ? integrityCheckCount : 0}
-            rewardsCount={rewardsCount}
-            pointsCount={canGivePoints ? pointsCount : 0}
+            adminPendingCount={adminUnlocked && canViewSignups ? adminPendingCount : 0}
+            ticketsCount={canViewTickets ? ticketsCount : 0}
+            integrityCheckCount={canViewIntegrity ? integrityCheckCount : 0}
+            rewardsCount={canViewRewards ? rewardsCount : 0}
+            pointsCount={canViewPoints ? pointsCount : 0}
             accessToken={accessToken}
           />
         </div>
@@ -319,6 +370,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       {userRole === 'cadet' && (
         <div className="mt-4 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 bg-white p-1.5 sm:p-2 rounded-lg shadow-sm border">
+            {canViewLeaderboards && (
             <Button
               variant={activeTab === 'leaderboards' ? 'default' : 'ghost'}
               size="sm"
@@ -328,6 +380,8 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               <TrendingUp className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
               Leaderboards
             </Button>
+            )}
+            {canViewRewards && (
             <Button
               variant={activeTab === 'rewards' ? 'default' : 'ghost'}
               size="sm"
@@ -337,7 +391,8 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               <Gift className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
               Rewards
             </Button>
-            {cadetName && (
+            )}
+            {cadetName && canViewMyPoints && (
               <Button
                 variant={activeTab === 'mypoints' ? 'default' : 'ghost'}
                 size="sm"
@@ -348,7 +403,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 Points
               </Button>
             )}
-            {cadetName && (
+            {cadetName && canViewMyAttendance && (
               <Button
                 variant={activeTab === 'myattendance' ? 'default' : 'ghost'}
                 size="sm"
@@ -359,6 +414,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
                 Attendance
               </Button>
             )}
+            {canViewTickets && (
             <Button
               variant={activeTab === 'tickets' ? 'default' : 'ghost'}
               size="sm"
@@ -368,6 +424,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
               <FileText className="size-3.5 sm:size-4 mr-1 sm:mr-2" />
               Tickets
             </Button>
+            )}
           </div>
         </div>
       )}
@@ -375,89 +432,100 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v)} className="space-y-6">
-          <TabsContent value="leaderboards">
+          {canViewLeaderboards && <TabsContent value="leaderboards">
             <Leaderboards userRole={userRole} />
-          </TabsContent>
+          </TabsContent>}
 
-          <TabsContent value="rewards">
+          {canViewRewards && <TabsContent value="rewards">
             <Rewards userRole={userRole} />
-          </TabsContent>
+          </TabsContent>}
 
           {/* Show My Points tab for cadets with cadetName */}
-          {userRole === 'cadet' && cadetName && (
+          {userRole === 'cadet' && cadetName && canViewMyPoints && (
             <TabsContent value="mypoints">
               <MyPoints accessToken={accessToken} cadetName={cadetName} />
             </TabsContent>
           )}
 
           {/* My Attendance for cadets */}
-          {userRole === 'cadet' && cadetName && (
+          {userRole === 'cadet' && cadetName && canViewMyAttendance && (
             <TabsContent value="myattendance">
               <MyAttendance cadetName={cadetName} />
             </TabsContent>
           )}
 
           {/* Cadet tickets */}
-          {userRole === 'cadet' && (
+          {userRole === 'cadet' && canViewTickets && (
             <TabsContent value="tickets">
               <Tickets accessToken={accessToken} />
             </TabsContent>
           )}
 
-          {canGivePoints && (
+          {canViewPoints && (
             <TabsContent value="points">
-              <PointsManager userRole={userRole} />
+              <PointsManager
+                userRole={userRole}
+                canEditPoints={canEditPoints}
+                canDeletePoints={canDeletePoints}
+                canViewRecentPoints={canEditPoints || canDeletePoints}
+                canUseAdminPin={canUseAdminPin}
+              />
             </TabsContent>
           )}
 
-          {canMarkAttendance && (
+          {canViewAttendance && (
             <TabsContent value="attendance">
-              <AttendanceManager userRole={userRole} />
+              <AttendanceManager
+                userRole={userRole}
+                canDeleteBulk={canDeleteAttendanceSessions}
+                canViewRecentSessions={canEditAttendance || canDeleteAttendanceSessions}
+                canEditSavedAttendance={canEditAttendance}
+              />
             </TabsContent>
           )}
 
-          {canManageCadets && (
+          {adminFeatureEnabled && (
             <>
-              <TabsContent value="cadets">
+              {canViewCadets && <TabsContent value="cadets">
                 <CadetsManager accessToken={accessToken} />
-              </TabsContent>
+              </TabsContent>}
 
-              <TabsContent value="reports">
+              {canViewReports && <TabsContent value="reports">
                 <ReportsExport accessToken={accessToken} userRole={userRole} />
-              </TabsContent>
+              </TabsContent>}
 
-              <TabsContent value="integrity">
+              {canViewIntegrity && <TabsContent value="integrity">
                 <div className="space-y-6">
                   <DataIntegrity accessToken={accessToken} />
                   <EffectivePermissions />
                 </div>
-              </TabsContent>
+              </TabsContent>}
 
-              {adminUnlocked && (
+              {adminUnlocked && canViewAdmin && (
                 <TabsContent value="admin">
                   <AdminPointGivers accessToken={accessToken} />
                 </TabsContent>
               )}
 
               {/* Admin tickets review (Flight Point Leads/Staff) */}
-              <TabsContent value="tickets">
+              {canViewTickets && <TabsContent value="tickets">
                 <TicketsAdmin accessToken={accessToken} />
-              </TabsContent>
+              </TabsContent>}
 
-              {adminUnlocked && (
+              {adminUnlocked && canViewSignups && canManageAccounts && (
                 <TabsContent value="signups">
                   <AdminSignups accessToken={accessToken} currentUserId={user.id} currentUserRole={userRole} />
                 </TabsContent>
               )}
 
-              <TabsContent value="presentation">
+              {canViewPresentation && <TabsContent value="presentation">
                 <PresentationEditor />
-              </TabsContent>
+              </TabsContent>}
             </>
           )}
 
           {/* Presentation-only role */}
-          {userRole === 'presentation' && (
+          {userRole === 'presentation' && canViewPresentation && (
             <TabsContent value="presentation">
               <PresentationEditor />
             </TabsContent>

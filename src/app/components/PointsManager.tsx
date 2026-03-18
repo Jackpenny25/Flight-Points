@@ -28,9 +28,13 @@ interface Point {
 
 interface PointsManagerProps {
   userRole: string;
+  canEditPoints?: boolean;
+  canDeletePoints?: boolean;
+  canViewRecentPoints?: boolean;
+  canUseAdminPin?: boolean;
 }
 
-export function PointsManager({ userRole }: PointsManagerProps) {
+export function PointsManager({ userRole, canEditPoints = false, canDeletePoints = false, canViewRecentPoints = false, canUseAdminPin = false }: PointsManagerProps) {
   const [points, setPoints] = useState<Point[]>([]);
   const [cadets, setCadets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,8 +60,8 @@ export function PointsManager({ userRole }: PointsManagerProps) {
   const ensureAdminPin = async (): Promise<boolean> => {
     if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
 
-    if (userRole !== 'snco') {
-      toast.error('Only Flight Point Leads can unlock admin actions.');
+    if (!canUseAdminPin) {
+      toast.error('You do not have permission to unlock admin actions.');
       return false;
     }
 
@@ -91,10 +95,6 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       toast.error(String(e?.message || e || 'Failed to verify PIN'));
       return false;
     }
-  };
-
-  const handleLogoClick = async () => {
-    await ensureAdminPin();
   };
 
   // Fetch points from API
@@ -383,8 +383,9 @@ export function PointsManager({ userRole }: PointsManagerProps) {
     }
   };
 
-  const canAdmin = userRole === 'snco';
-  const canDelete = canAdmin;
+  const canAdminEdit = canEditPoints;
+  const canAdminDelete = canDeletePoints;
+  const canAdmin = canAdminEdit || canAdminDelete;
   const flights = Array.from(new Set(cadets.map(c => c.flight))).sort();
 
   const flightPoints = useMemo(() => {
@@ -408,7 +409,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
 
   return (
     <div className="space-y-6">
-      <div className={`grid gap-6 ${userRole === 'snco' ? 'md:grid-cols-2' : 'max-w-2xl mx-auto'}`}>
+      <div className={`grid gap-6 ${canViewRecentPoints ? 'md:grid-cols-2' : 'max-w-2xl mx-auto'}`}>
       {/* Add Points Form */}
       <Card>
         <CardHeader>
@@ -584,7 +585,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       </Card>
 
       {/* Recent Points - Flight Point Leads/Staff only */}
-      {userRole === 'snco' && (
+      {canViewRecentPoints && (
       <Card>
         <CardHeader>
           <CardTitle>Recent Flight Points</CardTitle>
@@ -684,20 +685,20 @@ export function PointsManager({ userRole }: PointsManagerProps) {
                           </Badge>
                           {canAdmin && (
                             <>
-                              <Button
+                              {canAdminEdit && <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => startEditPoint(point)}
                               >
                                 Edit
-                              </Button>
-                              <Button
+                              </Button>}
+                              {canAdminDelete && <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleDeletePoint(point.id)}
                               >
                                 <Trash2 className="size-4 text-red-600" />
-                              </Button>
+                              </Button>}
                             </>
                           )}
                         </div>
@@ -721,7 +722,7 @@ export function PointsManager({ userRole }: PointsManagerProps) {
       )}
     </div>
 
-    {canAdmin && (
+    {canAdminDelete && (
         <Card>
           <CardHeader>
             <CardTitle>Cadet Totals & Clear</CardTitle>

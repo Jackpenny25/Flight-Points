@@ -36,9 +36,16 @@
 - rewards: reward lifecycle data
 - reward_suggestions: suggestion queue
 - reward_votes: votes per suggestion
-- app_users: login identities and role links
+- app_users: login identities, role links, and per-user `permissions` (JSONB overrides)
 - tickets: issue tracking and evidence link
 - revision_history: immutable change audit trail
+
+## Account access management (2026-03-18)
+- List/manage accounts endpoint includes permissions payload:
+  - GET `/api/auth/users`
+  - PUT `/api/auth/users/:id` supports `permissions` updates
+- Effective permissions are role defaults merged with account overrides.
+- Server-side enforcement now checks permission actions for key write paths (points, attendance, account management), not just role labels.
 
 ## Revision history columns of interest
 - record_type, record_id, action, changed_by, changed_at

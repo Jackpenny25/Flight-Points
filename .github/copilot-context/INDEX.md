@@ -25,3 +25,6 @@ Do not read this by default. Open only when normal instructions are insufficient
 - Keep concise; append only important facts.
 - Prefer updating existing sections over adding new files.
 - Never include secrets, credentials, or private tokens.
+
+## Last Updated
+- 2026-03-18: Per-account permission overrides added (tabs + actions), with backend enforcement and dashboard/nav integration.

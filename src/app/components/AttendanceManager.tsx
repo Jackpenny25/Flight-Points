@@ -24,9 +24,12 @@ interface AttendanceRecord {
 
 interface AttendanceManagerProps {
   userRole: string;
+  canDeleteBulk?: boolean;
+  canViewRecentSessions?: boolean;
+  canEditSavedAttendance?: boolean;
 }
 
-export function AttendanceManager({ userRole }: AttendanceManagerProps) {
+export function AttendanceManager({ userRole, canDeleteBulk = false, canViewRecentSessions = false, canEditSavedAttendance = false }: AttendanceManagerProps) {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [cadets, setCadets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -295,7 +298,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
     }
   };
 
-  const canDelete = userRole === 'snco';
+  const canDelete = canDeleteBulk;
 
   const nonHqCadets = cadets.filter(c => c.flight && c.flight.toLowerCase() !== 'hq');
   const flights = Array.from(new Set(nonHqCadets.map(c => c.flight))).sort();
@@ -322,9 +325,9 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
   };
 
   return (
-    <div className={`space-y-6 ${userRole === 'snco' ? 'grid gap-6 md:grid-cols-3' : ''}`}>
+    <div className={`space-y-6 ${canViewRecentSessions ? 'grid gap-6 md:grid-cols-3' : ''}`}>
 
-      <Card className={userRole === 'snco' ? 'md:col-span-2' : 'max-w-4xl mx-auto'}>
+      <Card className={canViewRecentSessions ? 'md:col-span-2' : 'max-w-4xl mx-auto'}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UserCheck className="size-5" />
@@ -483,7 +486,7 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
         </CardContent>
       </Card>
 
-      {userRole === 'snco' && (
+      {canViewRecentSessions && (
         <Card>
           <CardHeader>
             <CardTitle>Recent Attendance</CardTitle>
@@ -542,14 +545,14 @@ export function AttendanceManager({ userRole }: AttendanceManagerProps) {
                                     <Badge variant="outline" className={isPresent ? 'text-green-700 border-green-200' : 'text-gray-500'}>
                                       {isPresent ? 'Present' : 'Absent'}
                                     </Badge>
-                                    <Button
+                                    {canEditSavedAttendance && <Button
                                       size="sm"
                                       variant="outline"
                                       disabled={isUpdating}
                                       onClick={() => handleUpdateSavedAttendance(b.id, record, isPresent ? 'absent' : 'present')}
                                     >
                                       {isUpdating ? 'Saving...' : (isPresent ? 'Mark Absent' : 'Mark Present')}
-                                    </Button>
+                                    </Button>}
                                   </div>
                                 </div>
                               );

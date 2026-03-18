@@ -1,5 +1,6 @@
 // src/utils/auth.ts
 import { useState } from 'react';
+import { sanitizePermissionOverrides } from './permissions';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://flightpoints.uk/api';
 
@@ -44,6 +45,7 @@ export async function login(email: string, password: string): Promise<User> {
     // Decode JWT to extract user data
     try {
       const payload = JSON.parse(atob(data.token.split('.')[1]));
+      const permissionOverrides = sanitizePermissionOverrides(payload.permissions);
       const user = {
         id: payload.id,
         email: payload.email,
@@ -56,6 +58,7 @@ export async function login(email: string, password: string): Promise<User> {
           cadetName: payload.cadetName || (payload.cadetId ? payload.name : undefined),
           cadetId: payload.cadetId,
           flight: payload.flight,
+          permissions: permissionOverrides,
         }
       };
       localStorage.setItem('user', JSON.stringify(user));

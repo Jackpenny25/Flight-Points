@@ -21,3 +21,6 @@ Read strategy:
 Authoring strategy:
 - Add only durable facts (not temporary debug notes).
 - Keep bullets short and operational.
+
+Latest durable addition (2026-03-18):
+- Account access is now configurable per user (tab visibility + action permissions), and this should be treated as the source-of-truth behavior over role-only assumptions.

@@ -15,6 +15,12 @@
 - cadet: self views (points/leaderboards/rewards/tickets)
 - presentation: presentation tab only
 
+## Permission model (2026-03-18)
+- Role defaults still exist, but account access now supports per-user permission overrides.
+- Overrides include tab visibility and action-level permissions.
+- Effective permissions are computed as: role defaults + per-user overrides.
+- Effective permissions are refreshed server-side on authenticated requests.
+
 ## Auth/account model
 - Signup removed; accounts created by SNOs in app
 - Login input is username; stored internally as {username}@flightpoints.local

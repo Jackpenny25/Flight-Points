@@ -5,9 +5,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Checkbox } from './ui/checkbox';
 import { formatFlight } from './ui/utils';
 import { toast } from 'sonner';
 import { Copy, KeyRound, UserPlus, Trash2, Pencil } from 'lucide-react';
+import { PERMISSION_ACTION_META, PERMISSION_TAB_META, sanitizePermissionOverrides } from '../../utils/permissions';
 
 interface AdminSignupsProps {
   accessToken: string;
@@ -27,6 +29,7 @@ interface UserAccount {
   email: string;
   name: string;
   role: string;
+  permissions?: any;
   username: string;
   cadetId?: string;
   createdBy?: string;
@@ -59,6 +62,8 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
 
   // Role change state
   const [roleSelections, setRoleSelections] = useState<Record<string, string>>({});
+  const [editingPermissionsId, setEditingPermissionsId] = useState<string | null>(null);
+  const [permissionSelections, setPermissionSelections] = useState<Record<string, any>>({});
 
   // Search filters
   const [accountSearch, setAccountSearch] = useState('');
@@ -98,6 +103,7 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
         email: u.email,
         name: u.name,
         role: u.role,
+        permissions: sanitizePermissionOverrides(u.permissions),
         username: u.username || (u.email?.includes('@') ? u.email.split('@')[0] : u.email),
         cadetId: u.cadetId,
         createdBy: u.createdBy,
@@ -225,6 +231,49 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
     }
   };
 
+  const openPermissionsEditor = (user: UserAccount) => {
+    setEditingPermissionsId(user.id);
+    setPermissionSelections(prev => ({
+      ...prev,
+      [user.id]: sanitizePermissionOverrides(user.permissions || {}),
+    }));
+  };
+
+  const setPermissionFlag = (
+    userId: string,
+    group: 'tabs' | 'actions',
+    key: string,
+    value: boolean,
+  ) => {
+    setPermissionSelections(prev => {
+      const current = sanitizePermissionOverrides(prev[userId] || {});
+      const nextGroup = { ...(current[group] || {}), [key]: value };
+      return {
+        ...prev,
+        [userId]: {
+          ...current,
+          [group]: nextGroup,
+        },
+      };
+    });
+  };
+
+  const handleSavePermissions = async (userId: string) => {
+    try {
+      const payload = sanitizePermissionOverrides(permissionSelections[userId] || {});
+      const res = await api.updateUserPermissions(userId, payload);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success('Access permissions updated');
+      setEditingPermissionsId(null);
+      fetchData();
+    } catch (e: any) {
+      toast.error('Failed to update access: ' + String(e));
+    }
+  };
+
   const handleChangeUsername = async (userId: string) => {
     const newUsername = editUsernameValue.trim().toLowerCase()
       .replace(/[^a-z0-9.\-]/g, '')
@@ -268,6 +317,9 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
            u.username.toLowerCase().includes(search) ||
            u.role.toLowerCase().includes(search);
   });
+
+  const editingUser = users.find(u => u.id === editingPermissionsId) || null;
+  const editingPermissionValue = editingPermissionsId ? sanitizePermissionOverrides(permissionSelections[editingPermissionsId] || editingUser?.permissions || {}) : { tabs: {}, actions: {} };
 
   return (
     <div className="space-y-6">
@@ -566,6 +618,14 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
                               <KeyRound className="h-4 w-4 mr-1" />
                               {resettingId === u.id ? 'Resetting…' : 'New Password'}
                             </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openPermissionsEditor(u)}
+                              title="Edit tab and action access"
+                            >
+                              Access
+                            </Button>
                             {u.id !== currentUserId && (
                               <Button
                                 size="sm"
@@ -584,6 +644,52 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
                   </TableBody>
                 </Table>
               </div>
+              {editingUser && (
+                <div className="rounded-lg border p-4 space-y-4 bg-slate-50/60">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="font-semibold">Access settings for {editingUser.name}</div>
+                      <div className="text-sm text-muted-foreground">Role defaults can be overridden per user.</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={() => handleSavePermissions(editingUser.id)}>Save Access</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingPermissionsId(null)}>Cancel</Button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="font-medium text-sm">Visible Tabs</div>
+                      <div className="space-y-2 rounded border p-3 bg-white">
+                        {PERMISSION_TAB_META.map((item) => (
+                          <label key={item.key} className="flex items-center gap-2 text-sm">
+                            <Checkbox
+                              checked={Boolean(editingPermissionValue.tabs?.[item.key])}
+                              onCheckedChange={(checked) => setPermissionFlag(editingUser.id, 'tabs', item.key, Boolean(checked))}
+                            />
+                            <span>{item.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="font-medium text-sm">Actions</div>
+                      <div className="space-y-2 rounded border p-3 bg-white">
+                        {PERMISSION_ACTION_META.map((item) => (
+                          <label key={item.key} className="flex items-center gap-2 text-sm">
+                            <Checkbox
+                              checked={Boolean(editingPermissionValue.actions?.[item.key])}
+                              onCheckedChange={(checked) => setPermissionFlag(editingUser.id, 'actions', item.key, Boolean(checked))}
+                            />
+                            <span>{item.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="text-sm text-muted-foreground">
                 {users.length} account{users.length !== 1 ? 's' : ''} total
               </div>

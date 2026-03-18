@@ -1,7 +1,7 @@
 
 Dont commit yourself as it confuses me.
 
----
+---UPDATE THIS FILE ALOT AND ANY NECCESSARY CONTEXT FILES WITH ANY IMPORTANT INFORMATION YOU THINK IS RELEVANT TO THE PROJECT. This is the single source of truth for the project and should be updated with any learnings and decisions.
 
 ## ⚠️ USER NOTES (DO NOT TOUCH - CRITICAL INFO)
 
@@ -83,6 +83,16 @@ Always test using `npm run build` and `npm run server` at the end of large chang
 - **Admin PIN:** 6 digits, env `ADMIN_PIN`, verified server-side only.
 - **JWT tokens:** 7 days. Includes cadetId + flight from linked cadet.
 
+**Per-account permissions (2026-03-18):**
+- Added `app_users.permissions` JSONB column support (auto-created via `ensureAdminAccountSchema()`).
+- Accounts tab now supports editing tab visibility + action permissions per user (cadet/staff/pointgiver/snco/presentation).
+- Server now computes effective permissions from role defaults + per-user overrides and refreshes them on every authenticated request.
+- Key write endpoints now enforce permission actions, not only role checks:
+   - `givePoints`, `editPoints`, `deletePoints`
+   - `markAttendance`, `editAttendance`, `deleteAttendanceSessions`
+   - `manageAccounts`
+- Dashboard + TopNav + Points/Attendance managers now read effective permissions for tab visibility and action controls.
+
 ---
 
 ## Features (Phase 2 — 2026-03-17)
@@ -147,4 +157,50 @@ Always test using `npm run build` and `npm run server` at the end of large chang
 
 ---
 
-**Last Updated:** 2026-03-17 (Phase 2 complete)
+## 🔄 CONTEXT INBOX (TEMPORARY - APPEND EVERY CHAT)
+
+Purpose:
+- This section is a temporary high-detail buffer to capture as much useful context as possible after EVERY chat.
+- It is NOT permanent. It must be periodically sorted into the structured context files under `.github/copilot-context/`.
+
+Mandatory rules for every AI run:
+- MUST append a new inbox entry after EVERY chat response that contains project-relevant information.
+- MUST include implementation details, decisions, risks, follow-ups, validation outcomes, and operational notes when present.
+- MUST NOT remove previous inbox entries unless they were sorted into the context pack.
+- MUST keep secrets out (no credentials, tokens, private keys, or sensitive config values).
+- MUST keep this section at the bottom of this file.
+
+Sorting policy (inbox -> structured context files):
+- Sort immediately when user asks.
+- Auto-sort when either condition is met:
+   - Inbox exceeds 250 lines, or
+   - Inbox exceeds 12 entries.
+- After sorting, summarize durable facts into the correct files:
+   - `10-system-profile.md`
+   - `20-operations-runbook.md`
+   - `30-api-db-reference.md`
+   - `40-security-history-and-decisions.md`
+   - `50-feature-behavior.md`
+   - `60-open-items-and-handover.md`
+- After sorting, keep only a short rollover note in this inbox and continue appending new entries.
+
+Entry template (copy for each chat):
+- Date:
+- Chat summary:
+- Files touched:
+- Behavior/decision changes:
+- Validation performed:
+- Risks or follow-up:
+- Suggested context destinations:
+
+### Inbox Entries
+
+- Date: 2026-03-18
+   Chat summary: User requested mandatory temporary context capture at the bottom of this file after every chat, with high detail and later sorting into context-pack files.
+   Files touched: `.github/copilot-instructions.md`
+   Behavior/decision changes: Added strict permanent workflow rules requiring every AI to append context entries each chat and auto-sort when inbox grows too large.
+   Validation performed: Verified section placement at file bottom and aligned with existing no-secrets policy.
+   Risks or follow-up: Future AI runs must consistently append entries; missing entries should be treated as process regression.
+   Suggested context destinations: `00-usage.md`, `60-open-items-and-handover.md`
+
+**Last Updated:** 2026-03-18 (Context inbox workflow added; mandatory per-chat append enabled)

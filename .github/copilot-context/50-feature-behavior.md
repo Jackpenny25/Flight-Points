@@ -1,5 +1,12 @@
 # Feature Behavior Notes
 
+## Account access controls (2026-03-18)
+- Accounts tab supports per-user access overrides for all roles (cadet, staff, pointgiver, snco, presentation).
+- Access editor supports:
+	- tab visibility controls
+	- action-level controls (give/edit/delete points, attendance actions, account management, admin unlock)
+- Dashboard/TopNav and Points/Attendance manager UI now follow effective permissions rather than role-only assumptions.
+
 ## Points
 - Allowed award roles: snco, staff, pointgiver
 - pointgiver can only award own flight
