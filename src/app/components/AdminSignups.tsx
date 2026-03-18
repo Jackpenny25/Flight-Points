@@ -8,14 +8,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Checkbox } from './ui/checkbox';
 import { formatFlight } from './ui/utils';
 import { toast } from 'sonner';
-import { Copy, KeyRound, UserPlus, Trash2, Pencil } from 'lucide-react';
-import { PERMISSION_ACTION_META, PERMISSION_TAB_META, sanitizePermissionOverrides } from '../../utils/permissions';
+import { Copy, KeyRound, UserPlus, Trash2, Pencil, Shield } from 'lucide-react';
+import { PERMISSION_ACTION_META, PERMISSION_TAB_META, sanitizePermissionOverrides, ROLE_PERMISSION_DEFAULTS } from '../../utils/permissions';
+import type { EffectivePermissions } from '../../utils/permissions';
 
 interface AdminSignupsProps {
   accessToken: string;
   currentUserId: string;
   currentUserRole: string;
 }
+
+const ROLE_DISPLAY_NAMES: Record<string, string> = {
+  snco: 'Flight Point Lead',
+  pointgiver: 'Point Giver',
+  staff: 'Staff',
+  cadet: 'Cadet',
+  presentation: 'Presentation',
+};
 
 interface CadetEntry {
   id: string;
@@ -64,6 +73,12 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
   const [roleSelections, setRoleSelections] = useState<Record<string, string>>({});
   const [editingPermissionsId, setEditingPermissionsId] = useState<string | null>(null);
   const [permissionSelections, setPermissionSelections] = useState<Record<string, any>>({});
+
+  // Role defaults state
+  const [roleDefaultsData, setRoleDefaultsData] = useState<Record<string, EffectivePermissions>>({});
+  const [selectedRoleDefault, setSelectedRoleDefault] = useState<string>('snco');
+  const [roleDefaultEdits, setRoleDefaultEdits] = useState<Record<string, EffectivePermissions>>({});
+  const [savingRoleDefault, setSavingRoleDefault] = useState(false);
 
   // Search filters
   const [accountSearch, setAccountSearch] = useState('');
@@ -121,7 +136,61 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
 
   useEffect(() => {
     fetchData();
+    fetchRoleDefaults();
   }, []);
+
+  const fetchRoleDefaults = async () => {
+    try {
+      const res = await api.getRoleDefaults();
+      if (res && !res.error) {
+        setRoleDefaultsData(res);
+        // Deep-clone for edits
+        const edits: Record<string, EffectivePermissions> = {};
+        for (const [role, perms] of Object.entries(res as Record<string, EffectivePermissions>)) {
+          edits[role] = { tabs: { ...perms.tabs }, actions: { ...perms.actions } };
+        }
+        setRoleDefaultEdits(edits);
+      }
+    } catch {
+      // silently fail — defaults still viewable from hardcoded fallback
+    }
+  };
+
+  const handleRoleDefaultToggle = (role: string, group: 'tabs' | 'actions', key: string, value: boolean) => {
+    setRoleDefaultEdits(prev => ({
+      ...prev,
+      [role]: {
+        ...prev[role],
+        [group]: { ...(prev[role]?.[group] || {}), [key]: value },
+      },
+    }));
+  };
+
+  const handleSaveRoleDefault = async (role: string) => {
+    setSavingRoleDefault(true);
+    try {
+      const edits = roleDefaultEdits[role];
+      if (!edits) { toast.error('No edits to save'); return; }
+      const res = await api.updateRoleDefaults(role, edits);
+      if (res?.error) { toast.error(res.error); return; }
+      toast.success(`Default access for ${ROLE_DISPLAY_NAMES[role] || role} updated`);
+      await fetchRoleDefaults();
+    } catch (e: any) {
+      toast.error('Failed to save: ' + String(e));
+    } finally {
+      setSavingRoleDefault(false);
+    }
+  };
+
+  const handleResetRoleDefault = (role: string) => {
+    const builtin = ROLE_PERMISSION_DEFAULTS[role];
+    if (!builtin) return;
+    setRoleDefaultEdits(prev => ({
+      ...prev,
+      [role]: { tabs: { ...builtin.tabs }, actions: { ...builtin.actions } },
+    }));
+    toast.info('Reset to built-in defaults — click Save to apply');
+  };
 
   // Get cadets that don't already have accounts
   const cadetIdsWithAccounts = new Set(users.map(u => u.cadetId).filter(Boolean));
@@ -694,6 +763,98 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
                 {users.length} account{users.length !== 1 ? 's' : ''} total
               </div>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Role Default Permissions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Default Role Access
+          </CardTitle>
+          <CardDescription>
+            Set the default permissions for each role. Per-user overrides are applied on top of these.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {/* Role selector tabs */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {Object.keys(ROLE_DISPLAY_NAMES).map((role) => (
+              <Button
+                key={role}
+                size="sm"
+                variant={selectedRoleDefault === role ? 'default' : 'outline'}
+                onClick={() => setSelectedRoleDefault(role)}
+              >
+                {ROLE_DISPLAY_NAMES[role]}
+              </Button>
+            ))}
+          </div>
+
+          {roleDefaultEdits[selectedRoleDefault] ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="font-medium text-sm">Visible Tabs</div>
+                  <div className="space-y-2 rounded border p-3 bg-white dark:bg-muted/30">
+                    {PERMISSION_TAB_META.map((item) => (
+                      <label key={item.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={Boolean(roleDefaultEdits[selectedRoleDefault]?.tabs?.[item.key])}
+                          onCheckedChange={(checked) =>
+                            handleRoleDefaultToggle(selectedRoleDefault, 'tabs', item.key, Boolean(checked))
+                          }
+                        />
+                        <span>{item.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="font-medium text-sm">Actions</div>
+                  <div className="space-y-2 rounded border p-3 bg-white dark:bg-muted/30">
+                    {PERMISSION_ACTION_META.map((item) => (
+                      <label key={item.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={Boolean(roleDefaultEdits[selectedRoleDefault]?.actions?.[item.key])}
+                          onCheckedChange={(checked) =>
+                            handleRoleDefaultToggle(selectedRoleDefault, 'actions', item.key, Boolean(checked))
+                          }
+                        />
+                        <span>{item.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <Button
+                  size="sm"
+                  onClick={() => handleSaveRoleDefault(selectedRoleDefault)}
+                  disabled={savingRoleDefault}
+                >
+                  {savingRoleDefault ? 'Saving…' : `Save ${ROLE_DISPLAY_NAMES[selectedRoleDefault]} Defaults`}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleResetRoleDefault(selectedRoleDefault)}
+                >
+                  Reset to Built-in
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Changes take effect for all {ROLE_DISPLAY_NAMES[selectedRoleDefault]} users that don't have individual overrides set.
+                Existing per-user overrides remain unaffected.
+              </p>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">Loading role defaults…</div>
           )}
         </CardContent>
       </Card>

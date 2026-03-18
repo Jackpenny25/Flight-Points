@@ -71,7 +71,7 @@ Always test using `npm run build` and `npm run server` at the end of large chang
 - `mapToDb()` (camelCase → snake_case); `mapToClient()` (reverse).
 - Dedicated: `/api/points`, `/api/my-points`, `/api/leaderboards`, `/api/presentation-stats`, `/api/attendance/reports`, `/api/integrity-check`, `/api/reward-suggestions`, `/api/tickets`, `/api/health`.
 
-**Tables:** cadets, points, attendance, attendance_bulks, rewards, reward_suggestions, reward_votes, app_users, tickets, revision_history (auto-created).
+**Tables:** cadets, points, attendance, attendance_bulks, rewards, reward_suggestions, reward_votes, app_users, tickets, revision_history, role_permission_defaults (all auto-created).
 
 ---
 
@@ -92,6 +92,15 @@ Always test using `npm run build` and `npm run server` at the end of large chang
    - `markAttendance`, `editAttendance`, `deleteAttendanceSessions`
    - `manageAccounts`
 - Dashboard + TopNav + Points/Attendance managers now read effective permissions for tab visibility and action controls.
+
+**Role-level defaults editor (2026-03-18):**
+- New `role_permission_defaults` DB table (auto-created via `ensureRoleDefaultsSchema()`): `role TEXT PK, permissions JSONB`.
+- New endpoints: `GET /api/role-defaults` (snco/admin) returns full effective defaults for all roles; `PUT /api/role-defaults/:role` updates one role's defaults.
+- In-memory cache `roleDefaultsCache` loaded at server startup, bust on PUT.
+- Accounts tab now has "Default Role Access" card: role selector buttons (snco/pointgiver/staff/cadet/presentation), two-column checkbox grid (tabs + actions), Save + Reset to Built-in buttons.
+- `ROLE_PERMISSION_DEFAULTS` exported from `permissions.ts` so frontend can reset to built-in values without a server call.
+- `sanitizeFullPermissions()` helper on server validates complete permissions objects (not just overrides).
+- Per-user overrides are applied on top of the (potentially DB-customised) role defaults.
 
 ---
 
@@ -196,6 +205,26 @@ Entry template (copy for each chat):
 ### Inbox Entries
 
 - Date: 2026-03-18
+   Chat summary: Added "Default Role Access" section to Accounts tab — lets admins/sncos adjust the default permissions for each role through a checkbox UI. Changes stored in DB, applied to all users of that role unless they have per-user overrides.
+   Files touched: `server/server.ts`, `src/utils/permissions.ts`, `src/utils/api.ts`, `src/app/components/AdminSignups.tsx`, `.github/copilot-instructions.md`
+   Behavior/decision changes:
+     - New DB table `role_permission_defaults(role TEXT PK, permissions JSONB)` auto-created at server startup via `ensureRoleDefaultsSchema()`.
+     - `ROLE_PERMISSION_DEFAULTS` exported from `permissions.ts` (was unexported const before).
+     - `getRoleDefaultPermissions()` now checks `roleDefaultsCache` first, falls back to hardcoded.
+     - Server startup warms cache with `loadRoleDefaults()`.
+     - `GET /api/role-defaults` — snco/admin only; returns full effective defaults for all 6 roles.
+     - `PUT /api/role-defaults/:role` — snco/admin only; validates role, stores full permissions JSONB, busts cache.
+     - `sanitizeFullPermissions()` helper added to server — validates complete permissions (not overrides), fills all unknown keys with false.
+     - `api.getRoleDefaults()` and `api.updateRoleDefaults(role, perms)` added to api.ts.
+     - `AdminSignups.tsx`: new `ROLE_DISPLAY_NAMES` map, state (`roleDefaultsData`, `selectedRoleDefault`, `roleDefaultEdits`, `savingRoleDefault`), `fetchRoleDefaults()`, `handleRoleDefaultToggle()`, `handleSaveRoleDefault()`, `handleResetRoleDefault()`.
+     - New Card "Default Role Access" at bottom of Accounts tab with role tabs + two-column checkbox grid + Save/Reset buttons.
+   Validation performed: `npm run build` exit 0; no TS errors in modified frontend files.
+   Risks or follow-up:
+     - Server-side TypeScript pre-existing errors in server.ts still present (ipKeyGenerator type, Set spread) — not introduced by this work.
+     - Users logged in when role defaults change will see updated defaults on next API call (requireAuth refreshes from DB each request), but frontend tab visibility won't update until re-login.
+   Suggested context destinations: `30-api-db-reference.md`, `50-feature-behavior.md`
+
+- Date: 2026-03-18
    Chat summary: User requested mandatory temporary context capture at the bottom of this file after every chat, with high detail and later sorting into context-pack files.
    Files touched: `.github/copilot-instructions.md`
    Behavior/decision changes: Added strict permanent workflow rules requiring every AI to append context entries each chat and auto-sort when inbox grows too large.
@@ -203,4 +232,4 @@ Entry template (copy for each chat):
    Risks or follow-up: Future AI runs must consistently append entries; missing entries should be treated as process regression.
    Suggested context destinations: `00-usage.md`, `60-open-items-and-handover.md`
 
-**Last Updated:** 2026-03-18 (Context inbox workflow added; mandatory per-chat append enabled)
+**Last Updated:** 2026-03-18 (Role-level default permissions editor added to Accounts tab)

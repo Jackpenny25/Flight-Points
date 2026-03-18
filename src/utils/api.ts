@@ -139,6 +139,11 @@ export const api = {
   resetAccountPassword: (userId: string) =>
     fetchWithAuth('/admin/reset-account-password', { method: 'POST', body: JSON.stringify({ userId }) }).then(parseJsonSafe),
   
+  // Role defaults
+  getRoleDefaults: () => fetchWithAuth('/role-defaults', { method: 'GET' }).then(parseJsonSafe),
+  updateRoleDefaults: (role: string, permissions: any) =>
+    fetchWithAuth(`/role-defaults/${encodeURIComponent(role)}`, { method: 'PUT', body: JSON.stringify(permissions) }).then(parseJsonSafe),
+
   // Cleanup retention
   cleanupRetention: () => fetchWithAuth('/admin/cleanup-retention', { method: 'POST' }).then(r => r.json()),
   

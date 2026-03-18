@@ -283,8 +283,29 @@ function sanitizePermissionOverrides(raw: any): StoredPermissionOverrides {
   return output;
 }
 
+function sanitizeFullPermissions(raw: any): EffectivePermissions | null {
+  if (!raw || typeof raw !== 'object') return null;
+  if (!raw.tabs || typeof raw.tabs !== 'object') return null;
+  if (!raw.actions || typeof raw.actions !== 'object') return null;
+  const tabs = {} as PermissionTabs;
+  const actions = {} as PermissionActions;
+  for (const key of PERMISSION_TAB_KEYS) {
+    tabs[key] = raw.tabs[key] === true;
+  }
+  for (const key of PERMISSION_ACTION_KEYS) {
+    actions[key] = raw.actions[key] === true;
+  }
+  return { tabs, actions };
+}
+
+// In-memory cache for DB-stored role defaults
+let roleDefaultsCache: Record<string, EffectivePermissions> | null = null;
+
 function getRoleDefaultPermissions(role: string): EffectivePermissions {
   const normalized = String(role || '').toLowerCase();
+  if (roleDefaultsCache) {
+    return clonePermissions(roleDefaultsCache[normalized] || roleDefaultsCache['cadet'] || ROLE_PERMISSION_DEFAULTS.cadet);
+  }
   return clonePermissions(ROLE_PERMISSION_DEFAULTS[normalized] || ROLE_PERMISSION_DEFAULTS.cadet);
 }
 
@@ -948,6 +969,40 @@ function generateUsername(name: string): string {
     .slice(0, 30);                 // max 30 chars
 }
 
+// Ensure role defaults table exists
+let roleDefaultsSchemaPromise: Promise<void> | null = null;
+async function ensureRoleDefaultsSchema() {
+  if (!roleDefaultsSchemaPromise) {
+    roleDefaultsSchemaPromise = (async () => {
+      await query(`CREATE TABLE IF NOT EXISTS role_permission_defaults (
+        role TEXT PRIMARY KEY,
+        permissions JSONB NOT NULL
+      )`);
+    })().catch((error) => {
+      roleDefaultsSchemaPromise = null;
+      throw error;
+    });
+  }
+  return roleDefaultsSchemaPromise;
+}
+
+async function loadRoleDefaults(): Promise<Record<string, EffectivePermissions>> {
+  await ensureRoleDefaultsSchema();
+  const result = await query('SELECT role, permissions FROM role_permission_defaults');
+  const cache: Record<string, EffectivePermissions> = {};
+  // Seed with hardcoded defaults for all known roles
+  for (const [role, defaults] of Object.entries(ROLE_PERMISSION_DEFAULTS)) {
+    cache[role] = clonePermissions(defaults);
+  }
+  // Override with DB-stored values
+  for (const row of result.rows) {
+    const perms = sanitizeFullPermissions(row.permissions);
+    if (perms) cache[row.role] = perms;
+  }
+  roleDefaultsCache = cache;
+  return cache;
+}
+
 // Ensure admin account columns exist
 let adminSchemaInitPromise: Promise<void> | null = null;
 async function ensureAdminAccountSchema() {
@@ -1113,6 +1168,49 @@ app.delete('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Res
   } catch (error) {
     console.error('Error in DELETE /api/auth/users/:id:', error);
     return res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+// GET /api/role-defaults — return current effective defaults for all roles
+app.get('/api/role-defaults', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const defaults = await loadRoleDefaults();
+    return res.json(defaults);
+  } catch (error) {
+    console.error('Error in GET /api/role-defaults:', error);
+    return res.status(500).json({ error: 'Failed to load role defaults' });
+  }
+});
+
+// PUT /api/role-defaults/:role — update defaults for a specific role
+app.put('/api/role-defaults/:role', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!hasSignupAdminRole(req.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { role } = req.params;
+  const validRoles = Object.keys(ROLE_PERMISSION_DEFAULTS);
+  if (!validRoles.includes(role)) {
+    return res.status(400).json({ error: `Invalid role. Must be one of: ${validRoles.join(', ')}` });
+  }
+  try {
+    const perms = sanitizeFullPermissions(req.body);
+    if (!perms) {
+      return res.status(400).json({ error: 'Invalid permissions payload — expected { tabs: {...}, actions: {...} }' });
+    }
+    await ensureRoleDefaultsSchema();
+    await query(
+      `INSERT INTO role_permission_defaults (role, permissions) VALUES ($1, $2)
+       ON CONFLICT (role) DO UPDATE SET permissions = EXCLUDED.permissions`,
+      [role, JSON.stringify(perms)]
+    );
+    roleDefaultsCache = null; // bust cache
+    return res.json({ success: true, role, permissions: perms });
+  } catch (error) {
+    console.error('Error in PUT /api/role-defaults/:role:', error);
+    return res.status(500).json({ error: 'Failed to update role defaults' });
   }
 });
 
@@ -3749,4 +3847,6 @@ ${stack.split('\n').slice(0, 10).join('\n')}
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log('Security: helmet enabled, auth enforced on data endpoints, upload restrictions active');
+  // Warm up role defaults cache
+  loadRoleDefaults().catch((err) => console.error('Failed to load role defaults cache:', err));
 });

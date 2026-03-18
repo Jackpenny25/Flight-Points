@@ -65,7 +65,7 @@ export const PERMISSION_ACTION_META: Array<{ key: PermissionActionKey; label: st
   { key: 'unlockAdmin', label: 'Use admin PIN unlock' },
 ];
 
-const ROLE_PERMISSION_DEFAULTS: Record<string, EffectivePermissions> = {
+export const ROLE_PERMISSION_DEFAULTS: Record<string, EffectivePermissions> = {
   snco: {
     tabs: {
       leaderboards: true,
