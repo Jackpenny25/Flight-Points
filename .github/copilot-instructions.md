@@ -299,4 +299,28 @@ Entry template (copy for each chat):
      - DB ssl change (PGSSLMODE handling) is backward compat for require/verify-ca/verify-full but may differ if production uses non-standard PGSSLMODE value
    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
 
-**Last Updated:** 2026-03-20 (Startup diagnostics + crash guards added; root cause investigation ongoing)
+**Last Updated:** 2026-03-20 (NSSM root cause found and fixed; site restored)
+
+- Date: 2026-03-20 (RESOLVED)
+   Chat summary: Root cause of port 3001 unreachable was NSSM configured to launch `npm.ps1` (a PowerShell script) directly. NSSM uses CreateProcess which cannot execute .ps1 or .cmd files. Fixed by setting Application=cmd.exe and AppParameters="/c npm run server". Also set AppEnvironmentExtra to inject the correct PATH (nodejs dir + npm global) for the LocalSystem account. Server now starts successfully on port 3001.
+   Files touched: `server/server.ts` (startup diagnostics helped confirm it), NSSM service config on server (not in repo), `server-backup.ps1`
+   Behavior/decision changes:
+     - NSSM service "flight-points" now configured as:
+        - Application: C:\Windows\System32\cmd.exe
+        - AppParameters: /c npm run server
+        - AppDirectory: C:\inetpub\wwwroot\Flight-Points\Code\Flight-Points
+        - AppEnvironmentExtra: PATH=C:\Program Files\nodejs;C:\Users\Admin\AppData\Roaming\npm;C:\Windows\System32;C:\Windows
+        - AppStdout/AppStderr: C:\inetpub\wwwroot\Flight-Points\Logs\Server\nssm-stdout.log
+     - IMPORTANT: If the service ever needs to be recreated, use cmd.exe as the binary, NOT npm.ps1/npm.cmd
+     - Project is installed at: C:\inetpub\wwwroot\Flight-Points\Code\Flight-Points (subfolder under Code)
+     - Backup works correctly — .dump files are binary format, not corrupted; confirmed pg_dump path: C:\Program Files\PostgreSQL\18\bin\pg_dump.exe
+     - server-backup.ps1 now logs pg_dump output, exit code, and file size after backup
+   Validation performed:
+     - netstat confirmed TCP 0.0.0.0:3001 and [::]:3001 LISTENING (PID 5640)
+     - nssm-stdout.log showed clean startup: [startup] diagnostics + "Server running on http://localhost:3001"
+     - backup ran successfully: flight-points-db-20260320-171921.dump
+   Risks or follow-up:
+     - The AppEnvironmentExtra PATH only includes a minimal set. If future tools (e.g. git hooks, tsx) need additional paths, add them to the AppEnvironmentExtra.
+     - The scheduled task "Flight-Points_Server_Tunnel" (state: Ready, not Running) is apparently NOT required for the API server — NSSM handles it. The scheduled task likely handles the Cloudflare tunnel only. Verify this and document clearly.
+     - CORS "Not allowed by CORS" errors appeared in nssm-stdout.log — these came from something hitting the API from an unlisted origin immediately after startup (probably the scheduled task's tunnel health check hitting localhost directly, which has no Origin header... actually the error suggests an Origin header was present). May want to investigate what is generating those requests.
+   Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
