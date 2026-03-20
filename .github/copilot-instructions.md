@@ -232,4 +232,54 @@ Entry template (copy for each chat):
    Risks or follow-up: Future AI runs must consistently append entries; missing entries should be treated as process regression.
    Suggested context destinations: `00-usage.md`, `60-open-items-and-handover.md`
 
-**Last Updated:** 2026-03-18 (Role-level default permissions editor added to Accounts tab)
+- Date: 2026-03-20
+    Chat summary: Performed manual OWASP-category security triage based on Checkvibe-style summary counts and project code review. Also ran dependency audit and identified concrete package vulnerabilities plus free scanner alternatives.
+    Files touched: `server/server.ts`, `server/db.ts`, `src/utils/auth.ts`, `src/utils/api.ts`, `src/app/components/ui/chart.tsx`, `package.json`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - No runtime behavior changes made in this chat; analysis only.
+       - Confirmed key hardening already present: Helmet+CSP, CORS allowlist, JWT secret startup guard, auth middleware refresh, role/action permissions, and endpoint-specific rate limiters.
+       - Identified likely scanner-triggering weaknesses to prioritize:
+          - Dependency CVEs from `npm audit --omit=dev --json`: `express-rate-limit@8.2.1` (high), `multer@2.0.2` (high), `next@16.1.6` (moderate).
+          - CSP currently allows `'unsafe-inline'` for scripts and styles.
+          - JWT stored in `localStorage` on client (token theft impact if XSS occurs).
+          - `/api/auth/lookup-email` can disclose whether usernames exist (user enumeration risk).
+          - Upload artifacts are served publicly from `/uploads` (random filenames reduce guessing risk but no auth gate on retrieval).
+          - `server/db.ts` uses SSL with `rejectUnauthorized: false` when PG SSL mode is required.
+    Validation performed:
+       - Read and reviewed backend/frontend auth, CORS/CSP, upload, and generic CRUD code paths.
+       - Ran `npm audit --omit=dev --json` (reported 3 production dependency issues: 2 high, 1 moderate).
+       - Attempted external header checks (`curl -I` to `flightpoints.uk` and `api.flightpoints.uk`) but both returned Cloudflare 530 from this environment, so direct remote header validation was inconclusive.
+    Risks or follow-up:
+       - Upgrade vulnerable packages and re-run audit.
+       - Tighten CSP by removing `'unsafe-inline'` via nonce/hash strategy where possible.
+       - Consider migrating JWT from `localStorage` to secure HttpOnly cookies if architecture allows.
+       - Add anti-enumeration behavior to username/email lookup endpoint.
+       - Decide whether upload retrieval should require authenticated download route for ticket evidence.
+       - Run at least two free external scanners from a network that can access origin without Cloudflare 530 blocks.
+    Suggested context destinations: `40-security-history-and-decisions.md`, `60-open-items-and-handover.md`, `20-operations-runbook.md`
+
+- Date: 2026-03-20
+    Chat summary: User reported production outage (Cloudflare Error 1033) and inability to reach localhost:3001 on server. Performed immediate triage, implemented core security fixes, and prepared server-side recovery runbook.
+    Files touched: `package.json`, `package-lock.json`, `server/db.ts`, `server/server.ts`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Upgraded vulnerable production dependencies to patched versions:
+          - `express-rate-limit` -> `^8.2.2` (installed resolved `8.3.1`)
+          - `multer` -> `^2.1.1`
+          - `next` -> `^16.1.7` (installed resolved `16.2.0`)
+       - Hardened DB TLS behavior in `server/db.ts`:
+          - `PGSSLMODE=require` keeps encryption with `rejectUnauthorized=false` (compat mode).
+          - `PGSSLMODE=verify-ca|verify-full` now enforces certificate validation (`rejectUnauthorized=true`).
+       - Tightened CSP in `server/server.ts` by removing `'unsafe-inline'` from `scriptSrc`.
+       - Reduced username enumeration risk in `/api/auth/lookup-email` by returning normalized fallback email shape instead of distinct 404 for unknown users.
+    Validation performed:
+       - `npm run build` passed.
+       - `npm audit --omit=dev --json` after upgrades reported 0 production vulnerabilities.
+       - `npm run server` in this environment failed due DB connectivity (`ECONNREFUSED` on PostgreSQL localhost:5432), confirming API can fail hard when DB is unavailable.
+       - Local checks showed no running `cloudflared` or `node` process in this environment and no `Flight-Points_Server_Tunnel` scheduled task here (this workspace machine is not the production host).
+    Risks or follow-up:
+       - Production outage likely due API process crash (DB connectivity/config) and/or tunnel service not running on server host.
+       - Upload retrieval hardening still pending; currently `/uploads` remains public static route.
+       - Recommend running startup script `start-server-and-tunnel.ps1` directly on server and checking tunnel logs in central log root.
+    Suggested context destinations: `20-operations-runbook.md`, `40-security-history-and-decisions.md`, `60-open-items-and-handover.md`
+
+**Last Updated:** 2026-03-20 (Outage triage + dependency/security fixes applied)

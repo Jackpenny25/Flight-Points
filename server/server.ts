@@ -541,7 +541,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
       imgSrc: ["'self'", 'data:', 'blob:'],
@@ -1039,11 +1039,11 @@ app.post('/api/auth/lookup-email', async (req: Request, res: Response) => {
       [usernameStr]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Username not found' });
-    }
-
-    return res.json({ email: result.rows[0].email });
+    // Return a normalized login email shape even when no row exists to reduce
+    // account enumeration via distinct responses.
+    const fallbackEmail = usernameStr.includes('@') ? usernameStr : `${usernameStr}@flightpoints.local`;
+    const resolvedEmail = result.rows.length > 0 ? String(result.rows[0].email || fallbackEmail) : fallbackEmail;
+    return res.json({ email: resolvedEmail });
   } catch (error) {
     console.error('Error in POST /api/auth/lookup-email:', error);
     return res.status(500).json({ error: 'Server error' });

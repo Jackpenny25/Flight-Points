@@ -15,10 +15,11 @@ if (!connectionString) {
 
 const pgSslMode = String(process.env.PGSSLMODE || '').toLowerCase();
 const shouldUseSsl = pgSslMode === 'require' || pgSslMode === 'verify-ca' || pgSslMode === 'verify-full';
+const shouldRejectUnauthorized = pgSslMode === 'verify-ca' || pgSslMode === 'verify-full';
 
 export const pool = new Pool({
   connectionString,
-  ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
+  ssl: shouldUseSsl ? { rejectUnauthorized: shouldRejectUnauthorized } : undefined,
 });
 
 pool.on('error', (err) => {
