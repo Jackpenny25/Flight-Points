@@ -297,7 +297,24 @@ Entry template (copy for each chat):
      - `flight-points` Windows Service vs `Flight-Points_Server_Tunnel` Scheduled Task: BOTH may try to bind port 3001 simultaneously — could cause EADDRINUSE
      - IMPORTANT: `sc.exe qc flight-points` on the server will reveal what binary/args the service actually runs
      - DB ssl change (PGSSLMODE handling) is backward compat for require/verify-ca/verify-full but may differ if production uses non-standard PGSSLMODE value
-   Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-20 (session continued)
+    Chat summary: NSSM tunnel service was recreated with direct `cloudflared.exe` Application and separate AppParameters; service started successfully and cloudflared registered 4 tunnel connections (lhr14/lhr15/lhr20/lhr01). Public outage root cause is resolved at tunnel process level.
+    Files touched: `.github/copilot-instructions.md` (documentation), Windows service/task state on server (not in repo)
+    Behavior/decision changes:
+       - `flight-points-tunnel` now runs as dedicated NSSM Windows service.
+       - Scheduled task `Flight-Points_Server_Tunnel` remains disabled to avoid dual owners.
+       - Tunnel command now runs with explicit config path in systemprofile.
+       - Observed `'C:\Program' is not recognized` lines persisted in tunnel log from earlier failed cmd-wrapper attempts; these are historical/stale lines in appended log, not current startup failure.
+    Validation performed:
+       - `Get-Service flight-points-tunnel` => Running, Automatic.
+       - Tunnel logs show `Starting tunnel`, `Registered tunnel connection` for connIndex 0..3.
+       - API origin health remained 200 on localhost:3001.
+    Risks or follow-up:
+       - Confirm public endpoints return 200 after tunnel convergence (`https://flightpoints.uk`, `https://api.flightpoints.uk/api/health`).
+       - Optional: rotate tunnel log file to remove stale historic error lines for clearer monitoring.
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
 
 **Last Updated:** 2026-03-20 (NSSM root cause found and fixed; site restored)
 
@@ -323,4 +340,69 @@ Entry template (copy for each chat):
      - The AppEnvironmentExtra PATH only includes a minimal set. If future tools (e.g. git hooks, tsx) need additional paths, add them to the AppEnvironmentExtra.
      - The scheduled task "Flight-Points_Server_Tunnel" (state: Ready, not Running) is apparently NOT required for the API server — NSSM handles it. The scheduled task likely handles the Cloudflare tunnel only. Verify this and document clearly.
      - CORS "Not allowed by CORS" errors appeared in nssm-stdout.log — these came from something hitting the API from an unlisted origin immediately after startup (probably the scheduled task's tunnel health check hitting localhost directly, which has no Origin header... actually the error suggests an Origin header was present). May want to investigate what is generating those requests.
-   Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-20 (RESOLVED)
+    Chat summary: Verified full public recovery after moving Cloudflare tunnel lifecycle to NSSM service (`flight-points-tunnel`). Public website/API now return HTTP 200 and tunnel logs show healthy QUIC connections.
+    Files touched: `.github/copilot-instructions.md` (documentation), Windows service/task state on server (not in repo)
+    Behavior/decision changes:
+       - Confirmed final architecture: API via NSSM service `flight-points`; tunnel via NSSM service `flight-points-tunnel`; scheduled task `Flight-Points_Server_Tunnel` disabled to avoid conflicts.
+       - Tunnel startup command works with direct Application path to `cloudflared.exe` and separate AppParameters; avoids prior `'C:\Program'` parsing failures.
+       - Rotated tunnel log (clear + restart) to remove historical noise and retain clean current startup evidence.
+    Validation performed:
+       - `Invoke-WebRequest https://flightpoints.uk` => 200.
+       - `Invoke-WebRequest https://api.flightpoints.uk/api/health` => 200.
+       - Tunnel log shows `Starting tunnel` and `Registered tunnel connection` entries (multiple connIndex values).
+    Risks or follow-up:
+       - `cloudflared` Windows log note about system root cert pool is informational in this setup; no action required unless origin TLS mode changes.
+       - Keep single owner model (NSSM services) and avoid re-enabling overlapping tunnel startup mechanisms.
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-20 (session continued)
+    Chat summary: Website worked after tunnel recovery, but browser console reported CSP blocks for Cloudflare Insights (`beacon.min.js`) and an inline script bootstrap. Updated CSP to allow Cloudflare analytics specifically without reopening broad inline script execution.
+    Files touched: `server/server.ts`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - `helmet` CSP `scriptSrc` now includes `https://static.cloudflareinsights.com`.
+       - `helmet` CSP `scriptSrc` now includes explicit hash `'sha256-01FLQSjuSDH2Uy9763XUnLLdevloYBzKmIAhPOIIpPk='` for the blocked inline bootstrap script.
+       - `helmet` CSP `connectSrc` now includes `https://cloudflareinsights.com` for beacon uploads.
+       - Kept strict CSP posture (did NOT add `'unsafe-inline'` to `scriptSrc`).
+    Validation performed:
+       - `npm run build` passed.
+    Risks or follow-up:
+       - If Cloudflare changes the inline bootstrap payload, hash may rotate and require refresh.
+       - If analytics is not required, an alternative is disabling Cloudflare Web Analytics and removing these CSP allowances.
+    Suggested context destinations: `40-security-history-and-decisions.md`, `20-operations-runbook.md`
+
+- Date: 2026-03-20 (session continued)
+    Chat summary: Cloudflare 1033 persisted after API recovery because tunnel process was down. Native `cloudflared service install` was attempted multiple times and registered a crashing Windows service (`cloudflared`) with `BINARY_PATH_NAME: C:\cloudflared.exe`. System event log showed repeated crash-loop (275+ restarts). Application log showed service starts with arguments containing only executable path, then exits.
+    Files touched: `.github/copilot-instructions.md` (documentation), server host service configuration (not in repo)
+    Behavior/decision changes:
+       - Confirmed website/API origin is healthy on port 3001 while tunnel is failing.
+       - Confirmed tunnel credentials/config existed in both `C:\Users\Admin\.cloudflared` and `C:\Windows\System32\config\systemprofile\.cloudflared`.
+       - Updated systemprofile config to point credentials-file at systemprofile JSON path; crash persisted.
+       - Decision: move to NSSM-managed Cloudflare tunnel service (same stable pattern used for API service) instead of relying on cloudflared native service installer in this environment.
+    Validation performed:
+       - `sc.exe qc cloudflared` showed LocalSystem auto-start service at `C:\cloudflared.exe`.
+       - Event log confirmed repeated unexpected service termination and SCM restart attempts.
+       - API server remained healthy (`Server running on http://localhost:3001`) while public site still returned Cloudflare 1033/530.
+    Risks or follow-up:
+       - Must avoid running both Scheduled Task tunnel runner and new tunnel service simultaneously.
+       - Finalize one single owner for tunnel lifecycle (recommended: dedicated NSSM service) and disable other launchers.
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-20 (session continued)
+    Chat summary: Attempted NSSM tunnel service using `cmd.exe /c` wrapper failed due quoting/path parsing (`'C:\Program' is not recognized...`). Service installed as `flight-points-tunnel` but failed to start and ended in Paused state. API remained healthy on localhost:3001; public site still Cloudflare 1033 because tunnel was not running.
+    Files touched: `.github/copilot-instructions.md` (documentation), Windows service/task state on server (not in repo)
+    Behavior/decision changes:
+       - Disabled conflicting scheduled task `Flight-Points_Server_Tunnel`.
+       - Uninstalled native `cloudflared` service.
+       - Created NSSM service `flight-points-tunnel` with cmd wrapper, which failed due path quoting.
+       - Next fix direction: configure NSSM with Application set directly to `C:\Program Files\cloudflared\cloudflared.exe` and AppParameters set separately (`tunnel --config ... run <id>`) to avoid cmd parsing issues.
+    Validation performed:
+       - `Invoke-WebRequest http://127.0.0.1:3001/api/health` returned 200.
+       - `Invoke-WebRequest https://flightpoints.uk` still returned Cloudflare 1033.
+       - Tunnel log contained repeated `'C:\Program' is not recognized` errors.
+    Risks or follow-up:
+       - Ensure only one tunnel lifecycle owner remains enabled after fix (either NSSM service or task, not both).
+       - Recheck service recovery options so tunnel auto-restarts on crash.
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`

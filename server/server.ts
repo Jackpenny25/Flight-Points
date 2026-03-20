@@ -556,11 +556,21 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
+      // Allow Cloudflare Web Analytics beacon script and its inline bootstrap hash.
+      scriptSrc: [
+        "'self'",
+        'https://static.cloudflareinsights.com',
+        "'sha256-01FLQSjuSDH2Uy9763XUnLLdevloYBzKmIAhPOIIpPk='",
+      ],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
       imgSrc: ["'self'", 'data:', 'blob:'],
-      connectSrc: ["'self'", 'https://flightpoints.uk', 'https://api.flightpoints.uk'],
+      connectSrc: [
+        "'self'",
+        'https://flightpoints.uk',
+        'https://api.flightpoints.uk',
+        'https://cloudflareinsights.com',
+      ],
       objectSrc: ["'none'"],
       frameSrc: ["'none'"],
       baseUri: ["'self'"],
