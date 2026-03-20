@@ -591,6 +591,13 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json({ limit: '1mb' }));
+
+// Serve static assets BEFORE CORS middleware — static files are public and don't
+// need cross-origin protection. This also prevents spurious CORS errors when
+// something accesses localhost:3001 directly (e.g. health checks, system monitor).
+app.use('/uploads', express.static(UPLOADS_DIR));
+app.use(express.static(path.join(__dirname, '../dist')));
+
 app.use('/api/', apiLimiter);
 
 // JWT secret — refuse to start with the insecure default
@@ -3791,11 +3798,7 @@ app.post('/api/test-error-alert', requireAuth, requireRole(['snco', 'admin']), (
   next(err);
 });
 
-// Serve static files from the dist folder
-app.use('/uploads', express.static(UPLOADS_DIR));
-app.use(express.static(path.join(__dirname, '../dist')));
-
-// SPA fallback - must be AFTER all API routes
+// SPA fallback - must be AFTER all API routes (static file serving moved above CORS middleware)
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next();
@@ -3834,8 +3837,9 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     console.error('Stack:', stack.split('\n').slice(0, 5).join('\n'));
   }
 
-  // Send email alert for 5xx errors
-  if (statusCode >= 500 && isEmailConfigured()) {
+  // Send email alert for 5xx errors (skip CORS errors — caused by client/proxy behaviour, not server bugs)
+  const isCorsError = errorMsg.includes('CORS') || errorMsg.includes('cross-origin');
+  if (statusCode >= 500 && isEmailConfigured() && !isCorsError) {
     const emailBody = `
 Website Error Alert
 ===================
