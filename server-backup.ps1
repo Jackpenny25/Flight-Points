@@ -165,12 +165,23 @@ if ($EnableDatabaseBackup) {
     $databaseUrl = Get-DatabaseUrlFromEnvFile -FilePath $EnvFilePath
     $dbFilePath = Join-Path $dbBackupRoot ("$BackupName-db-$timestamp.dump")
 
-    & $PgDumpPath "--dbname=$databaseUrl" '--format=custom' "--file=$dbFilePath" '--no-owner' '--no-privileges'
-    if ($LASTEXITCODE -ne 0) {
-        throw "pg_dump failed with exit code $LASTEXITCODE"
+    Write-Log "pg_dump path : $PgDumpPath"
+    Write-Log "Output file  : $dbFilePath"
+
+    $pgOutput = & $PgDumpPath "--dbname=$databaseUrl" '--format=custom' "--file=$dbFilePath" '--no-owner' '--no-privileges' 2>&1
+    $pgExit = $LASTEXITCODE
+    if ($pgOutput) {
+        foreach ($line in $pgOutput) { Write-Log "  pg_dump: $line" }
+    }
+    if ($pgExit -ne 0) {
+        throw "pg_dump failed with exit code $pgExit"
     }
 
-    Write-Log "Database backup complete: $dbFilePath"
+    $fileSize = (Get-Item $dbFilePath -ErrorAction SilentlyContinue).Length
+    Write-Log "Database backup complete: $dbFilePath ($fileSize bytes)"
+    if ($fileSize -eq 0) {
+        throw "pg_dump exited 0 but the backup file is 0 bytes. Check connection string and pg_dump output above."
+    }
 }
 
 if ($EnableFileBackup) {
