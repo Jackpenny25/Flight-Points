@@ -8,6 +8,8 @@ import multer from 'multer';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+// Wrap ipKeyGenerator to satisfy keyGenerator's (req, res) => string signature
+const ipKeyGen = (req: import('express').Request) => ipKeyGenerator(req.ip ?? '');
 import { query } from './db';
 
 // --- Types ---
@@ -438,7 +440,7 @@ const apiLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: ipKeyGenerator // Properly handles IPv6 addresses with Cloudflare proxy
+  keyGenerator: ipKeyGen // Properly handles IPv6 addresses with Cloudflare proxy
 });
 
 // Stricter limiter for auth endpoints
@@ -447,7 +449,7 @@ const authLimiter = rateLimit({
   max: 10,
   message: { error: 'Too many login attempts, please try again later.' },
   skipSuccessfulRequests: true,
-  keyGenerator: ipKeyGenerator // Properly handles IPv6 addresses
+  keyGenerator: ipKeyGen // Properly handles IPv6 addresses
 });
 
 // Rate limiter for admin PIN verification (brute-force protection)
@@ -456,7 +458,7 @@ const pinLimiter = rateLimit({
   max: 5, // Only 5 attempts per 15 minutes
   message: { error: 'Too many PIN attempts, please try again later.' },
   skipSuccessfulRequests: false,
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: ipKeyGen,
 });
 
 // Rate limiter for ticket creation
@@ -464,7 +466,7 @@ const ticketLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10,
   message: { error: 'Too many tickets submitted, please try again later.' },
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: ipKeyGen,
 });
 
 // Rate limiter for points awarding
@@ -472,7 +474,7 @@ const pointsLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 50,
   message: { error: 'Too many points awarded, please try again later.' },
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: ipKeyGen,
 });
 
 // Rate limiter for file uploads
@@ -480,7 +482,7 @@ const uploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10,
   message: { error: 'Too many file uploads, please try again later.' },
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: ipKeyGen,
 });
 
 // ========== ACCOUNT LOCKOUT / PROGRESSIVE DELAY ==========
@@ -3206,7 +3208,7 @@ app.get('/api/integrity-check', async (req, res) => {
       passed: checks.filter(c => c.status === 'pass').length,
       warnings: checks.filter(c => c.status === 'warning').length,
       failed: checks.filter(c => c.status === 'fail').length,
-      categories: [...new Set(checks.map(c => c.category))],
+      categories: Array.from(new Set(checks.map(c => c.category))),
     };
 
     res.json({ checks, summary });
