@@ -282,4 +282,21 @@ Entry template (copy for each chat):
        - Recommend running startup script `start-server-and-tunnel.ps1` directly on server and checking tunnel logs in central log root.
     Suggested context destinations: `20-operations-runbook.md`, `40-security-history-and-decisions.md`, `60-open-items-and-handover.md`
 
-**Last Updated:** 2026-03-20 (Outage triage + dependency/security fixes applied)
+- Date: 2026-03-20 (session continued)
+   Chat summary: Diagnosed why port 3001 is unreachable after service restart. Auto-deploy restarts a Windows Service named "flight-points" (Stop-Service/Start-Service). Two most likely causes: (1) process.exit(1) fires because JWT_SECRET not visible in service environment; (2) unhandled rejection/exception crashes Node before app.listen(). Added startup diagnostic logging + process crash guards.
+   Files touched: `server/server.ts`
+   Behavior/decision changes:
+     - Logged exact .env.local path + file-exists check BEFORE dotenv.config runs (visible in server logs)
+     - FATAL JWT_SECRET error now also prints: resolved .env.local path, whether file was found, NODE_ENV, CWD
+     - Added process.on('unhandledRejection') — logs reason, doesn't crash
+     - Added process.on('uncaughtException') — logs error then calls process.exit(1) so crash is visible
+     - Variables renamed to _envFilePath / _envFileExists (prefixed to signal startup-only scope)
+   Validation performed: `npm run build` exit 0.
+   Risks or follow-up:
+     - Root cause still unconfirmed — need user to run `npm run server` manually on server and check new log output
+     - `flight-points` Windows Service vs `Flight-Points_Server_Tunnel` Scheduled Task: BOTH may try to bind port 3001 simultaneously — could cause EADDRINUSE
+     - IMPORTANT: `sc.exe qc flight-points` on the server will reveal what binary/args the service actually runs
+     - DB ssl change (PGSSLMODE handling) is backward compat for require/verify-ca/verify-full but may differ if production uses non-standard PGSSLMODE value
+   Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+**Last Updated:** 2026-03-20 (Startup diagnostics + crash guards added; root cause investigation ongoing)

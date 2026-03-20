@@ -355,7 +355,20 @@ import jwt from 'jsonwebtoken';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
-dotenv.config({ path: path.join(projectRoot, '.env.local'), override: true });
+const _envFilePath = path.join(projectRoot, '.env.local');
+const _envFileExists = fs.existsSync(_envFilePath);
+console.log(`[startup] projectRoot: ${projectRoot}`);
+console.log(`[startup] .env.local: ${_envFilePath} (exists: ${_envFileExists})`);
+dotenv.config({ path: _envFilePath, override: true });
+
+// Catch unhandled rejections so the process doesn't silently die mid-startup
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] Unhandled Rejection (non-fatal):', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[server] Uncaught Exception (process will exit):', err);
+  process.exit(1);
+});
 
 // ========== CONFIGURABLE CONSTANTS ==========
 // Points awarded to each cadet marked 'present' during attendance
@@ -583,7 +596,12 @@ app.use('/api/', apiLimiter);
 // JWT secret — refuse to start with the insecure default
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET || JWT_SECRET === 'changeme') {
-  console.error('FATAL: JWT_SECRET is not set or is the insecure default. Set a strong secret in .env.local and restart.');
+  console.error('FATAL: JWT_SECRET is not set or is the insecure default.');
+  console.error(`  .env.local path tried : ${_envFilePath}`);
+  console.error(`  .env.local file found : ${_envFileExists}`);
+  console.error(`  NODE_ENV              : ${process.env.NODE_ENV ?? '(not set)'}`);
+  console.error(`  CWD                   : ${process.cwd()}`);
+  console.error('Action: set a strong JWT_SECRET in .env.local and restart the service.');
   process.exit(1);
 }
 
