@@ -41,6 +41,8 @@ const PANEL_LOCKOUT_MINUTES = parseInt(process.env.PANEL_LOCKOUT_MINUTES || '15'
 // Locate log/backup directories (configurable so it works both in dev and on server)
 const LOGS_ROOT    = process.env.PANEL_LOGS_ROOT   || 'C:\\inetpub\\wwwroot\\Flight-Points\\Logs';
 const BACKUPS_DIR  = process.env.PANEL_BACKUPS_DIR || 'C:\\inetpub\\wwwroot\\Flight-Points\\Backups';
+const PANEL_LOG_DIR = path.join(LOGS_ROOT, 'Panel');
+const PANEL_DIAGNOSTICS_LOG = path.join(PANEL_LOG_DIR, 'panel-diagnostics.log');
 
 const SERVICES = ['flight-points', 'flight-points-tunnel'];
 
@@ -54,6 +56,16 @@ if (PANEL_TOTP_SECRET) {
   console.log('[panel] ✓ Auth: TOTP enabled (PIN as backup)');
 } else {
   console.log('[panel] ✓ Auth: PIN only');
+}
+
+function appendDiagnosticLog(event, details) {
+  try {
+    fs.mkdirSync(PANEL_LOG_DIR, { recursive: true });
+    const payload = typeof details === 'string' ? details : JSON.stringify(details);
+    fs.appendFileSync(PANEL_DIAGNOSTICS_LOG, `${new Date().toISOString()} ${event} ${payload}${os.EOL}`, 'utf8');
+  } catch {
+    // Diagnostics must never crash the panel.
+  }
 }
 
 // ─── Session Store ────────────────────────────────────────────────────────────
@@ -204,14 +216,79 @@ function fetchLocal(urlPath, timeout = 5000) {
       let data = '';
       res.on('data', d => data += d);
       res.on('end', () => {
-        try { resolve({ ok: res.statusCode < 400, status: res.statusCode, body: JSON.parse(data) }); }
-        catch { resolve({ ok: res.statusCode < 400, status: res.statusCode, body: data }); }
+        try {
+          const body = JSON.parse(data);
+          if (res.statusCode >= 400) appendDiagnosticLog('local_fetch_non_ok', { urlPath, status: res.statusCode, body });
+          resolve({ ok: res.statusCode < 400, status: res.statusCode, body });
+        }
+        catch {
+          if (res.statusCode >= 400) appendDiagnosticLog('local_fetch_non_ok', { urlPath, status: res.statusCode, body: data });
+          resolve({ ok: res.statusCode < 400, status: res.statusCode, body: data });
+        }
       });
     });
-    req.on('error', err => resolve({ ok: false, status: 0, body: null, error: err.message }));
-    req.on('timeout', () => { req.destroy(); resolve({ ok: false, status: 0, body: null, error: 'timeout' }); });
+    req.on('error', err => {
+      appendDiagnosticLog('local_fetch_error', { urlPath, error: err.message });
+      resolve({ ok: false, status: 0, body: null, error: err.message });
+    });
+    req.on('timeout', () => {
+      req.destroy();
+      appendDiagnosticLog('local_fetch_timeout', { urlPath, timeout });
+      resolve({ ok: false, status: 0, body: null, error: 'timeout' });
+    });
     req.end();
   });
+}
+
+function getDbHealthSummary(health) {
+  if (!health || typeof health !== 'object') return { ok: false, detail: 'No health payload' };
+  if (health.database === 'ok') return { ok: true, detail: 'database=ok' };
+  if (health.checks && health.checks.db) {
+    return { ok: !!health.checks.db.ok, detail: health.checks.db.detail || 'DB check present' };
+  }
+  if (health.db && typeof health.db === 'object') {
+    return { ok: !!health.db.ok, detail: health.db.detail || 'DB check present' };
+  }
+  return { ok: false, detail: 'DB check not found in health payload' };
+}
+
+async function getTunnelSummary() {
+  const services = await getServicesMap();
+  const cfResult = await ps(`
+    $p = Get-Process -Name cloudflared -EA SilentlyContinue
+    if ($p) {
+      [PSCustomObject]@{
+        Running=$true; Pid=$p.Id
+        StartTime=if($p.StartTime){$p.StartTime.ToString('u')}else{''}
+        MemMB=[Math]::Round($p.WorkingSet/1MB,1)
+        CPU=[Math]::Round($p.CPU,2)
+      }
+    } else { [PSCustomObject]@{Running=$false;Pid=0;StartTime='';MemMB=0;CPU=0} }
+  `);
+
+  let process = { Running: false };
+  try { process = JSON.parse(cfResult.out); }
+  catch {
+    appendDiagnosticLog('tunnel_process_parse_failed', { stdout: cfResult.out, stderr: cfResult.err });
+  }
+
+  let publicResult = { ok: false, status: 0, latency: 0 };
+  const start = Date.now();
+  try {
+    publicResult = await new Promise(resolve => {
+      const req2 = https.get('https://api.flightpoints.uk/api/health', { timeout: 6000 }, res2 => {
+        res2.resume();
+        resolve({ ok: res2.statusCode < 400, status: res2.statusCode, latency: Date.now() - start });
+      });
+      req2.on('error', err => resolve({ ok: false, status: 0, latency: Date.now() - start, error: err.message }));
+      req2.on('timeout', () => { req2.destroy(); resolve({ ok: false, status: 0, latency: 6000, error: 'timeout' }); });
+    });
+  } catch {
+    // Network unavailable.
+  }
+
+  const service = services['flight-points-tunnel'] || 'Unknown';
+  return { ok: service === 'Running' || !!process.Running || !!publicResult.ok, service, process, public: publicResult };
 }
 
 // ─── Route Handlers ──────────────────────────────────────────────────────────
@@ -243,20 +320,24 @@ async function handleLogin(req, res, body) {
 
 // GET /api/overview
 async function handleOverview(req, res) {
-  const [apiResult, branch, commit, svcMap] = await Promise.all([
+  const [apiResult, branch, commit, svcMap, tunnel] = await Promise.all([
     fetchLocal('/api/health', 4000),
     shell('git rev-parse --abbrev-ref HEAD'),
     shell('git log -1 --format="%h||%s||%ai"'),
-    getServicesMap()
+    getServicesMap(),
+    getTunnelSummary()
   ]);
   const [behind, localMods] = await Promise.all([
     shell('git rev-list --count HEAD..@{u} 2>nul'),
     shell('git status --porcelain')
   ]);
   const parts = (commit.ok ? commit.out : '').split('||');
+  const db = getDbHealthSummary(apiResult.body);
+  appendDiagnosticLog('overview_snapshot', { apiStatus: apiResult.status, apiOk: apiResult.ok, db, tunnel, services: svcMap });
   json(res, 200, {
-    api:      { ok: apiResult.ok, status: apiResult.status, health: apiResult.body },
+    api:      { ok: apiResult.ok, status: apiResult.status, health: apiResult.body, db },
     services: svcMap,
+    tunnel,
     git: {
       branch:   branch.ok ? branch.out : 'unknown',
       commit:   { short: parts[0]||'', message: parts[1]||'', date: parts[2]||'' },
@@ -288,7 +369,10 @@ async function getServicesMap() {
     $out | ConvertTo-Json
   `);
   try { return JSON.parse(result.out); }
-  catch { return { 'flight-points': 'Unknown', 'flight-points-tunnel': 'Unknown' }; }
+  catch {
+    appendDiagnosticLog('services_map_parse_failed', { stdout: result.out, stderr: result.err });
+    return { 'flight-points': 'Unknown', 'flight-points-tunnel': 'Unknown' };
+  }
 }
 
 // GET /api/services
@@ -409,8 +493,11 @@ async function handleDeployAudit(req, res) {
 function resolveLogPath(type) {
   // Named shortcuts
   const named = {
-    'nssm':   path.join(ROOT, 'Logs', 'Server', 'nssm-stdout.log'),
-    'server': path.join(LOGS_ROOT, 'Server', 'nssm-stdout.log'),
+    'nssm':        path.join(ROOT, 'Logs', 'Server', 'nssm-stdout.log'),
+    'server':      path.join(LOGS_ROOT, 'Server', 'nssm-stdout.log'),
+    'panel':       path.join(PANEL_LOG_DIR, 'panel-stdout.log'),
+    'panel-error': path.join(PANEL_LOG_DIR, 'panel-stderr.log'),
+    'diagnostics': PANEL_DIAGNOSTICS_LOG,
   };
   if (named[type]) return named[type];
 
@@ -513,6 +600,7 @@ function handleListLogs(req, res) {
   };
   addDir(path.join(ROOT, 'Logs', 'Server'), 'nssm');
   addDir(path.join(LOGS_ROOT, 'Server'),  'server');
+  addDir(path.join(LOGS_ROOT, 'Panel'),   'panel');
   addDir(path.join(LOGS_ROOT, 'Tunnel'),  'tunnel');
   addDir(path.join(LOGS_ROOT, 'Deploy'),  'deploy');
   addDir(path.join(LOGS_ROOT, 'Backup'),  'backup');
@@ -528,13 +616,16 @@ async function handleDbStatus(req, res) {
   const result = await fetchLocal('/api/health', 5000);
   const latency = Date.now() - start;
   const apiReachable = result.ok && result.status < 400;
-  const dbHealthy = apiReachable && result.body && result.body.database === 'ok';
+  const dbSummary = getDbHealthSummary(result.body);
+  const dbHealthy = apiReachable && dbSummary.ok;
+  appendDiagnosticLog('db_status', { apiReachable, apiStatus: result.status, dbOk: dbHealthy, detail: dbSummary.detail });
   json(res, 200, {
     ok:             dbHealthy,
     latency,
     apiReachable,
     apiStatus:      result.status,
     health:         result.body || null,
+    dbDetail:       dbSummary.detail,
     error:          !apiReachable ? (result.error || `API returned ${result.status}`) : null
   });
 }
@@ -646,35 +737,9 @@ async function handleSystem(req, res) {
 
 // ─── Tunnel ───────────────────────────────────────────────────────────────────
 async function handleTunnel(req, res) {
-  const cfResult = await ps(`
-    $p = Get-Process -Name cloudflared -EA SilentlyContinue
-    if ($p) {
-      [PSCustomObject]@{
-        Running=$true; Pid=$p.Id
-        StartTime=if($p.StartTime){$p.StartTime.ToString('u')}else{''}
-        MemMB=[Math]::Round($p.WorkingSet/1MB,1)
-        CPU=[Math]::Round($p.CPU,2)
-      }
-    } else { [PSCustomObject]@{Running=$false;Pid=0;StartTime='';MemMB=0;CPU=0} }
-  `);
-  let cfProc = { Running: false };
-  try { cfProc = JSON.parse(cfResult.out); } catch {}
-
-  // Check public API endpoint
-  let publicResult = { ok: false, status: 0, latency: 0 };
-  const start = Date.now();
-  try {
-    publicResult = await new Promise(resolve => {
-      const req2 = https.get('https://api.flightpoints.uk/api/health', { timeout: 6000 }, res2 => {
-        res2.resume();
-        resolve({ ok: res2.statusCode < 400, status: res2.statusCode, latency: Date.now() - start });
-      });
-      req2.on('error', () => resolve({ ok: false, status: 0, latency: Date.now() - start }));
-      req2.on('timeout', () => { req2.destroy(); resolve({ ok: false, status: 0, latency: 6000, error: 'timeout' }); });
-    });
-  } catch { /* network unavailable */ }
-
-  json(res, 200, { process: cfProc, public: publicResult, localApi: { port: API_PORT } });
+  const tunnel = await getTunnelSummary();
+  appendDiagnosticLog('tunnel_status', tunnel);
+  json(res, 200, { service: tunnel.service, process: tunnel.process, public: tunnel.public, ok: tunnel.ok, localApi: { port: API_PORT } });
 }
 
 // ─── Network Port Check ───────────────────────────────────────────────────────

@@ -809,14 +809,17 @@ async function refreshHeaderStatus() {
   const data = await apiFetch('/api/overview');
   if (!data || data.error) return;
 
+  const tunnel = getTunnelState(data);
+  const dbOk = getDbOkFromOverview(data);
+
   setHsDot('api', data.api?.ok);
-  setHsDot('tunnel', data.services?.['flight-points-tunnel'] === 'Running');
-  setHsDot('db', data.api?.health?.database === 'ok');
+  setHsDot('tunnel', tunnel.ok);
+  setHsDot('db', dbOk);
 
   // Sidebar dots
   setNavDot('sdot-api', data.services?.['flight-points'] === 'Running');
-  setNavDot('sdot-db', data.api?.health?.database === 'ok');
-  setNavDot('sdot-tunnel', data.services?.['flight-points-tunnel'] === 'Running');
+  setNavDot('sdot-db', dbOk);
+  setNavDot('sdot-tunnel', tunnel.ok);
 }
 
 function setHsDot(id, ok) {
@@ -829,15 +832,32 @@ function setNavDot(id, ok) {
   el.className = 'nav-dot ' + (ok ? 'green' : (ok === false ? 'red' : ''));
 }
 
+function getDbOkFromOverview(data) {
+  if (typeof data?.api?.db?.ok === 'boolean') return data.api.db.ok;
+  if (data?.api?.health?.database === 'ok') return true;
+  if (typeof data?.api?.health?.checks?.db?.ok === 'boolean') return data.api.health.checks.db.ok;
+  if (typeof data?.api?.health?.db?.ok === 'boolean') return data.api.health.db.ok;
+  return false;
+}
+
+function getTunnelState(data) {
+  const ok = typeof data?.tunnel?.ok === 'boolean' ? data.tunnel.ok : data?.services?.['flight-points-tunnel'] === 'Running';
+  const label = data?.tunnel?.service || data?.services?.['flight-points-tunnel'] || 'Unknown';
+  return { ok, label: ok ? 'Running' : label };
+}
+
 // ─── Overview ─────────────────────────────────────────
 async function loadOverview() {
   const data = await apiFetch('/api/overview');
   if (!data || data.error) { toast('Failed to load overview', 'error'); return; }
 
+  const tunnel = getTunnelState(data);
+  const dbOk = getDbOkFromOverview(data);
+
   // Status cards
   setOvCard('ov-api', data.api?.ok, data.api?.ok ? 'Running' : 'Down', '🌐');
-  setOvCard('ov-tunnel', data.services?.['flight-points-tunnel'] === 'Running', data.services?.['flight-points-tunnel'] || '—', '☁️');
-  setOvCard('ov-db', data.api?.health?.database === 'ok', data.api?.health?.database === 'ok' ? 'Connected' : 'Offline', '🗄️');
+  setOvCard('ov-tunnel', tunnel.ok, tunnel.label || 'Unknown', '☁️');
+  setOvCard('ov-db', dbOk, dbOk ? 'Connected' : 'Offline', '🗄️');
   const memPct = data.system?.memory?.usedPct || 0;
   const memColor = memPct > 85 ? 'red' : memPct > 70 ? 'yellow' : 'green';
   setOvCard('ov-mem', null, `${memPct}%`, '💾', memColor);

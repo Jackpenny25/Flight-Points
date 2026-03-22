@@ -513,6 +513,24 @@ Entry template (copy for each chat):
        - `cloudflared/config.example.yml` uses the currently documented tunnel ID and admin profile path; adjust hostname, credentials path, or origin ports if production differs.
        - If the browser still shows filled dots in the login box, it may be browser autofill rather than placeholder text; the field now clears itself on focus to avoid manual deletion.
     Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`
+
+- Date: 2026-03-22
+    Chat summary: Fixed Control Panel overview status logic so database health reads the current API health shape and tunnel status has process/public fallbacks. Added persistent panel diagnostics log.
+    Files touched: `panel/panel-server.cjs`, `panel/index.html`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Root cause for false DB offline state: panel expected `health.database === 'ok'`, but server `/api/health` currently returns `checks.db.ok` and `checks.db.detail`.
+       - Added `getDbHealthSummary()` on panel server to support both old and new health payload shapes.
+       - Overview/header/sidebar DB indicators now use normalized DB health instead of the old hard-coded field.
+       - Added `getTunnelSummary()` with combined service/process/public-health evaluation so tunnel state is more resilient than just `Get-Service` output.
+       - Added persistent diagnostics log at `Logs\Panel\panel-diagnostics.log` recording overview snapshots, DB checks, local API fetch failures, tunnel status, and service-map parse failures.
+       - Panel log viewer now includes panel logs directory, including diagnostics.
+    Validation performed:
+       - `npm run build` passed after status logic changes.
+       - `node --check panel/panel-server.cjs` executed after patching.
+    Risks or follow-up:
+       - Production panel service may still be configured to launch `panel-server.js`; attached stderr shows historical or active `.js` service configuration and should be corrected by rerunning `panel\Install-PanelService.ps1` or updating NSSM `AppParameters` to `panel\panel-server.cjs`.
+       - Cloudflare tunnel config must keep `http_status:404` as the final ingress rule; any hostname placed after it will never match.
+    Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
      - IMPORTANT: If the service ever needs to be recreated, use cmd.exe as the binary, NOT npm.ps1/npm.cmd
      - Project is installed at: C:\inetpub\wwwroot\Flight-Points\Code\Flight-Points (subfolder under Code)
      - Backup works correctly — .dump files are binary format, not corrupted; confirmed pg_dump path: C:\Program Files\PostgreSQL\18\bin\pg_dump.exe
