@@ -32,6 +32,7 @@ const PANEL_DIR  = __dirname;
 // ─── Config ───────────────────────────────────────────────────────────────────
 const PORT       = parseInt(process.env.PANEL_PORT || '4000', 10);
 const PANEL_PIN  = process.env.PANEL_PIN || process.env.ADMIN_PIN || '';
+const PANEL_TOTP_SECRET = process.env.PANEL_TOTP_SECRET || ''; // Optional: base32 TOTP secret
 const API_PORT   = parseInt(process.env.PORT || '3001', 10);
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours sliding window
 
@@ -44,6 +45,13 @@ const SERVICES = ['flight-points', 'flight-points-tunnel'];
 if (!PANEL_PIN) {
   console.error('[panel] FATAL: PANEL_PIN or ADMIN_PIN must be set in .env.local');
   process.exit(1);
+}
+
+// Log auth method on startup
+if (PANEL_TOTP_SECRET) {
+  console.log('[panel] ✓ Auth: TOTP enabled (PIN as backup)');
+} else {
+  console.log('[panel] ✓ Auth: PIN only');
 }
 
 // ─── Session Store ────────────────────────────────────────────────────────────
@@ -84,6 +92,42 @@ function recordAttempt(ip, success) {
   a.count++;
   if (a.count >= 5) a.lockedUntil = Date.now() + 15 * 60 * 1000;
   loginAttempts.set(ip, a);
+}
+
+// ─── TOTP Helper (RFC 6238) ──────────────────────────────────────────────────
+// Converts base32 secret to bytes without external library
+function base32Decode(b32) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const bytes = [];
+  let bits = 0, value = 0;
+  for (const c of (b32 || '').toUpperCase().replace(/=/g, '')) {
+    const idx = alphabet.indexOf(c);
+    if (idx < 0) continue;
+    value = (value << 5) | idx;
+    bits += 5;
+    if (bits >= 8) { bits -= 8; bytes.push((value >> bits) & 0xff); }
+  }
+  return Buffer.from(bytes);
+}
+
+// Generate TOTP tokens valid for current 30-second window and adjacent windows
+function generateTotp(secret) {
+  if (!secret) return null;
+  const key = base32Decode(secret);
+  let now = Math.floor(Date.now() / 1000);
+  const timeCounter = Math.floor(now / 30);
+  const tokens = [];
+  // Generate tokens for current, previous, and next 30-second windows (for clock skew tolerance)
+  for (let i = -1; i <= 1; i++) {
+    let counter = timeCounter + i;
+    const buf = Buffer.alloc(8);
+    for (let j = 7; j >= 0; j--) { buf[j] = counter & 0xff; counter >>>= 8; }
+    const hmac = crypto.createHmac('sha1', key).update(buf).digest();
+    const offset = hmac[hmac.length - 1] & 0xf;
+    const code = (((hmac[offset] & 0x7f) << 24) | ((hmac[offset + 1] & 0xff) << 16) | ((hmac[offset + 2] & 0xff) << 8) | (hmac[offset + 3] & 0xff)) % 1000000;
+    tokens.push(code.toString().padStart(6, '0'));
+  }
+  return tokens; // [prev, current, next]
 }
 
 // ─── Execution Helpers ────────────────────────────────────────────────────────
@@ -175,9 +219,21 @@ async function handleLogin(req, res, body) {
   const ip = req.socket.remoteAddress || 'unknown';
   if (isLocked(ip)) return json(res, 429, { error: 'Too many attempts. Try again in 15 minutes.' });
   const pin = String(body.pin || '');
-  if (!pin || pin !== PANEL_PIN) {
+  const totp = String(body.totp || '');
+  
+  let valid = false;
+  if (PANEL_TOTP_SECRET && totp) {
+    // TOTP mode
+    const tokens = generateTotp(PANEL_TOTP_SECRET);
+    valid = tokens && tokens.includes(totp);
+  } else if (pin) {
+    // PIN mode (or PIN as backup for TOTP)
+    valid = pin === PANEL_PIN;
+  }
+  
+  if (!valid) {
     recordAttempt(ip, false);
-    return json(res, 401, { error: 'Invalid PIN' });
+    return json(res, 401, { error: 'Invalid credentials' });
   }
   recordAttempt(ip, true);
   json(res, 200, { token: createSession() });
@@ -469,11 +525,15 @@ async function handleDbStatus(req, res) {
   const start = Date.now();
   const result = await fetchLocal('/api/health', 5000);
   const latency = Date.now() - start;
+  const apiReachable = result.ok && result.status < 400;
+  const dbHealthy = apiReachable && result.body && result.body.database === 'ok';
   json(res, 200, {
-    ok:           result.ok && result.body && result.body.database === 'ok',
+    ok:             dbHealthy,
     latency,
-    apiReachable: result.ok,
-    health:       result.body || null
+    apiReachable,
+    apiStatus:      result.status,
+    health:         result.body || null,
+    error:          !apiReachable ? (result.error || `API returned ${result.status}`) : null
   });
 }
 
@@ -690,8 +750,9 @@ const server = http.createServer(async (req, res) => {
   const parsed = new URL(req.url, `http://localhost`);
   const p = parsed.pathname.replace(/\/+$/, '') || '/';
 
-  // Frontend
+  // Frontend & static assets
   if (method === 'GET' && p === '/') return serveHtml(res);
+  if (method === 'GET' && p === '/favicon.ico') return json(res, 204, {}); // No favicon
 
   // Body
   let body = {};
@@ -700,7 +761,7 @@ const server = http.createServer(async (req, res) => {
   // ── Auth routes (no token required) ──
   if (method === 'POST' && p === '/api/auth/login')  return handleLogin(req, res, body);
   if (method === 'POST' && p === '/api/auth/logout') { sessions.delete(getToken(req)); return json(res, 200, { ok: true }); }
-  if (method === 'GET'  && p === '/api/auth/check')  return json(res, 200, { ok: validateSession(getToken(req)) });
+  if (method === 'GET'  && p === '/api/auth/check')  return json(res, 200, { ok: validateSession(getToken(req)), totpEnabled: !!PANEL_TOTP_SECRET });
 
   // ── All routes below require auth ──
   if (!requireAuth(req, res)) return;

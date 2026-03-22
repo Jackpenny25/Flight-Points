@@ -193,10 +193,14 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
     <div class="login-title">Control Panel</div>
     <div class="login-sub">Flight-Points Server</div>
     <div class="field">
-      <input class="pin-input" id="pin-input" type="password" placeholder="••••••" maxlength="10" autocomplete="current-password">
+      <div id="auth-mode-label" style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;"></div>
+      <input class="pin-input" id="pin-input" type="password" placeholder="Enter PIN or Code" maxlength="10" autocomplete="off">
     </div>
     <button class="btn primary" style="width:100%;justify-content:center;padding:10px;" onclick="doLogin()">Unlock</button>
     <div class="login-error" id="login-error"></div>
+    <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+      PIN: 4-10 digits | Code: 6 digits from authenticator app
+    </div>
   </div>
 </div>
 
@@ -640,12 +644,27 @@ let currentLogType = null;
 let procRefreshInterval = null;
 
 // ─── Auth ──────────────────────────────────────────────
+let TOTP_ENABLED = false;
+
 async function doLogin() {
-  const pin  = document.getElementById('pin-input').value;
+  const input = document.getElementById('pin-input').value.trim();
   const errEl = document.getElementById('login-error');
   errEl.textContent = '';
-  if (!pin) return;
-  const res = await apiFetch('/api/auth/login', 'POST', { pin });
+  
+  if (!input) {
+    errEl.textContent = 'Please enter PIN or code';
+    return;
+  }
+  
+  // Determine if it's a PIN (4-10 digits) or TOTP (exactly 6 digits)
+  let pin = '', totp = '';
+  if (input.length === 6 && /^\d{6}$/.test(input) && TOTP_ENABLED) {
+    totp = input;
+  } else {
+    pin = input;
+  }
+  
+  const res = await apiFetch('/api/auth/login', 'POST', { pin, totp });
   if (res.token) {
     TOKEN = res.token;
     sessionStorage.setItem('panel_token', TOKEN);
@@ -668,7 +687,18 @@ document.getElementById('pin-input').addEventListener('keydown', e => { if (e.ke
 
 // Check if already authenticated
 async function checkAuth() {
-  if (!TOKEN) return;
+  if (!TOKEN) {
+    // Also check for TOTP on first load
+    try {
+      const res = await apiFetch('/api/auth/check');
+      TOTP_ENABLED = res.totpEnabled || false;
+      document.getElementById('auth-mode-label').textContent = TOTP_ENABLED ? 'PIN or Authenticator Code' : 'Panel PIN';
+    } catch (e) {
+      TOTP_ENABLED = false;
+      document.getElementById('auth-mode-label').textContent = 'Panel PIN';
+    }
+    return;
+  }
   const res = await apiFetch('/api/auth/check');
   if (res.ok) {
     document.getElementById('login-screen').classList.add('hidden');
@@ -1130,7 +1160,12 @@ async function loadDbStatus() {
   document.getElementById('db-latency-val').textContent = data.latency ? `${data.latency}ms` : '—';
 
   const detail = document.getElementById('db-health-detail');
-  if (data.health && typeof data.health === 'object') {
+  if (!apiOk && data.error) {
+    detail.innerHTML = `<div class="info-row" style="color:var(--red);padding:8px;background:var(--red-bg);border-radius:4px;">
+      <span><strong>API Error:</strong> ${escHtml(data.error)}</span>
+      <p style="font-size:11px;margin-top:6px;color:var(--muted);">Check that the API service (flight-points) is running on port ${window.API_PORT || 3001}</p>
+    </div>`;
+  } else if (data.health && typeof data.health === 'object') {
     detail.innerHTML = Object.entries(data.health).map(([k, v]) => {
       const ok = v === 'ok' || v === true || (typeof v === 'number' && v > 0);
       const bad = v === 'error' || v === false || v === 'fail';

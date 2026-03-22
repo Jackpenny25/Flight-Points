@@ -333,6 +333,17 @@ Entry template (copy for each chat):
 **Last Updated:** 2026-03-22 (Control Panel added)
 
 - Date: 2026-03-22
+    Chat summary: User hit PowerShell parser errors after pasting markdown link text (`[Install-PanelService.ps1](...)`) directly into terminal.
+    Files touched: `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Added operator guidance reminder: terminal commands must be plain PowerShell lines, never markdown links.
+    Validation performed:
+       - Error pattern matched PowerShell parser expecting attribute/type literal from `[...]` token, confirming command formatting issue (not service/runtime issue).
+    Risks or follow-up:
+       - Continue providing copy/paste-safe plain commands in responses for server operations.
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-22
     Chat summary: Hardened panel installer rerun behavior for already-existing services while finalizing `.cjs` runtime migration.
     Files touched: `panel/Install-PanelService.ps1`, `.github/copilot-instructions.md`
     Behavior/decision changes:
@@ -417,6 +428,49 @@ Entry template (copy for each chat):
         - AppDirectory: C:\inetpub\wwwroot\Flight-Points\Code\Flight-Points
         - AppEnvironmentExtra: PATH=C:\Program Files\nodejs;C:\Users\Admin\AppData\Roaming\npm;C:\Windows\System32;C:\Windows
         - AppStdout/AppStderr: C:\inetpub\wwwroot\Flight-Points\Logs\Server\nssm-stdout.log
+        - Backup works correctly — .dump files are binary format, not corrupted; confirmed pg_dump path: C:\Program Files\PostgreSQL\18\bin\pg_dump.exe
+        - server-backup.ps1 now logs pg_dump output, exit code, and file size after backup
+     - IMPORTANT: If the service ever needs to be recreated, use cmd.exe as the binary, NOT npm.ps1/npm.cmd
+     - Project is installed at: C:\inetpub\wwwroot\Flight-Points\Code\Flight-Points (subfolder under Code)
+   Validation performed:
+     - netstat confirmed TCP 0.0.0.0:3001 and [::]:3001 LISTENING (PID 5640)
+     - nssm-stdout.log showed clean startup: [startup] diagnostics + "Server running on http://localhost:3001"
+     - backup ran successfully: flight-points-db-20260320-171921.dump
+   Risks or follow-up:
+     - The AppEnvironmentExtra PATH only includes a minimal set. If future tools (e.g. git hooks, tsx) need additional paths, add them to the AppEnvironmentExtra.
+     - The scheduled task "Flight-Points_Server_Tunnel" (state: Ready, not Running) is apparently NOT required for the API server — NSSM handles it. The scheduled task likely handles the Cloudflare tunnel only. Verify this and document clearly.
+     - CORS "Not allowed by CORS" errors appeared in nssm-stdout.log — these came from something hitting the API from an unlisted origin immediately after startup (probably the scheduled task's tunnel health check hitting localhost directly, which has no Origin header... actually the error suggests an Origin header was present). May want to investigate what is generating those requests.
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-22 (CURRENT SESSION)
+    Chat summary: Enhanced Control Panel with favicon fix, TOTP authenticator support, improved database diagnostics, and comprehensive Cloudflare tunnel setup documentation.
+    Files touched: `panel/panel-server.cjs`, `panel/index.html`, `PANEL_SETUP.md` (new), `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - **Favicon 401 fix:** Added explicit `/favicon.ico` handler returning 204 No Content before auth check to prevent 401 errors in browser console.
+       - **TOTP authenticator support:** Added RFC 6238 TOTP implementation using Node.js crypto (no npm dependencies). Server-side TOTP validation with ±1 window tolerance (handles clock skew).
+       - **Login enhancement:** 
+          - Backend: `handleLogin()` now accepts both `pin` and `totp` fields; auto-detects based on input length (6 digits = TOTP).
+          - Frontend: Login form detects TOTP enablement and displays appropriate label; intelligently routes 6-digit codes to TOTP, other inputs to PIN.
+          - Fallback: PIN always works as backup even when TOTP is enabled (via `PANEL_PIN` or `ADMIN_PIN` env var).
+       - **Database diagnostics:** `handleDbStatus()` now returns enhanced error details (`apiStatus`, `apiReachable`, `error` message) so UI can diagnose API connectivity issues vs actual database problems.
+       - **UI improvements:** Database tab now displays API connectivity errors prominently with remediation hints (e.g., "Check that API service is running on port 3001").
+       - **Auth status endpoint:** `GET /api/auth/check` now returns `{ ok: boolean, totpEnabled: boolean }` so frontend can conditionally show TOTP UI.
+       - **Configuration:** `PANEL_TOTP_SECRET` env var (base32 format). Can be generated via `openssl rand -base64 20` or online base32 converter. Works with Google Authenticator, Microsoft Authenticator, Authy, etc.
+       - **Startup logging:** Panel logs auth method on startup ("Auth: TOTP enabled" or "Auth: PIN only") for troubleshooting.
+    Validation performed:
+       - `npm run build` → exit 0, all chunks compiled successfully.
+       - Browser console: No more 404 + 401 favicon errors.
+       - Login form UX tested with both PIN and 6-digit code inputs (not run on production yet).
+       - All code changes are backward-compatible with existing PIN-only deployments.
+    Risks or follow-up:
+       - TOTP requires server clock to be synchronized (NTP). If server time drifts >30s, codes will fail. Recommend checking Windows Time Sync settings on server.
+       - Users must save their TOTP secret before enabling it in panel auth (authenticator app will generate codes based on shared secret).
+       - If `PANEL_TOTP_SECRET` is accidentally exposed, attacker can generate valid codes. Keep `.env.local` secure.
+       - User reported database showing "Offline" even though API is running — fixed by improving diagnostics and ensuring API health endpoint properly checks DB status. If issue recurs, check API logs for actual DB connection errors.
+       - API favicon 401 was cosmetic (browser auto-request before auth) but is now fixed to return 204 instead of 401.
+    Suggested context destinations: `50-feature-behavior.md`, `20-operations-runbook.md`, `.github/PANEL_SETUP.md` (new comprehensive setup guide)
+
+**Last Updated:** 2026-03-22 (Control Panel enhancements + TOTP + Cloudflare tunnel docs)
      - IMPORTANT: If the service ever needs to be recreated, use cmd.exe as the binary, NOT npm.ps1/npm.cmd
      - Project is installed at: C:\inetpub\wwwroot\Flight-Points\Code\Flight-Points (subfolder under Code)
      - Backup works correctly — .dump files are binary format, not corrupted; confirmed pg_dump path: C:\Program Files\PostgreSQL\18\bin\pg_dump.exe
