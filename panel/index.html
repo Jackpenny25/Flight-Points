@@ -194,12 +194,12 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
     <div class="login-sub">Flight-Points Server</div>
     <div class="field">
       <div id="auth-mode-label" style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;"></div>
-      <input class="pin-input" id="pin-input" type="password" placeholder="Enter PIN or Code" maxlength="10" autocomplete="off">
+      <input class="pin-input" id="pin-input" type="password" placeholder="Panel PIN or 6-digit code" maxlength="10" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" onfocus="handleLoginInputFocus()" onblur="handleLoginInputBlur()">
     </div>
     <button class="btn primary" style="width:100%;justify-content:center;padding:10px;" onclick="doLogin()">Unlock</button>
     <div class="login-error" id="login-error"></div>
     <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-      PIN: 4-10 digits | Code: 6 digits from authenticator app
+      Panel PIN: backup code in .env.local | Code: 6 digits from authenticator app
     </div>
   </div>
 </div>
@@ -646,8 +646,39 @@ let procRefreshInterval = null;
 // ─── Auth ──────────────────────────────────────────────
 let TOTP_ENABLED = false;
 
+function getLoginInput() {
+  return document.getElementById('pin-input');
+}
+
+function getLoginPlaceholder() {
+  return TOTP_ENABLED ? 'Panel PIN or 6-digit code' : 'Panel PIN';
+}
+
+function handleLoginInputFocus() {
+  const input = getLoginInput();
+  if (!input) return;
+  input.placeholder = '';
+  if (input.value) input.select();
+}
+
+function handleLoginInputBlur() {
+  const input = getLoginInput();
+  if (!input) return;
+  if (!input.value) input.placeholder = getLoginPlaceholder();
+}
+
+function syncLoginUi() {
+  const label = document.getElementById('auth-mode-label');
+  const input = getLoginInput();
+  if (label) label.textContent = TOTP_ENABLED ? 'Panel Backup PIN or Authenticator Code' : 'Panel PIN';
+  if (input) {
+    input.value = '';
+    input.placeholder = getLoginPlaceholder();
+  }
+}
+
 async function doLogin() {
-  const input = document.getElementById('pin-input').value.trim();
+  const input = getLoginInput().value.trim();
   const errEl = document.getElementById('login-error');
   errEl.textContent = '';
   
@@ -692,10 +723,10 @@ async function checkAuth() {
     try {
       const res = await apiFetch('/api/auth/check');
       TOTP_ENABLED = res.totpEnabled || false;
-      document.getElementById('auth-mode-label').textContent = TOTP_ENABLED ? 'PIN or Authenticator Code' : 'Panel PIN';
+      syncLoginUi();
     } catch (e) {
       TOTP_ENABLED = false;
-      document.getElementById('auth-mode-label').textContent = 'Panel PIN';
+      syncLoginUi();
     }
     return;
   }

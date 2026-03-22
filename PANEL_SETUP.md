@@ -34,13 +34,29 @@ PANEL_PIN=123456
 PANEL_TOTP_SECRET=YOUR_BASE32_SECRET_HERE
 ```
 
+`PANEL_PIN` is the panel-only backup code. It is separate from the website login and is used only for the standalone control panel.
+
 **Generate a TOTP Secret:**
 
-You can generate a base32 secret using an online tool or your authenticator app:
-1. Go to https://www.base32.io/ or use `openssl rand -base64 20 | tr '+/' '-_'`
-2. Convert output to base32 format
-3. Store the secret in `PANEL_TOTP_SECRET`
-4. Scan the secret with your authenticator app, or enter it manually
+`PANEL_TOTP_SECRET` must be a Base32 secret using only `A-Z` and `2-7`.
+
+Do not paste a Base64 string directly into the authenticator app. The previous guidance using `openssl rand -base64 20` was wrong unless you convert it to Base32 first.
+
+Use one of these safe setup methods:
+
+1. Generate a Base32 secret with an online Base32 generator and store it in `PANEL_TOTP_SECRET`.
+2. In your authenticator app, choose `Enter setup key` or `Manual entry`.
+3. Account name: `Flight-Points Panel`
+4. Key: paste the exact Base32 value from `PANEL_TOTP_SECRET`
+5. Key type: `Time based` / `TOTP`
+
+Example valid secret format:
+
+```
+JBSWY3DPEHPK3PXP
+```
+
+If you want to provision it as a QR code later, the value would be embedded in an `otpauth://` URI. `Scan with authenticator app` means scanning that QR code, not typing the secret into the normal 6-digit code login box.
 
 **Login methods:**
 - **PIN only:** Enter your PIN (e.g., `123456`)
@@ -130,6 +146,8 @@ Then:
 # Restart tunnel service
 Restart-Service flight-points-tunnel
 ```
+
+If you are using the server's main config file, a ready-to-copy example now exists at `cloudflared/config.example.yml` in this repo.
 
 ### Test Remote Access
 

@@ -1,0 +1,11 @@
+tunnel: 1ca34d31-ae16-42e8-ba67-75d95a8fb2f8
+credentials-file: C:\Users\Admin\.cloudflared\1ca34d31-ae16-42e8-ba67-75d95a8fb2f8.json
+
+ingress:
+  - hostname: panel.flightpoints.uk
+    service: http://localhost:4000
+  - hostname: api.flightpoints.uk
+    service: http://localhost:3001
+  - hostname: flightpoints.uk
+    service: http://localhost:5173
+  - service: http_status:404

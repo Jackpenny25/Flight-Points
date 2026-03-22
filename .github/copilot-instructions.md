@@ -455,7 +455,7 @@ Entry template (copy for each chat):
        - **Database diagnostics:** `handleDbStatus()` now returns enhanced error details (`apiStatus`, `apiReachable`, `error` message) so UI can diagnose API connectivity issues vs actual database problems.
        - **UI improvements:** Database tab now displays API connectivity errors prominently with remediation hints (e.g., "Check that API service is running on port 3001").
        - **Auth status endpoint:** `GET /api/auth/check` now returns `{ ok: boolean, totpEnabled: boolean }` so frontend can conditionally show TOTP UI.
-       - **Configuration:** `PANEL_TOTP_SECRET` env var (base32 format). Can be generated via `openssl rand -base64 20` or online base32 converter. Works with Google Authenticator, Microsoft Authenticator, Authy, etc.
+      - **Configuration:** `PANEL_TOTP_SECRET` env var must be a true Base32 secret (`A-Z`, `2-7`). Do not paste raw Base64 directly into the authenticator app or env var. Works with Google Authenticator, Microsoft Authenticator, Authy, etc.
        - **Startup logging:** Panel logs auth method on startup ("Auth: TOTP enabled" or "Auth: PIN only") for troubleshooting.
     Validation performed:
        - `npm run build` → exit 0, all chunks compiled successfully.
@@ -471,6 +471,48 @@ Entry template (copy for each chat):
     Suggested context destinations: `50-feature-behavior.md`, `20-operations-runbook.md`, `.github/PANEL_SETUP.md` (new comprehensive setup guide)
 
 **Last Updated:** 2026-03-22 (Control Panel enhancements + TOTP + Cloudflare tunnel docs)
+
+- Date: 2026-03-22
+    Chat summary: Clarified TOTP onboarding after user reported authenticator app rejected the long secret during setup.
+    Files touched: `PANEL_SETUP.md`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Corrected prior guidance: `openssl rand -base64 20` is not directly valid as a TOTP setup key unless converted to Base32.
+       - Documented that authenticator apps need `Manual entry` / `Enter setup key` with a Base32 secret, or a QR generated from an `otpauth://` URI.
+       - Clarified that `scan with authenticator app` refers to scanning a QR code, not pasting the secret into the 6-digit login field.
+    Validation performed:
+       - Reviewed current panel TOTP decoder implementation; confirmed it expects Base32 input (`A-Z`, `2-7`).
+    Risks or follow-up:
+       - Consider adding built-in provisioning support later: show an `otpauth://` URI or QR in the panel setup flow to remove operator error.
+    Suggested context destinations: `50-feature-behavior.md`, `20-operations-runbook.md`
+
+- Date: 2026-03-22
+    Chat summary: User asked for the exact command to restart the standalone Control Panel Windows service.
+    Files touched: `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Operational command for panel restart is `Restart-Service -Name flight-points-panel`.
+       - Status check command is `Get-Service flight-points-panel`.
+    Validation performed:
+       - Command matches installer-created NSSM service name `flight-points-panel`.
+    Risks or follow-up:
+       - If restart fails, check `C:\inetpub\wwwroot\Flight-Points\Logs\Panel\panel-stdout.log` and `panel-stderr.log`.
+    Suggested context destinations: `20-operations-runbook.md`
+
+- Date: 2026-03-22
+    Chat summary: Improved panel login UX, clarified backup PIN meaning, increased allowed login attempts, and added a reusable Cloudflare tunnel config example.
+    Files touched: `panel/panel-server.cjs`, `panel/index.html`, `PANEL_SETUP.md`, `cloudflared/config.example.yml`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Login field now clears the placeholder on focus and restores it on blur if empty.
+       - Login help text now explains that `PANEL_PIN` is the panel-only backup code, separate from website auth.
+       - Added `PANEL_MAX_LOGIN_ATTEMPTS` env var with default `10` and `PANEL_LOCKOUT_MINUTES` with default `15`.
+       - Panel login label now says `Panel Backup PIN or Authenticator Code` when TOTP is enabled.
+       - Added `cloudflared/config.example.yml` with routes for `panel.flightpoints.uk`, `api.flightpoints.uk`, and `flightpoints.uk`.
+    Validation performed:
+       - `node --check panel/panel-server.cjs` passed.
+       - `npm run build` passed.
+    Risks or follow-up:
+       - `cloudflared/config.example.yml` uses the currently documented tunnel ID and admin profile path; adjust hostname, credentials path, or origin ports if production differs.
+       - If the browser still shows filled dots in the login box, it may be browser autofill rather than placeholder text; the field now clears itself on focus to avoid manual deletion.
+    Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`
      - IMPORTANT: If the service ever needs to be recreated, use cmd.exe as the binary, NOT npm.ps1/npm.cmd
      - Project is installed at: C:\inetpub\wwwroot\Flight-Points\Code\Flight-Points (subfolder under Code)
      - Backup works correctly — .dump files are binary format, not corrupted; confirmed pg_dump path: C:\Program Files\PostgreSQL\18\bin\pg_dump.exe

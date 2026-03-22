@@ -35,6 +35,8 @@ const PANEL_PIN  = process.env.PANEL_PIN || process.env.ADMIN_PIN || '';
 const PANEL_TOTP_SECRET = process.env.PANEL_TOTP_SECRET || ''; // Optional: base32 TOTP secret
 const API_PORT   = parseInt(process.env.PORT || '3001', 10);
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours sliding window
+const PANEL_MAX_LOGIN_ATTEMPTS = parseInt(process.env.PANEL_MAX_LOGIN_ATTEMPTS || '10', 10);
+const PANEL_LOCKOUT_MINUTES = parseInt(process.env.PANEL_LOCKOUT_MINUTES || '15', 10);
 
 // Locate log/backup directories (configurable so it works both in dev and on server)
 const LOGS_ROOT    = process.env.PANEL_LOGS_ROOT   || 'C:\\inetpub\\wwwroot\\Flight-Points\\Logs';
@@ -90,7 +92,7 @@ function recordAttempt(ip, success) {
   if (success) { loginAttempts.delete(ip); return; }
   const a = loginAttempts.get(ip) || { count: 0, lockedUntil: 0 };
   a.count++;
-  if (a.count >= 5) a.lockedUntil = Date.now() + 15 * 60 * 1000;
+  if (a.count >= PANEL_MAX_LOGIN_ATTEMPTS) a.lockedUntil = Date.now() + PANEL_LOCKOUT_MINUTES * 60 * 1000;
   loginAttempts.set(ip, a);
 }
 
@@ -217,7 +219,7 @@ function fetchLocal(urlPath, timeout = 5000) {
 // POST /api/auth/login
 async function handleLogin(req, res, body) {
   const ip = req.socket.remoteAddress || 'unknown';
-  if (isLocked(ip)) return json(res, 429, { error: 'Too many attempts. Try again in 15 minutes.' });
+  if (isLocked(ip)) return json(res, 429, { error: `Too many attempts. Try again in ${PANEL_LOCKOUT_MINUTES} minutes.` });
   const pin = String(body.pin || '');
   const totp = String(body.totp || '');
   
