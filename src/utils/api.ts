@@ -84,6 +84,11 @@ export const api = {
   updateReward: (id: string, data: any) => fetchWithAuth(`/data/rewards/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => r.json()),
   deleteReward: (id: string) => fetchWithAuth(`/data/rewards/${id}`, { method: 'DELETE' }).then(r => r.json()),
 
+  // Potential Rewards (SNCO planning list)
+  getPotentialRewards: () => fetchWithAuth('/rewards/potential-list', { method: 'GET' }).then(r => r.json()),
+  addPotentialReward: (text: string) => fetchWithAuth('/rewards/potential-list', { method: 'POST', body: JSON.stringify({ text }) }).then(r => r.json()),
+  deletePotentialReward: (id: string) => fetchWithAuth(`/rewards/potential-list/${id}`, { method: 'DELETE' }).then(r => r.json()),
+
   // Reward Suggestions
   getRewardSuggestions: () => fetchWithAuth('/reward-suggestions', { method: 'GET' }).then(r => r.json()),
   createRewardSuggestion: (data: { title: string; description?: string }) => fetchWithAuth('/reward-suggestions', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),

@@ -1779,6 +1779,50 @@ app.get('/api/integrity-check/count', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/rewards/potential-list - SNCO only: return all potential reward ideas
+app.get('/api/rewards/potential-list', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'snco') return res.status(403).json({ error: 'Forbidden' });
+    await ensureRewardsSchema();
+    const result = await query('SELECT id, text, created_at FROM potential_rewards ORDER BY created_at ASC');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error in GET /api/rewards/potential-list:', error);
+    res.status(500).json({ error: 'Failed to fetch potential rewards' });
+  }
+});
+
+// POST /api/rewards/potential-list - SNCO only: add a new idea
+app.post('/api/rewards/potential-list', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'snco') return res.status(403).json({ error: 'Forbidden' });
+    const text = String(req.body?.text || '').trim();
+    if (!text) return res.status(400).json({ error: 'text is required' });
+    await ensureRewardsSchema();
+    const result = await query(
+      'INSERT INTO potential_rewards (text, created_by) VALUES ($1, $2) RETURNING id, text, created_at',
+      [text, req.user.email]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error in POST /api/rewards/potential-list:', error);
+    res.status(500).json({ error: 'Failed to add potential reward' });
+  }
+});
+
+// DELETE /api/rewards/potential-list/:id - SNCO only: remove an idea
+app.delete('/api/rewards/potential-list/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'snco') return res.status(403).json({ error: 'Forbidden' });
+    await ensureRewardsSchema();
+    await query('DELETE FROM potential_rewards WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error in DELETE /api/rewards/potential-list/:id:', error);
+    res.status(500).json({ error: 'Failed to delete potential reward' });
+  }
+});
+
 // GET /api/rewards/active-count - Get count of active (unclaimed) rewards
 app.get('/api/rewards/active-count', async (req: Request, res: Response) => {
   try {
@@ -3488,6 +3532,12 @@ async function ensureRewardsSchema() {
       await query('CREATE INDEX IF NOT EXISTS idx_reward_votes_suggestion_id ON reward_votes (suggestion_id)');
       await query('CREATE INDEX IF NOT EXISTS idx_reward_votes_user_id ON reward_votes (user_id)');
       await query('CREATE INDEX IF NOT EXISTS idx_reward_suggestions_status ON reward_suggestions (status)');
+      await query(`CREATE TABLE IF NOT EXISTS potential_rewards (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        text VARCHAR NOT NULL,
+        created_by VARCHAR NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )`);
       console.log('[ensureRewardsSchema] Schema ready.');
     })().catch((error) => {
       console.error('[ensureRewardsSchema] Failed:', error?.message || error);

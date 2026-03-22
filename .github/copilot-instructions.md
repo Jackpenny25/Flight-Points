@@ -416,6 +416,22 @@ Entry template (copy for each chat):
        - Existing variable names like `adminPinVerified` remain in session storage for compatibility; behavior is safeguard-code based despite legacy naming.
       Suggested context destinations: `20-operations-runbook.md`, `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
 
+- Date: 2026-03-22 (latest)
+   Chat summary: Added "Potential Rewards" list to the Rewards tab — SNCO-only, plain bullet points, editable inline.
+   Files touched: `src/app/components/Rewards.tsx`
+   Behavior/decision changes:
+     - New card "Potential Rewards" visible only when `canManageRewards` (i.e. `userRole === 'snco'`); completely hidden from all other roles.
+     - State: `potentialItems: string[]` initialised from `localStorage.getItem('fp_potential_rewards')` (JSON array); `potentialInput: string`.
+     - Items stored in `localStorage` key `fp_potential_rewards` — no backend/DB changes needed.
+     - Each item rendered as a plain bullet (`•`) with an inline `✕` remove button.
+     - Add via text input + "Add" button or pressing Enter.
+     - Card inserted between the Reward Suggestions card and the Claimed Rewards section.
+     - Styled with `bg-emerald-50` header to visually distinguish from other cards.
+   Validation performed: `npm run build` passed (1826 modules, 11.45s).
+   Risks or follow-up:
+     - `localStorage` is per-browser; items won't sync across devices. If cross-device sync is needed later, add `GET/POST /api/rewards/potential-list` backed by a server-side JSON file.
+   Suggested context destinations: `50-feature-behavior.md`
+
 - Date: 2026-03-22
       Chat summary: Fixed panel restart failures caused by `powershell.exe` not being resolvable in the service PATH.
       Files touched: `panel/panel-server.cjs`, `.github/copilot-instructions.md`
