@@ -11,7 +11,7 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
     "start": "concurrently \"npm run preview\" \"npm run server\"",
     "deploy": "npm run build",
-    "panel": "node panel/panel-server.js"
+    "panel": "node panel/panel-server.cjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

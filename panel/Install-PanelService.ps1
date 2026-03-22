@@ -119,12 +119,15 @@ if ($existing) {
     Write-Host "Service '$ServiceName' already exists - stopping and reconfiguring..."
     & $nssm stop $ServiceName 2>$null
     Start-Sleep -Seconds 2
+    Write-Host "Removing existing service before reinstall..."
+    & $nssm remove $ServiceName confirm
+    Start-Sleep -Seconds 1
 }
 
 # Install / configure NSSM service
-$panelScript = Join-Path $ProjectDir 'panel\panel-server.js'
+$panelScript = Join-Path $ProjectDir 'panel\panel-server.cjs'
 if (-not (Test-Path $panelScript)) {
-    Write-Error "panel\panel-server.js not found at $panelScript. Ensure the panel folder is deployed."
+    Write-Error "panel\panel-server.cjs not found at $panelScript. Ensure the panel folder is deployed."
     exit 1
 }
 

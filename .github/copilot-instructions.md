@@ -147,7 +147,7 @@ Always test using `npm run build` and `npm run server` at the end of large chang
 
 ## Server-Side Checklist (Post-Implementation)
 **Control Panel:** Standalone server management GUI at port 4000.
-- Files: `panel/panel-server.js` (backend, pure Node.js built-ins only), `panel/index.html` (frontend SPA).
+- Files: `panel/panel-server.cjs` (backend, pure Node.js built-ins only), `panel/index.html` (frontend SPA).
 - Auth: PIN via `PANEL_PIN` or falls back to `ADMIN_PIN` from `.env.local`. Rate-limited (5 attempts → 15min lockout). 2-hour sliding session.
 - Install as service: `panel\Install-PanelService.ps1` — creates NSSM service `flight-points-panel` on port 4000.
 - Start manually: `npm run panel` (added to package.json).
@@ -331,6 +331,34 @@ Entry template (copy for each chat):
     Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
 
 **Last Updated:** 2026-03-22 (Control Panel added)
+
+- Date: 2026-03-22
+    Chat summary: Hardened panel installer rerun behavior for already-existing services while finalizing `.cjs` runtime migration.
+    Files touched: `panel/Install-PanelService.ps1`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Installer now removes existing `flight-points-panel` service before reinstall (`nssm remove ... confirm`) after stopping it.
+       - Prevents stale/paused service config from persisting across installer reruns.
+    Validation performed: PowerShell parser check for installer (`ParseFile`) -> `Parse OK`.
+    Risks or follow-up:
+       - Re-running installer now recreates the service each time; this is intentional to guarantee config drift is corrected.
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-22
+    Chat summary: Resolved production panel startup failure where NSSM service entered `SERVICE_PAUSED` because Node treated `panel-server.js` as ESM (`type: module`) and `require` was unavailable.
+    Files touched: `panel/panel-server.cjs`, `panel/Install-PanelService.ps1`, `package.json`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Added CommonJS runtime file `panel/panel-server.cjs` (copied from existing panel server implementation).
+       - Updated npm script to `"panel": "node panel/panel-server.cjs"`.
+       - Updated installer to configure NSSM `AppParameters` for `panel\panel-server.cjs`.
+       - Updated panel UI fallback text to reference `.cjs` filename.
+       - Root cause confirmed from server output: `ReferenceError: require is not defined in ES module scope`.
+    Validation performed:
+       - `node --check panel/panel-server.cjs` -> pass.
+       - PowerShell parser check for installer (`ParseFile`) -> `Parse OK`.
+    Risks or follow-up:
+       - Existing server service created with old `.js` parameter must be rerun through installer once to update NSSM config.
+       - Keep `panel/panel-server.js` only as legacy copy; operational runtime is `.cjs`.
+    Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
 
 - Date: 2026-03-22
     Chat summary: User hit `NSSM not found` when running panel installer on production server. Improved installer to detect additional common NSSM locations and print actionable install/path guidance.
