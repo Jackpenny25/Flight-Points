@@ -11,7 +11,8 @@
 # Prerequisites:
 #   - NSSM installed (https://nssm.cc/) and on PATH, OR at C:\nssm\nssm.exe
 #   - Node.js installed and on PATH
-#   - PANEL_PIN or ADMIN_PIN set in .env.local
+#   - ADMIN_TOTP_SECRET set in .env.local
+#   - ADMIN_BACKUP_CODE set in .env.local (long random backup code)
 #   - PANEL_PORT optionally set in .env.local (default: 4000)
 
 param(
@@ -85,15 +86,19 @@ if ($Uninstall) {
     exit 0
 }
 
-# Check .env.local has a PIN
+# Check .env.local has safeguard auth config
 $envFile = Join-Path $ProjectDir '.env.local'
 if (-not (Test-Path $envFile)) {
-    Write-Error ".env.local not found at $envFile. Cannot continue - PANEL_PIN/ADMIN_PIN must be set."
+    Write-Error ".env.local not found at $envFile. Cannot continue - ADMIN_TOTP_SECRET and ADMIN_BACKUP_CODE must be set."
     exit 1
 }
 $envContent = Get-Content $envFile -Raw
-if ($envContent -notmatch '(PANEL_PIN|ADMIN_PIN)\s*=\s*.+') {
-    Write-Error "PANEL_PIN or ADMIN_PIN not found in .env.local. Add it before installing the panel service."
+if ($envContent -notmatch 'ADMIN_TOTP_SECRET\s*=\s*.+') {
+    Write-Error "ADMIN_TOTP_SECRET not found in .env.local. Add it before installing the panel service."
+    exit 1
+}
+if ($envContent -notmatch 'ADMIN_BACKUP_CODE\s*=\s*.+') {
+    Write-Error "ADMIN_BACKUP_CODE not found in .env.local. Add one long random backup code before installing the panel service."
     exit 1
 }
 

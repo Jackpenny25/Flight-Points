@@ -352,4 +352,33 @@ Entry template (copy for each chat):
         - `ADMIN_TOTP_SECRET` must be a Base32 secret (`A-Z`, `2-7`) and server clock drift will break TOTP if Windows time is inaccurate.
         - The admin safeguard token is intentionally short-lived and currently focused on high-impact Accounts/role-default operations, not every destructive route in the application.
         - TeamViewer button still depends on TeamViewer being installed at one of the backend-detected paths.
-      Suggested context destinations: `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
+         Suggested context destinations: `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-22
+    Chat summary: Migrated admin safeguard authentication away from PIN-first usage to authenticator-first with one long backup code fallback, across both main site safeguard verification and standalone panel login.
+    Files touched: `server/server.ts`, `panel/panel-server.cjs`, `panel/index.html`, `panel/Install-PanelService.ps1`, `src/app/components/AdminSafeguardDialog.tsx`, `src/app/components/AdminSignups.tsx`, `src/app/components/Dashboard.tsx`, `src/app/components/PointsManager.tsx`, `src/app/components/CadetsManager.tsx`, `src/utils/api.ts`, `src/utils/permissions.ts`, `src/app/components/PrivacyPolicyModal.tsx`, `.gitignore`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Main API safeguard verification (`POST /api/admin/verify-pin`) now validates either:
+          - TOTP (`ADMIN_TOTP_SECRET`, 6-digit), or
+          - a long backup code (minimum 24 chars).
+       - PIN acceptance was removed from active validation logic; endpoint path name is kept for compatibility.
+       - Safeguard token `method` now reports `totp` or `backup` (instead of pin/totp).
+       - Added startup backup-code loader in `server/server.ts`:
+          - uses `ADMIN_BACKUP_CODE` if present,
+          - otherwise reads `data/admin-backup-code.txt`,
+          - otherwise generates a random high-entropy code and writes it to `data/admin-backup-code.txt`.
+       - Added constant-time comparison (`crypto.timingSafeEqual`) for backup code checks.
+       - Panel auth updated similarly in `panel/panel-server.cjs`: authenticator required with long backup-code fallback, no PIN mode.
+       - Panel login UI text and request payload updated (`code` instead of pin/totp split), and input max length expanded for long backup codes.
+       - Panel install script now requires `ADMIN_TOTP_SECRET` and `ADMIN_BACKUP_CODE` in `.env.local`.
+       - Frontend safeguard dialogs/prompts now accept authenticator code or long backup code (removed numeric-only input restrictions where needed).
+       - Added `data/admin-backup-code.txt` to `.gitignore` to prevent secret leakage.
+    Validation performed:
+       - `npm run build` passed.
+       - `npm run server` startup passed to listen stage and showed new backup-code generation logging; then hit existing local DB `ECONNREFUSED` (expected in this environment without PostgreSQL).
+       - VS Code diagnostics check reported no errors in modified files.
+    Risks or follow-up:
+       - If `ADMIN_TOTP_SECRET` is not configured, safeguard verification now intentionally fails (500) until configured.
+       - Generated backup file should be migrated into `ADMIN_BACKUP_CODE` in `.env.local` and then stored securely in ops password vault.
+       - Existing variable names like `adminPinVerified` remain in session storage for compatibility; behavior is safeguard-code based despite legacy naming.
+    Suggested context destinations: `20-operations-runbook.md`, `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`

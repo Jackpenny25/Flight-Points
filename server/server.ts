@@ -1484,16 +1484,58 @@ function mapRowsToClient(type: DataType, rows: Record<string, any>[]) {
   return rows.map(row => mapToClient(type, row));
 }
 
-// ========== PIN MANAGEMENT ENDPOINTS ==========
+// ========== ADMIN SAFEGUARD ENDPOINTS ==========
 
 const ADMIN_TOTP_SECRET = String(process.env.ADMIN_TOTP_SECRET || '').trim();
 const ADMIN_SAFEGUARD_TTL_SECONDS = 10 * 60;
+const ADMIN_BACKUP_CODE_MIN_LENGTH = 24;
+const ADMIN_BACKUP_CODE_PATH = path.join(projectRoot, 'data', 'admin-backup-code.txt');
 
-function getConfiguredAdminPin() {
-  // Only read from server-side env — never fall back to VITE_ prefixed vars which may leak to the client bundle
-  const configuredPin = String(process.env.ADMIN_PIN || '').trim();
-  return configuredPin;
+function generateBackupCode() {
+  return crypto.randomBytes(48).toString('base64url');
 }
+
+function normalizeBackupCode(value: string) {
+  return String(value || '').trim();
+}
+
+function loadOrCreateAdminBackupCode() {
+  const envCode = normalizeBackupCode(String(process.env.ADMIN_BACKUP_CODE || ''));
+  if (envCode) {
+    if (envCode.length < ADMIN_BACKUP_CODE_MIN_LENGTH) {
+      console.error(`[startup] FATAL: ADMIN_BACKUP_CODE must be at least ${ADMIN_BACKUP_CODE_MIN_LENGTH} characters.`);
+      process.exit(1);
+    }
+    return envCode;
+  }
+
+  try {
+    if (fs.existsSync(ADMIN_BACKUP_CODE_PATH)) {
+      const fileCode = normalizeBackupCode(fs.readFileSync(ADMIN_BACKUP_CODE_PATH, 'utf8'));
+      if (fileCode.length >= ADMIN_BACKUP_CODE_MIN_LENGTH) {
+        return fileCode;
+      }
+    }
+
+    const generated = generateBackupCode();
+    fs.mkdirSync(path.dirname(ADMIN_BACKUP_CODE_PATH), { recursive: true });
+    fs.writeFileSync(ADMIN_BACKUP_CODE_PATH, generated, { encoding: 'utf8', mode: 0o600 });
+    console.warn(`[startup] Generated admin backup code at ${ADMIN_BACKUP_CODE_PATH}. Move it to ADMIN_BACKUP_CODE in .env.local for long-term management.`);
+    return generated;
+  } catch (error) {
+    console.error('[startup] Failed to load or create admin backup code:', error);
+    return '';
+  }
+}
+
+function codesMatchConstantTime(submitted: string, expected: string) {
+  const submittedBuffer = Buffer.from(submitted, 'utf8');
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  if (submittedBuffer.length !== expectedBuffer.length) return false;
+  return crypto.timingSafeEqual(submittedBuffer, expectedBuffer);
+}
+
+const ADMIN_BACKUP_CODE = loadOrCreateAdminBackupCode();
 
 function base32Decode(secret: string) {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -1540,7 +1582,7 @@ function generateTotpCodes(secret: string) {
   return codes;
 }
 
-function createAdminSafeguardToken(user: UserJwtPayload, method: 'pin' | 'totp') {
+function createAdminSafeguardToken(user: UserJwtPayload, method: 'totp' | 'backup') {
   return jwt.sign(
     {
       purpose: 'admin-safeguard',
@@ -1570,7 +1612,7 @@ function requireAdminSafeguard(req: AuthRequest, res: Response, next: NextFuncti
   }
 }
 
-// GET /api/admin/pin-status - Get current user's PIN status
+// GET /api/admin/pin-status - Get current user's admin safeguard status
 app.get('/api/admin/pin-status', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user?.id) {
@@ -1578,91 +1620,94 @@ app.get('/api/admin/pin-status', requireAuth, async (req: AuthRequest, res: Resp
     }
 
     if (!hasAdminPinRole(req.user)) {
-      return res.status(403).json({ error: 'Only Flight Point Leads can use admin PIN actions' });
+      return res.status(403).json({ error: 'Only Flight Point Leads can use admin safeguard actions' });
     }
 
-    const configuredPin = getConfiguredAdminPin();
     res.json({
       is_default: false,
       last_changed: null,
-      has_pin: /^\d{6}$/.test(configuredPin),
+      has_pin: false,
+      has_backup_code: ADMIN_BACKUP_CODE.length >= ADMIN_BACKUP_CODE_MIN_LENGTH,
+      backup_code_min_length: ADMIN_BACKUP_CODE_MIN_LENGTH,
       totp_enabled: !!ADMIN_TOTP_SECRET,
+      totp_required: true,
       safeguard_ttl_seconds: ADMIN_SAFEGUARD_TTL_SECONDS,
     });
   } catch (error) {
     console.error('Error in GET /api/admin/pin-status:', error);
-    res.status(500).json({ error: 'Failed to fetch PIN status' });
+    res.status(500).json({ error: 'Failed to fetch safeguard status' });
   }
 });
 
-// POST /api/admin/verify-pin - Verify a PIN (rate-limited to prevent brute force)
+// POST /api/admin/verify-pin - Verify an authenticator or backup code (rate-limited)
 app.post('/api/admin/verify-pin', pinLimiter, requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     if (!hasAdminPinRole(req.user)) {
-      return res.status(403).json({ error: 'Only Flight Point Leads can verify admin PIN' });
+      return res.status(403).json({ error: 'Only Flight Point Leads can verify admin safeguard codes' });
     }
 
     const { pin, code, totp } = req.body || {};
     const rawCode = String(code || totp || pin || '').trim();
     if (!rawCode) {
-      return res.status(400).json({ error: 'Admin PIN or authenticator code is required' });
+      return res.status(400).json({ error: 'Authenticator code or backup code is required' });
     }
 
-    const configuredPin = getConfiguredAdminPin();
-    if (!/^\d{6}$/.test(configuredPin)) {
-      return res.status(500).json({ error: 'Admin PIN is not configured correctly. Set a 6-digit ADMIN_PIN in .env.local.' });
+    if (!ADMIN_TOTP_SECRET) {
+      return res.status(500).json({ error: 'Authenticator secret is not configured. Set ADMIN_TOTP_SECRET in .env.local.' });
     }
 
-    if (!/^\d{6}$/.test(rawCode)) {
-      return res.status(400).json({ error: 'Code must be 6 digits' });
+    if (!ADMIN_BACKUP_CODE || ADMIN_BACKUP_CODE.length < ADMIN_BACKUP_CODE_MIN_LENGTH) {
+      return res.status(500).json({ error: 'Backup code is not configured correctly. Set ADMIN_BACKUP_CODE in .env.local.' });
     }
 
-    const totpValid = !!ADMIN_TOTP_SECRET && generateTotpCodes(ADMIN_TOTP_SECRET).includes(rawCode);
-    const pinValid = rawCode === configuredPin;
+    const totpValid = /^\d{6}$/.test(rawCode) && generateTotpCodes(ADMIN_TOTP_SECRET).includes(rawCode);
+    const backupValid = rawCode.length >= ADMIN_BACKUP_CODE_MIN_LENGTH
+      ? codesMatchConstantTime(rawCode, ADMIN_BACKUP_CODE)
+      : false;
 
-    if (!pinValid && !totpValid) {
-      return res.status(401).json({ error: ADMIN_TOTP_SECRET ? 'Incorrect PIN or authenticator code' : 'Incorrect PIN' });
+    if (!backupValid && !totpValid) {
+      return res.status(401).json({ error: 'Incorrect authenticator or backup code' });
     }
 
-    const method: 'pin' | 'totp' = totpValid ? 'totp' : 'pin';
+    const method: 'totp' | 'backup' = totpValid ? 'totp' : 'backup';
     res.json({
       success: true,
       method,
       safeguardToken: createAdminSafeguardToken(req.user!, method),
       expiresInSeconds: ADMIN_SAFEGUARD_TTL_SECONDS,
-      totpEnabled: !!ADMIN_TOTP_SECRET,
+      totpEnabled: true,
     });
   } catch (error) {
     console.error('Error in POST /api/admin/verify-pin:', error);
-    res.status(500).json({ error: 'Failed to verify PIN' });
+    res.status(500).json({ error: 'Failed to verify safeguard code' });
   }
 });
 
-// POST /api/admin/change-pin - Change user's PIN
+// POST /api/admin/change-pin - Deprecated legacy endpoint
 app.post('/api/admin/change-pin', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     if (!hasAdminPinRole(req.user)) {
-      return res.status(403).json({ error: 'Only Flight Point Leads can change admin PIN' });
+      return res.status(403).json({ error: 'Only Flight Point Leads can use admin safeguard settings' });
     }
 
     res.status(400).json({
-      error: 'Admin PIN is managed in .env.local. Update ADMIN_PIN to a new 6-digit value and restart the server.',
+      error: 'Admin PIN is retired. Use ADMIN_TOTP_SECRET and ADMIN_BACKUP_CODE in .env.local.',
     });
   } catch (error) {
     console.error('Error in POST /api/admin/change-pin:', error);
-    res.status(500).json({ error: 'Failed to change PIN' });
+    res.status(500).json({ error: 'Failed to update safeguard settings' });
   }
 });
 
-// POST /api/admin/reset-pin - Reset a user's PIN (admin only)
+// POST /api/admin/reset-pin - Deprecated legacy endpoint
 app.post('/api/admin/reset-pin', requireAuth, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
   try {
     res.status(400).json({
-      error: 'Admin PIN is managed in .env.local. Set ADMIN_PIN to a 6-digit value and restart the server.',
+      error: 'Admin PIN is retired. Use ADMIN_TOTP_SECRET and ADMIN_BACKUP_CODE in .env.local.',
     });
   } catch (error) {
     console.error('Error in POST /api/admin/reset-pin:', error);
-    res.status(500).json({ error: 'Failed to reset PIN' });
+    res.status(500).json({ error: 'Failed to reset safeguard settings' });
   }
 });
 

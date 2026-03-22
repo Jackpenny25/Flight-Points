@@ -62,7 +62,7 @@ export const PERMISSION_ACTION_META: Array<{ key: PermissionActionKey; label: st
   { key: 'deleteAttendanceSessions', label: 'Delete attendance sessions' },
   { key: 'manageCadets', label: 'Manage cadets, reports, integrity' },
   { key: 'manageAccounts', label: 'Manage accounts and roles' },
-  { key: 'unlockAdmin', label: 'Use admin PIN unlock' },
+  { key: 'unlockAdmin', label: 'Use admin safeguard unlock' },
 ];
 
 export const ROLE_PERMISSION_DEFAULTS: Record<string, EffectivePermissions> = {

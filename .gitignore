@@ -17,3 +17,6 @@ auto-deploy.log
 .env.migration*
 .env.migration.template
 .env.migration.local
+
+# Generated admin safeguard backup code (never commit)
+data/admin-backup-code.txt

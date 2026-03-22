@@ -160,8 +160,8 @@ export const api = {
   // Deploy Status
   getDeployStatus: () => fetchWithAuth('/deploy-status', { method: 'GET' }).then(r => r.json()),
   
-  // Verify PIN
-  verifyPin: (pin: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ pin }) }).then(r => r.json()),
+  // Verify admin safeguard code
+  verifyPin: (pin: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ code: pin }) }).then(r => r.json()),
   verifyAdminCode: (code: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ code }) }).then(r => r.json()),
   getAdminSafeguardStatus: () => fetchWithAuth('/admin/pin-status', { method: 'GET' }).then(r => r.json()),
   

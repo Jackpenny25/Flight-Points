@@ -246,12 +246,12 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
     <div class="login-sub">Flight-Points Server</div>
     <div class="field">
       <div id="auth-mode-label" style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;"></div>
-      <input class="pin-input" id="pin-input" type="password" placeholder="Panel PIN or 6-digit code" maxlength="10" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" onfocus="handleLoginInputFocus()" onblur="handleLoginInputBlur()">
+      <input class="pin-input" id="pin-input" type="password" placeholder="Authenticator code or backup code" maxlength="128" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" onfocus="handleLoginInputFocus()" onblur="handleLoginInputBlur()">
     </div>
     <button class="btn primary" style="width:100%;justify-content:center;padding:10px;" onclick="doLogin()">Unlock</button>
     <div class="login-error" id="login-error"></div>
     <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-      Panel PIN: backup code in .env.local | Code: 6 digits from authenticator app
+      Use your authenticator app code. Backup: one long code from ADMIN_BACKUP_CODE.
     </div>
   </div>
 </div>
@@ -742,7 +742,7 @@ function getLoginInput() {
 }
 
 function getLoginPlaceholder() {
-  return TOTP_ENABLED ? 'Panel PIN or 6-digit code' : 'Panel PIN';
+  return TOTP_ENABLED ? 'Authenticator code or backup code' : 'Authenticator code';
 }
 
 function handleLoginInputFocus() {
@@ -761,7 +761,7 @@ function handleLoginInputBlur() {
 function syncLoginUi() {
   const label = document.getElementById('auth-mode-label');
   const input = getLoginInput();
-  if (label) label.textContent = TOTP_ENABLED ? 'Panel Backup PIN or Authenticator Code' : 'Panel PIN';
+  if (label) label.textContent = TOTP_ENABLED ? 'Authenticator or Backup Code' : 'Authenticator Code';
   if (input) {
     input.value = '';
     input.placeholder = getLoginPlaceholder();
@@ -774,19 +774,11 @@ async function doLogin() {
   errEl.textContent = '';
   
   if (!input) {
-    errEl.textContent = 'Please enter PIN or code';
+    errEl.textContent = 'Please enter your authenticator or backup code';
     return;
   }
-  
-  // Determine if it's a PIN (4-10 digits) or TOTP (exactly 6 digits)
-  let pin = '', totp = '';
-  if (input.length === 6 && /^\d{6}$/.test(input) && TOTP_ENABLED) {
-    totp = input;
-  } else {
-    pin = input;
-  }
-  
-  const res = await apiFetch('/api/auth/login', 'POST', { pin, totp });
+
+  const res = await apiFetch('/api/auth/login', 'POST', { code: input });
   if (res.token) {
     TOKEN = res.token;
     sessionStorage.setItem('panel_token', TOKEN);
