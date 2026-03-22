@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flight-Points Control Panel</title>
+<style>
+:root{
+  --bg:#0d1117;--bg2:#161b22;--bg3:#1c2128;--bg4:#21262d;
+  --border:#30363d;--border2:#3d444d;
+  --text:#e6edf3;--muted:#7d8590;--muted2:#484f58;
+  --green:#3fb950;--green-bg:#0f291e;
+  --yellow:#d29922;--yellow-bg:#272115;
+  --red:#f85149;--red-bg:#2d1317;
+  --blue:#58a6ff;--blue-bg:#0d2149;
+  --purple:#bc8cff;
+  --accent:#238636;--accent-hover:#2ea043;
+  --font-mono:'Consolas','Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;}
+
+/* ── Layout ───────────────────────────────────────────── */
+#app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+#header{display:flex;align-items:center;gap:12px;height:56px;padding:0 20px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10;}
+#main{display:flex;flex:1;overflow:hidden;}
+#sidebar{width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;}
+#content{flex:1;overflow-y:auto;padding:24px;}
+
+/* ── Header ──────────────────────────────────────────── */
+.logo{font-size:18px;font-weight:700;color:var(--blue);display:flex;align-items:center;gap:8px;white-space:nowrap;}
+.logo span{font-size:20px;}
+.header-status{display:flex;align-items:center;gap:16px;margin-left:8px;}
+.h-status-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
+.h-status-item .dot{width:8px;height:8px;border-radius:50%;background:var(--muted2);}
+.h-status-item .dot.green{background:var(--green);}
+.h-status-item .dot.red{background:var(--red);}
+.h-status-item .dot.yellow{background:var(--yellow);}
+.header-quick{display:flex;gap:8px;margin-left:auto;align-items:center;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);cursor:pointer;font-size:12px;font-weight:500;transition:all .15s;white-space:nowrap;}
+.btn:hover{background:var(--bg4);border-color:var(--muted2);}
+.btn.primary{background:var(--accent);border-color:var(--accent-hover);color:#fff;}
+.btn.primary:hover{background:var(--accent-hover);}
+.btn.danger{border-color:#f8514966;color:var(--red);}
+.btn.danger:hover{background:var(--red-bg);border-color:var(--red);}
+.btn.small{padding:4px 8px;font-size:11px;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+
+/* ── Sidebar ─────────────────────────────────────────── */
+.nav-section{padding:16px 12px 8px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 16px;cursor:pointer;border-left:2px solid transparent;color:var(--muted);font-size:13px;transition:all .12s;user-select:none;}
+.nav-item:hover{background:var(--bg3);color:var(--text);}
+.nav-item.active{color:var(--blue);border-left-color:var(--blue);background:rgba(88,166,255,.07);}
+.nav-icon{font-size:15px;width:18px;text-align:center;}
+.nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;}
+.nav-dot{width:6px;height:6px;border-radius:50%;margin-left:auto;background:var(--muted2);}
+.nav-dot.green{background:var(--green);}
+.nav-dot.red{background:var(--red);}
+.nav-dot.yellow{background:var(--yellow);}
+.sidebar-footer{margin-top:auto;padding:16px;color:var(--muted);font-size:11px;border-top:1px solid var(--border);}
+
+/* ── Cards ───────────────────────────────────────────── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px;}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg3);}
+.card-title{font-size:13px;font-weight:600;color:var(--text);}
+.card-body{padding:16px;}
+.card-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+
+/* ── Status ──────────────────────────────────────────── */
+.status-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;display:flex;align-items:center;gap:14px;}
+.status-icon{font-size:22px;width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.status-icon.green{background:#0f291e;}
+.status-icon.red{background:#2d1317;}
+.status-icon.yellow{background:#272115;}
+.status-icon.blue{background:#0d2149;}
+.status-icon.gray{background:#1c2128;}
+.status-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;}
+.status-value{font-size:16px;font-weight:700;}
+.status-value.green{color:var(--green);}
+.status-value.red{color:var(--red);}
+.status-value.yellow{color:var(--yellow);}
+.status-value.blue{color:var(--blue);}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;}
+.badge.green{background:var(--green-bg);color:var(--green);}
+.badge.red{background:var(--red-bg);color:var(--red);}
+.badge.yellow{background:var(--yellow-bg);color:var(--yellow);}
+.badge.blue{background:var(--blue-bg);color:var(--blue);}
+.badge.gray{background:var(--bg3);color:var(--muted);}
+.dot-pulse{display:inline-block;width:6px;height:6px;border-radius:50%;}
+.dot-pulse.green{background:var(--green);}
+.dot-pulse.red{background:var(--red);}
+.dot-pulse.yellow{background:var(--yellow);}
+.dot-pulse.gray{background:var(--muted2);}
+
+/* ── Progress ────────────────────────────────────────── */
+.progress-bar{height:6px;background:var(--bg4);border-radius:3px;overflow:hidden;}
+.progress-fill{height:100%;border-radius:3px;transition:width .5s ease;background:var(--blue);}
+.progress-fill.green{background:var(--green);}
+.progress-fill.yellow{background:var(--yellow);}
+.progress-fill.red{background:var(--red);}
+
+/* ── Terminal ────────────────────────────────────────── */
+.terminal{background:#000;border:1px solid var(--border);border-radius:6px;font-family:var(--font-mono);font-size:12px;line-height:1.5;color:#c9d1d9;overflow-y:auto;padding:12px;white-space:pre-wrap;word-break:break-word;}
+.terminal .line-ok{color:var(--green);}
+.terminal .line-err{color:var(--red);}
+.terminal .line-warn{color:var(--yellow);}
+.terminal .line-info{color:var(--blue);}
+
+/* ── Tables ──────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);}
+td{padding:9px 12px;border-bottom:1px solid var(--border);color:var(--text);}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(255,255,255,.02);}
+.code{font-family:var(--font-mono);font-size:12px;color:var(--blue);}
+
+/* ── Forms ───────────────────────────────────────────── */
+input,select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:13px;width:100%;outline:none;}
+input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,166,255,.15);}
+.field{margin-bottom:12px;}
+.label{font-size:12px;color:var(--muted);margin-bottom:4px;display:block;}
+
+/* ── Utility ─────────────────────────────────────────── */
+.flex{display:flex;}
+.flex-col{flex-direction:column;}
+.items-center{align-items:center;}
+.justify-between{justify-content:space-between;}
+.gap-8{gap:8px;}
+.gap-12{gap:12px;}
+.gap-16{gap:16px;}
+.mt-8{margin-top:8px;}
+.mt-12{margin-top:12px;}
+.mt-16{margin-top:16px;}
+.mb-8{margin-bottom:8px;}
+.text-muted{color:var(--muted);}
+.text-sm{font-size:12px;}
+.text-xs{font-size:11px;}
+.text-mono{font-family:var(--font-mono);}
+.text-green{color:var(--green);}
+.text-red{color:var(--red);}
+.text-yellow{color:var(--yellow);}
+.text-blue{color:var(--blue);}
+.bold{font-weight:600;}
+.divider{border:none;border-top:1px solid var(--border);margin:12px 0;}
+.scroll-box{overflow-y:auto;}
+.hidden{display:none!important;}
+.spin{animation:spin .8s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.section{display:none;}
+.section.active{display:block;}
+.tab-pane{display:none;}
+.tab-pane.active{display:block;}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);}
+.info-row:last-child{border-bottom:none;}
+.info-key{color:var(--muted);font-size:12px;}
+.info-val{font-size:12px;font-weight:500;font-family:var(--font-mono);}
+.tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;background:var(--bg4);color:var(--muted);}
+
+/* ── Toast ───────────────────────────────────────────── */
+#toast-container{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
+.toast{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;max-width:360px;box-shadow:0 8px 24px rgba(0,0,0,.4);pointer-events:all;display:flex;align-items:center;gap:8px;animation:fadeIn .2s ease;}
+.toast.ok{border-left:3px solid var(--green);}
+.toast.error{border-left:3px solid var(--red);}
+.toast.info{border-left:3px solid var(--blue);}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── Login ───────────────────────────────────────────── */
+#login-screen{position:fixed;inset:0;background:var(--bg);z-index:9000;display:flex;align-items:center;justify-content:center;}
+.login-box{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:40px 36px;width:360px;text-align:center;}
+.login-logo{font-size:36px;margin-bottom:12px;}
+.login-title{font-size:22px;font-weight:700;margin-bottom:4px;}
+.login-sub{color:var(--muted);font-size:13px;margin-bottom:28px;}
+.pin-input{font-size:22px;letter-spacing:8px;text-align:center;font-family:var(--font-mono);padding:12px;}
+.login-error{color:var(--red);font-size:13px;margin-top:10px;min-height:20px;}
+
+/* ── Log viewer specific ─────────────────────────────── */
+.log-toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);border-bottom:1px solid var(--border);}
+.log-file-label{font-size:11px;color:var(--muted);font-family:var(--font-mono);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.live-indicator{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--green);}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.2s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+</style>
+</head>
+<body>
+
+<!-- ─── Login Screen ─────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">✈️</div>
+    <div class="login-title">Control Panel</div>
+    <div class="login-sub">Flight-Points Server</div>
+    <div class="field">
+      <input class="pin-input" id="pin-input" type="password" placeholder="••••••" maxlength="10" autocomplete="current-password">
+    </div>
+    <button class="btn primary" style="width:100%;justify-content:center;padding:10px;" onclick="doLogin()">Unlock</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- ─── Toast Container ──────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ─── App Shell ────────────────────────────────────────────── -->
+<div id="app" class="hidden">
+
+  <!-- Header -->
+  <div id="header">
+    <div class="logo"><span>✈</span> FP Panel</div>
+    <div class="header-status">
+      <div class="h-status-item"><div class="dot" id="hs-api"></div><span id="hs-api-txt">API</span></div>
+      <div class="h-status-item"><div class="dot" id="hs-tunnel"></div><span id="hs-tunnel-txt">Tunnel</span></div>
+      <div class="h-status-item"><div class="dot" id="hs-db"></div><span id="hs-db-txt">DB</span></div>
+    </div>
+    <div class="header-quick">
+      <button class="btn small" onclick="quickAction('restart','flight-points')">⟳ Restart API</button>
+      <button class="btn small" onclick="quickAction('restart','flight-points-tunnel')">⟳ Restart Tunnel</button>
+      <button class="btn small" id="btn-check-updates" onclick="checkUpdates()">↑ Check Updates</button>
+      <button class="btn small danger" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div class="nav-section">Main</div>
+      <div class="nav-item active" onclick="nav('overview')"><span class="nav-icon">📊</span>Overview<span class="nav-dot" id="sdot-overview"></span></div>
+      <div class="nav-item" onclick="nav('services')"><span class="nav-icon">⚙️</span>Services<span class="nav-dot" id="sdot-api"></span></div>
+      <div class="nav-item" onclick="nav('deploy')"><span class="nav-icon">🚀</span>Git &amp; Deploy</div>
+      <div class="nav-item" onclick="nav('logs')"><span class="nav-icon">📋</span>Logs</div>
+      <div class="nav-section">Data</div>
+      <div class="nav-item" onclick="nav('database')"><span class="nav-icon">🗄️</span>Database<span class="nav-dot" id="sdot-db"></span></div>
+      <div class="nav-item" onclick="nav('processes')"><span class="nav-icon">⚡</span>Processes</div>
+      <div class="nav-section">Info</div>
+      <div class="nav-item" onclick="nav('system')"><span class="nav-icon">🖥️</span>System</div>
+      <div class="nav-item" onclick="nav('tunnel')"><span class="nav-icon">🌐</span>Tunnel<span class="nav-dot" id="sdot-tunnel"></span></div>
+      <div class="sidebar-footer">
+        <div>Last refresh: <span id="last-refresh">—</span></div>
+        <div style="margin-top:4px;">Auto-refresh: 30s</div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div id="content">
+
+      <!-- ══════════════════ OVERVIEW ══════════════════ -->
+      <div class="section active" id="sec-overview">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+          <h2 style="font-size:18px;font-weight:700;">Overview</h2>
+          <button class="btn small" onclick="loadOverview()">⟳ Refresh</button>
+        </div>
+
+        <!-- Status cards row -->
+        <div class="grid-4 mb-8" id="ov-cards">
+          <div class="status-card"><div class="status-icon gray" id="ov-api-icon">🌐</div><div><div class="status-label">API Server</div><div class="status-value" id="ov-api-val">—</div></div></div>
+          <div class="status-card"><div class="status-icon gray" id="ov-tunnel-icon">☁️</div><div><div class="status-label">Tunnel</div><div class="status-value" id="ov-tunnel-val">—</div></div></div>
+          <div class="status-card"><div class="status-icon gray" id="ov-db-icon">🗄️</div><div><div class="status-label">Database</div><div class="status-value" id="ov-db-val">—</div></div></div>
+          <div class="status-card"><div class="status-icon gray" id="ov-mem-icon">💾</div><div><div class="status-label">Memory</div><div class="status-value" id="ov-mem-val">—</div></div></div>
+        </div>
+
+        <div class="grid-2">
+          <!-- Git Info -->
+          <div class="card">
+            <div class="card-header"><span class="card-title">🔀 Git Status</span><span id="ov-git-badge"></span></div>
+            <div class="card-body">
+              <div class="info-row"><span class="info-key">Branch</span><span class="info-val text-blue" id="ov-branch">—</span></div>
+              <div class="info-row"><span class="info-key">Last Commit</span><span class="info-val text-mono text-sm" id="ov-commit">—</span></div>
+              <div class="info-row"><span class="info-key">State</span><span id="ov-git-state">—</span></div>
+              <div class="info-row"><span class="info-key">Commits Behind</span><span class="info-val" id="ov-behind">—</span></div>
+            </div>
+          </div>
+
+          <!-- System Info -->
+          <div class="card">
+            <div class="card-header"><span class="card-title">🖥️ System</span></div>
+            <div class="card-body">
+              <div class="info-row"><span class="info-key">Hostname</span><span class="info-val" id="ov-hostname">—</span></div>
+              <div class="info-row"><span class="info-key">System Uptime</span><span class="info-val" id="ov-uptime">—</span></div>
+              <div class="info-row"><span class="info-key">Panel Uptime</span><span class="info-val" id="ov-panel-uptime">—</span></div>
+              <div class="mt-12"><div class="label" style="margin-bottom:6px;">Memory Usage — <span id="ov-mem-pct">—</span></div><div class="progress-bar"><div class="progress-fill" id="ov-mem-bar" style="width:0%"></div></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Deploy Status -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">📦 Deploy Status</span><button class="btn small" onclick="loadDeployStatus()">Refresh</button></div>
+          <div class="card-body" id="ov-deploy-status"><span class="text-muted">Loading…</span></div>
+        </div>
+      </div>
+
+      <!-- ══════════════════ SERVICES ══════════════════ -->
+      <div class="section" id="sec-services">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+          <h2 style="font-size:18px;font-weight:700;">Services</h2>
+          <button class="btn small" onclick="loadServices()">⟳ Refresh</button>
+        </div>
+
+        <div id="services-list">
+          <div class="text-muted">Loading…</div>
+        </div>
+
+        <!-- NSSM Info Detail -->
+        <div class="card mt-16">
+          <div class="card-header">
+            <span class="card-title">🔧 Service Configuration (NSSM)</span>
+            <div class="card-actions">
+              <button class="btn small" onclick="loadNssmInfo('flight-points')">API Info</button>
+              <button class="btn small" onclick="loadNssmInfo('flight-points-tunnel')">Tunnel Info</button>
+            </div>
+          </div>
+          <div class="terminal" id="nssm-output" style="height:160px;overflow-y:auto;">Select a service above to view NSSM configuration…</div>
+        </div>
+
+        <!-- Windows Event Log -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📰 Windows Event Log</span>
+            <div class="card-actions">
+              <button class="btn small" onclick="loadEventLog('flight-points')">API Events</button>
+              <button class="btn small" onclick="loadEventLog('flight-points-tunnel')">Tunnel Events</button>
+            </div>
+          </div>
+          <div id="event-log-container"><div class="card-body text-muted">Select a service above to view events.</div></div>
+        </div>
+      </div>
+
+      <!-- ══════════════════ DEPLOY ══════════════════ -->
+      <div class="section" id="sec-deploy">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+          <h2 style="font-size:18px;font-weight:700;">Git &amp; Deploy</h2>
+          <button class="btn small" onclick="loadGitStatus()">⟳ Refresh</button>
+        </div>
+
+        <!-- Git Status Card -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">🔀 Repository Status</span></div>
+          <div class="card-body">
+            <div class="grid-2">
+              <div>
+                <div class="info-row"><span class="info-key">Branch</span><span class="info-val text-blue bold" id="git-branch">—</span></div>
+                <div class="info-row"><span class="info-key">Commit Hash</span><span class="info-val code" id="git-hash">—</span></div>
+                <div class="info-row"><span class="info-key">Message</span><span class="info-val text-sm" id="git-msg">—</span></div>
+                <div class="info-row"><span class="info-key">Author</span><span class="info-val text-sm" id="git-author">—</span></div>
+                <div class="info-row"><span class="info-key">Date</span><span class="info-val text-sm" id="git-date">—</span></div>
+              </div>
+              <div>
+                <div class="info-row"><span class="info-key">Working Tree</span><span id="git-dirty-badge">—</span></div>
+                <div class="info-row"><span class="info-key">Ahead</span><span class="info-val" id="git-ahead">—</span></div>
+                <div class="info-row"><span class="info-key">Behind origin</span><span class="info-val text-yellow bold" id="git-behind">—</span></div>
+                <div class="mt-12">
+                  <div class="label mb-8">Changed Files</div>
+                  <div id="git-changed" style="font-size:12px;font-family:var(--font-mono);color:var(--muted);line-height:1.7;">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Git Actions -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">🔄 Git Actions</span></div>
+          <div class="card-body">
+            <div class="flex gap-8 flex-wrap">
+              <button class="btn" onclick="runOp('git-fetch','Fetching from origin…')">⬇ Fetch</button>
+              <button class="btn primary" onclick="confirmOp('git-pull','Pull latest changes from origin/main?','Git Pull')">⬇⬇ Pull</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Build/Deploy Actions -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">🛠️ Build &amp; Deploy</span></div>
+          <div class="card-body">
+            <div class="flex gap-8 flex-wrap mb-8">
+              <button class="btn" onclick="runOp('deploy-typecheck','Running TypeScript type check…')">🔍 TypeCheck</button>
+              <button class="btn" onclick="runOp('deploy-install','Running npm install…')">📦 npm install</button>
+              <button class="btn" onclick="runOp('deploy-build','Running npm run build…')">🏗️ Build</button>
+              <button class="btn" onclick="runOp('deploy-audit','Running npm audit…')">🛡️ Audit</button>
+              <button class="btn primary" onclick="confirmOp('deploy-run','This will run the full auto-deploy pipeline (git pull → install → build → restart). Continue?','Full Deploy')">🚀 Full Deploy</button>
+            </div>
+            <div style="font-size:11px;color:var(--muted);">Full Deploy = git pull → npm install → npm run build → restart API service</div>
+          </div>
+        </div>
+
+        <!-- Command Output -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">💻 Output</span>
+            <div class="flex items-center gap-8">
+              <span id="op-status" style="font-size:12px;"></span>
+              <button class="btn small" onclick="clearOpOutput()">Clear</button>
+            </div>
+          </div>
+          <div class="terminal" id="op-output" style="height:280px;overflow-y:auto;">No command run yet.</div>
+        </div>
+
+        <!-- Git Log -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">📖 Commit History</span><button class="btn small" onclick="loadGitLog()">Load</button></div>
+          <div style="overflow-x:auto;">
+            <table id="git-log-table">
+              <thead><tr><th>Hash</th><th>Message</th><th>Author</th><th>When</th></tr></thead>
+              <tbody id="git-log-body"><tr><td colspan="4" class="text-muted" style="padding:16px;">Click Load to fetch history</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════ LOGS ══════════════════ -->
+      <div class="section" id="sec-logs">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+          <h2 style="font-size:18px;font-weight:700;">Log Viewer</h2>
+          <div class="flex gap-8">
+            <button class="btn small" onclick="loadLogList()">⟳ Refresh List</button>
+          </div>
+        </div>
+
+        <!-- Log selector -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">📁 Select Log</span></div>
+          <div class="card-body">
+            <div class="grid-2">
+              <div>
+                <div class="label">Quick Select</div>
+                <div class="flex gap-8 flex-wrap mt-8">
+                  <button class="btn small" onclick="openLog('nssm')">NSSM stdout</button>
+                  <button class="btn small" onclick="openLog('server')">Server log</button>
+                  <button class="btn small" onclick="openLog('error')">Error log</button>
+                  <button class="btn small" onclick="openLog('tunnel')">Tunnel log</button>
+                  <button class="btn small" onclick="openLog('deploy')">Deploy log</button>
+                  <button class="btn small" onclick="openLog('backup')">Backup log</button>
+                </div>
+              </div>
+              <div>
+                <div class="label">From File List</div>
+                <select id="log-file-select" onchange="openLog(null, this.value)" class="mt-8">
+                  <option value="">— Select log file —</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Log Viewer -->
+        <div class="card">
+          <div class="log-toolbar">
+            <span class="log-file-label" id="log-path-label">No log selected</span>
+            <div id="live-indicator" class="live-indicator hidden"><div class="live-dot"></div>LIVE</div>
+            <button class="btn small" id="btn-live-toggle" onclick="toggleLiveTail()">▶ Go Live</button>
+            <button class="btn small" onclick="refreshCurrentLog()">⟳</button>
+            <button class="btn small danger" id="btn-clear-log" onclick="clearCurrentLog()">🗑 Clear</button>
+          </div>
+          <div class="terminal" id="log-content" style="height:420px;overflow-y:auto;border-top:none;border-radius:0 0 8px 8px;">Select a log to view</div>
+        </div>
+
+        <!-- All Log Files -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">📂 All Log Files</span></div>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Modified</th><th>Actions</th></tr></thead>
+              <tbody id="log-files-table"><tr><td colspan="5" class="text-muted" style="padding:16px;">Click Refresh List</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════ DATABASE ══════════════════ -->
+      <div class="section" id="sec-database">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+          <h2 style="font-size:18px;font-weight:700;">Database</h2>
+          <button class="btn small" onclick="loadDbStatus()">⟳ Refresh</button>
+        </div>
+
+        <div class="grid-3">
+          <div class="status-card"><div class="status-icon gray" id="db-api-icon">🌐</div><div><div class="status-label">API Reachable</div><div class="status-value" id="db-api-val">—</div></div></div>
+          <div class="status-card"><div class="status-icon gray" id="db-status-icon">🗄️</div><div><div class="status-label">Database</div><div class="status-value" id="db-status-val">—</div></div></div>
+          <div class="status-card"><div class="status-icon blue" id="db-latency-icon">⚡</div><div><div class="status-label">API Latency</div><div class="status-value blue" id="db-latency-val">—</div></div></div>
+        </div>
+
+        <!-- Health Detail -->
+        <div class="card mt-16">
+          <div class="card-header"><span class="card-title">🏥 Health Check Detail</span></div>
+          <div class="card-body" id="db-health-detail"><span class="text-muted">Loading…</span></div>
+        </div>
+
+        <!-- Backup -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">💾 Database Backup</span></div>
+          <div class="card-body">
+            <div class="flex gap-8 mb-8">
+              <button class="btn primary" onclick="confirmOp('db-backup','Run a database backup now using server-backup.ps1?','Database Backup')">▶ Run Backup Now</button>
+            </div>
+            <div style="font-size:12px;color:var(--muted);">Backups are stored in the configured backup directory. Runs PostgreSQL pg_dump.</div>
+          </div>
+        </div>
+
+        <!-- Backup history -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">📂 Backup Files</span><button class="btn small" onclick="loadBackups()">Load</button></div>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead><tr><th>Filename</th><th>Size</th><th>Created</th><th>Location</th></tr></thead>
+              <tbody id="backup-table"><tr><td colspan="4" class="text-muted" style="padding:16px;">Click Load to list backup files</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Backup output -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">💻 Backup Output</span></div>
+          <div class="terminal" id="backup-output" style="height:160px;overflow-y:auto;">No backup run yet.</div>
+        </div>
+      </div>
+
+      <!-- ══════════════════ PROCESSES ══════════════════ -->
+      <div class="section" id="sec-processes">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+          <h2 style="font-size:18px;font-weight:700;">Processes</h2>
+          <div class="flex gap-8">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
+              <input type="checkbox" id="auto-refresh-procs" onchange="toggleProcAutoRefresh()" style="width:auto;"> Auto-refresh
+            </label>
+            <button class="btn small" onclick="loadProcesses()">⟳ Refresh</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">⚡ Active node &amp; cloudflared Processes</span></div>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead><tr><th>PID</th><th>Name</th><th>CPU (s)</th><th>Memory</th><th>Started</th><th>Actions</th></tr></thead>
+              <tbody id="procs-table"><tr><td colspan="6" class="text-muted" style="padding:16px;">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Port status -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">🔌 Port Status</span><button class="btn small" onclick="loadPorts()">Check</button></div>
+          <div class="card-body" id="ports-body"><span class="text-muted">Click Check to test ports</span></div>
+        </div>
+      </div>
+
+      <!-- ══════════════════ SYSTEM ══════════════════ -->
+      <div class="section" id="sec-system">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+          <h2 style="font-size:18px;font-weight:700;">System Information</h2>
+          <button class="btn small" onclick="loadSystem()">⟳ Refresh</button>
+        </div>
+
+        <div class="grid-2">
+          <!-- Host -->
+          <div class="card">
+            <div class="card-header"><span class="card-title">🖥️ Host</span></div>
+            <div class="card-body" id="sys-host-body"><span class="text-muted">Loading…</span></div>
+          </div>
+          <!-- CPU & Memory -->
+          <div class="card">
+            <div class="card-header"><span class="card-title">⚡ CPU &amp; Memory</span></div>
+            <div class="card-body" id="sys-perf-body"><span class="text-muted">Loading…</span></div>
+          </div>
+        </div>
+
+        <!-- Disk -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">💿 Disk Drives</span></div>
+          <div class="card-body" id="sys-disk-body"><span class="text-muted">Loading…</span></div>
+        </div>
+
+        <!-- Network -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">🌐 Network Interfaces</span></div>
+          <div class="card-body" id="sys-net-body"><span class="text-muted">Loading…</span></div>
+        </div>
+
+        <!-- Env check -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">🔑 Environment Variables</span></div>
+          <div class="card-body" id="sys-env-body"><span class="text-muted">Loading…</span></div>
+        </div>
+
+        <!-- Paths -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">📁 Configured Paths</span></div>
+          <div class="card-body" id="sys-paths-body"><span class="text-muted">Loading…</span></div>
+        </div>
+      </div>
+
+      <!-- ══════════════════ TUNNEL ══════════════════ -->
+      <div class="section" id="sec-tunnel">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+          <h2 style="font-size:18px;font-weight:700;">Tunnel</h2>
+          <button class="btn small" onclick="loadTunnel()">⟳ Refresh</button>
+        </div>
+
+        <div class="grid-2 mb-8">
+          <div class="status-card"><div class="status-icon gray" id="tun-proc-icon">☁️</div><div><div class="status-label">cloudflared Process</div><div class="status-value" id="tun-proc-val">—</div></div></div>
+          <div class="status-card"><div class="status-icon gray" id="tun-pub-icon">🌎</div><div><div class="status-label">Public Endpoint</div><div class="status-value" id="tun-pub-val">—</div></div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">☁️ cloudflared Process</span></div>
+          <div class="card-body" id="tun-detail-body"><span class="text-muted">Loading…</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">🌎 Public Endpoint Check</span></div>
+          <div class="card-body" id="tun-pub-body"><span class="text-muted">Loading…</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">⚙️ Tunnel Service Actions</span></div>
+          <div class="card-body">
+            <div class="flex gap-8 flex-wrap">
+              <button class="btn" onclick="svcAction('flight-points-tunnel','start')">▶ Start Tunnel</button>
+              <button class="btn danger" onclick="svcAction('flight-points-tunnel','stop')">■ Stop Tunnel</button>
+              <button class="btn primary" onclick="svcAction('flight-points-tunnel','restart')">⟳ Restart Tunnel</button>
+            </div>
+            <div class="terminal mt-12" id="tun-action-output" style="height:120px;overflow-y:auto;">Awaiting action…</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  Flight-Points Control Panel — Client JS
+// ═══════════════════════════════════════════════════════
+let TOKEN = sessionStorage.getItem('panel_token') || '';
+let currentSection = 'overview';
+let liveEventSource = null;
+let currentLogType = null;
+let procRefreshInterval = null;
+
+// ─── Auth ──────────────────────────────────────────────
+async function doLogin() {
+  const pin  = document.getElementById('pin-input').value;
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  if (!pin) return;
+  const res = await apiFetch('/api/auth/login', 'POST', { pin });
+  if (res.token) {
+    TOKEN = res.token;
+    sessionStorage.setItem('panel_token', TOKEN);
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    initDashboard();
+  } else {
+    errEl.textContent = res.error || 'Login failed';
+  }
+}
+
+async function doLogout() {
+  await apiFetch('/api/auth/logout', 'POST');
+  TOKEN = '';
+  sessionStorage.removeItem('panel_token');
+  location.reload();
+}
+
+document.getElementById('pin-input').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// Check if already authenticated
+async function checkAuth() {
+  if (!TOKEN) return;
+  const res = await apiFetch('/api/auth/check');
+  if (res.ok) {
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    initDashboard();
+  } else {
+    TOKEN = '';
+    sessionStorage.removeItem('panel_token');
+  }
+}
+
+// ─── API Helper ────────────────────────────────────────
+async function apiFetch(path, method = 'GET', body = null) {
+  try {
+    const opts = {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-Panel-Token': TOKEN }
+    };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(path, opts);
+    if (res.status === 401) { doLogout(); return {}; }
+    return await res.json();
+  } catch (e) {
+    console.error('apiFetch error', e);
+    return { error: e.message };
+  }
+}
+
+// ─── Toast ─────────────────────────────────────────────
+function toast(msg, type = 'info', duration = 4000) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  const icons = { ok: '✓', error: '✗', info: 'ℹ' };
+  t.innerHTML = `<span style="font-size:15px">${icons[type]||'ℹ'}</span>${escHtml(msg)}`;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), duration);
+}
+
+// ─── Navigation ────────────────────────────────────────
+function nav(section) {
+  stopLiveTail();
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(el => {
+    if (el.getAttribute('onclick') && el.getAttribute('onclick').includes(`'${section}'`)) el.classList.add('active');
+  });
+  const sec = document.getElementById(`sec-${section}`);
+  if (sec) sec.classList.add('active');
+  currentSection = section;
+
+  // Load data for the section
+  switch(section) {
+    case 'overview':  loadOverview(); loadDeployStatus(); break;
+    case 'services':  loadServices(); break;
+    case 'deploy':    loadGitStatus(); break;
+    case 'logs':      loadLogList(); break;
+    case 'database':  loadDbStatus(); break;
+    case 'processes': loadProcesses(); break;
+    case 'system':    loadSystem(); break;
+    case 'tunnel':    loadTunnel(); break;
+  }
+}
+
+// ─── Init ──────────────────────────────────────────────
+function initDashboard() {
+  loadOverview();
+  loadDeployStatus();
+  // Background status bar refresh every 30s
+  setInterval(refreshHeaderStatus, 30000);
+  refreshHeaderStatus();
+}
+
+// ─── Header Status Bar ────────────────────────────────
+async function refreshHeaderStatus() {
+  document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+  const data = await apiFetch('/api/overview');
+  if (!data || data.error) return;
+
+  setHsDot('api', data.api?.ok);
+  setHsDot('tunnel', data.services?.['flight-points-tunnel'] === 'Running');
+  setHsDot('db', data.api?.health?.database === 'ok');
+
+  // Sidebar dots
+  setNavDot('sdot-api', data.services?.['flight-points'] === 'Running');
+  setNavDot('sdot-db', data.api?.health?.database === 'ok');
+  setNavDot('sdot-tunnel', data.services?.['flight-points-tunnel'] === 'Running');
+}
+
+function setHsDot(id, ok) {
+  const el = document.getElementById(`hs-${id}`);
+  if (el) el.className = 'dot ' + (ok ? 'green' : (ok === false ? 'red' : ''));
+}
+function setNavDot(id, ok) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'nav-dot ' + (ok ? 'green' : (ok === false ? 'red' : ''));
+}
+
+// ─── Overview ─────────────────────────────────────────
+async function loadOverview() {
+  const data = await apiFetch('/api/overview');
+  if (!data || data.error) { toast('Failed to load overview', 'error'); return; }
+
+  // Status cards
+  setOvCard('ov-api', data.api?.ok, data.api?.ok ? 'Running' : 'Down', '🌐');
+  setOvCard('ov-tunnel', data.services?.['flight-points-tunnel'] === 'Running', data.services?.['flight-points-tunnel'] || '—', '☁️');
+  setOvCard('ov-db', data.api?.health?.database === 'ok', data.api?.health?.database === 'ok' ? 'Connected' : 'Offline', '🗄️');
+  const memPct = data.system?.memory?.usedPct || 0;
+  const memColor = memPct > 85 ? 'red' : memPct > 70 ? 'yellow' : 'green';
+  setOvCard('ov-mem', null, `${memPct}%`, '💾', memColor);
+
+  // Git
+  setText('ov-branch', data.git?.branch);
+  const c = data.git?.commit || {};
+  setText('ov-commit', c.short ? `${c.short} — ${c.message}` : '—');
+  setText('ov-git-state', '');
+  document.getElementById('ov-git-state').innerHTML = data.git?.dirty
+    ? '<span class="badge yellow">Dirty</span>' : '<span class="badge green">Clean</span>';
+  const behind = data.git?.behind || 0;
+  document.getElementById('ov-behind').innerHTML = behind > 0
+    ? `<span class="text-yellow bold">${behind} commit${behind !== 1 ? 's' : ''}</span>` : '<span class="text-muted">Up to date</span>';
+  document.getElementById('ov-git-badge').innerHTML = behind > 0
+    ? `<span class="badge yellow">▲ ${behind} update${behind !== 1?'s':''}</span>` : '<span class="badge green">● Up to date</span>';
+
+  // System
+  setText('ov-hostname', data.system?.hostname);
+  setText('ov-uptime', fmtUptime(data.system?.uptime));
+  setText('ov-panel-uptime', fmtUptime(data.system?.processUptime));
+  setText('ov-mem-pct', `${memPct}%`);
+  const bar = document.getElementById('ov-mem-bar');
+  bar.style.width = `${memPct}%`;
+  bar.className = `progress-fill ${memColor}`;
+}
+
+function setOvCard(prefix, ok, val, icon, forceColor) {
+  const iconEl = document.getElementById(`${prefix}-icon`);
+  const valEl  = document.getElementById(`${prefix}-val`);
+  if (!iconEl || !valEl) return;
+  const color = forceColor || (ok === true ? 'green' : ok === false ? 'red' : 'blue');
+  iconEl.className = `status-icon ${color}`;
+  valEl.className  = `status-value ${color}`;
+  valEl.textContent = val || '—';
+}
+
+async function loadDeployStatus() {
+  const data = await apiFetch('/api/deploy-status');
+  const el = document.getElementById('ov-deploy-status');
+  if (!data || data.error) { el.innerHTML = '<span class="text-muted">Could not load deploy status</span>'; return; }
+  let html = '';
+  if (data.deploy) {
+    const d = data.deploy;
+    const ok = d.status === 'success';
+    html += `<div class="flex gap-12 flex-wrap">`;
+    html += `<div><div class="label">Status</div><span class="badge ${ok?'green':'red'}">${d.status||'—'}</span></div>`;
+    if (d.commit) html += `<div><div class="label">Commit</div><span class="code text-sm">${escHtml(d.commit)}</span></div>`;
+    if (d.timestamp) html += `<div><div class="label">Time</div><span class="text-sm">${escHtml(String(d.timestamp))}</span></div>`;
+    if (d.message) html += `<div><div class="label">Message</div><span class="text-sm">${escHtml(d.message)}</span></div>`;
+    html += `</div>`;
+  } else { html += '<span class="text-muted text-sm">No deploy-status.json found</span>'; }
+  if (data.uptime) {
+    const u = data.uptime;
+    html += `<hr class="divider"><div class="text-sm"><span class="label">Uptime Status:</span> ${escHtml(JSON.stringify(u))}</div>`;
+  }
+  el.innerHTML = html;
+}
+
+// ─── Services ─────────────────────────────────────────
+async function loadServices() {
+  const data = await apiFetch('/api/services');
+  const el = document.getElementById('services-list');
+  if (!Array.isArray(data)) { el.innerHTML = '<div class="text-muted">Failed to load services</div>'; return; }
+
+  el.innerHTML = data.map(s => {
+    const running = s.Status === 'Running';
+    const color = running ? 'green' : s.Status === 'NotFound' ? 'gray' : 'red';
+    return `<div class="card" style="margin-bottom:12px;">
+      <div class="card-header">
+        <div class="flex items-center gap-12">
+          <span class="badge ${color}"><span class="dot-pulse ${color}"></span> ${escHtml(s.Status)}</span>
+          <span class="bold">${escHtml(s.Name)}</span>
+          <span class="tag">${escHtml(s.StartType)}</span>
+        </div>
+        <div class="flex gap-8">
+          <button class="btn small" onclick="svcAction('${s.Name}','start')" ${running ? 'disabled' : ''}>▶ Start</button>
+          <button class="btn small danger" onclick="svcAction('${s.Name}','stop')" ${!running ? 'disabled' : ''}>■ Stop</button>
+          <button class="btn small primary" onclick="svcAction('${s.Name}','restart')">⟳ Restart</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function svcAction(name, action) {
+  toast(`${action[0].toUpperCase()+action.slice(1)}ing ${name}…`, 'info');
+  const res = await apiFetch(`/api/services/${name}/${action}`, 'POST');
+  if (res.ok !== undefined) {
+    toast(res.output || `${action} ${res.ok ? 'succeeded' : 'failed'}`, res.ok ? 'ok' : 'error');
+  }
+  const tunOut = document.getElementById('tun-action-output');
+  if (tunOut) tunOut.textContent = res.output || '(no output)';
+  setTimeout(loadServices, 2000);
+  setTimeout(refreshHeaderStatus, 3000);
+}
+
+async function quickAction(action, name) {
+  toast(`${action[0].toUpperCase()+action.slice(1)}ing ${name}…`, 'info');
+  const res = await apiFetch(`/api/services/${name}/${action}`, 'POST');
+  toast(res.output || (res.ok ? 'Done' : 'Failed'), res.ok ? 'ok' : 'error');
+  setTimeout(refreshHeaderStatus, 3500);
+}
+
+async function loadNssmInfo(name) {
+  const out = document.getElementById('nssm-output');
+  out.textContent = `Loading NSSM info for ${name}…`;
+  const res = await apiFetch(`/api/services/${name}/info`);
+  const parts = [res.qc, res.status, res.nssmGet && `AppParameters: ${res.nssmGet}`, res.nssmDir && `AppDirectory: ${res.nssmDir}`].filter(Boolean);
+  out.textContent = parts.join('\n\n') || res.raw || 'No NSSM info available';
+}
+
+async function loadEventLog(name) {
+  const el = document.getElementById('event-log-container');
+  el.innerHTML = '<div class="card-body text-muted">Loading…</div>';
+  const events = await apiFetch(`/api/services/${name}/events`);
+  if (!Array.isArray(events) || events.length === 0) {
+    el.innerHTML = '<div class="card-body text-muted">No matching events found in Windows Event Log.</div>';
+    return;
+  }
+  el.innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Time</th><th>ID</th><th>Level</th><th>Message</th></tr></thead>
+    <tbody>${events.map(e => `<tr>
+      <td class="text-sm">${escHtml(String(e.TimeCreated||'').split('T')[0])} ${escHtml(String(e.TimeCreated||'').split('T')[1]||'')}</td>
+      <td>${e.Id||''}</td>
+      <td><span class="badge ${e.LevelDisplayName==='Error'?'red':'yellow'}">${escHtml(String(e.LevelDisplayName||''))}</span></td>
+      <td class="text-sm" style="max-width:400px;overflow:hidden;text-overflow:ellipsis;">${escHtml(String((e.Message||'').substring(0,200)))}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+// ─── Git & Deploy ─────────────────────────────────────
+async function loadGitStatus() {
+  const data = await apiFetch('/api/git/status');
+  if (!data || data.error) return;
+  const c = data.commit || {};
+  setText('git-branch', data.branch);
+  setText('git-hash', c.hash || '—');
+  setText('git-msg', c.message || '—');
+  setText('git-author', c.author || '—');
+  setText('git-date', c.date || '—');
+  document.getElementById('git-dirty-badge').innerHTML = data.dirty
+    ? '<span class="badge yellow">Uncommitted changes</span>' : '<span class="badge green">Clean</span>';
+  setText('git-ahead',  data.ahead  || '0');
+  const behind = data.behind || 0;
+  document.getElementById('git-behind').innerHTML = behind > 0
+    ? `<span class="text-yellow bold">${behind}</span>` : '<span class="text-muted">0</span>';
+  const changed = document.getElementById('git-changed');
+  if (data.changed && data.changed.length) {
+    changed.textContent = data.changed.slice(0, 20).join('\n') + (data.changed.length > 20 ? `\n…and ${data.changed.length - 20} more` : '');
+  } else { changed.textContent = '(none)'; }
+}
+
+async function loadGitLog() {
+  const entries = await apiFetch('/api/git/log');
+  const tbody = document.getElementById('git-log-body');
+  if (!Array.isArray(entries)) { tbody.innerHTML = '<tr><td colspan="4" class="text-muted">Failed to load</td></tr>'; return; }
+  tbody.innerHTML = entries.map(e =>
+    `<tr><td class="code">${escHtml(e.hash)}</td><td class="text-sm">${escHtml(e.msg)}</td><td class="text-sm text-muted">${escHtml(e.author)}</td><td class="text-sm text-muted">${escHtml(e.relative)}</td></tr>`
+  ).join('') || '<tr><td colspan="4" class="text-muted">No commits</td></tr>';
+}
+
+async function checkUpdates() {
+  const btn = document.getElementById('btn-check-updates');
+  btn.disabled = true; btn.textContent = '⟳ Checking…';
+  const res = await apiFetch('/api/git/fetch', 'POST');
+  appendOpOutput(`[git fetch] ${res.output || 'Done'}`);
+  btn.disabled = false; btn.textContent = '↑ Check Updates';
+  toast(res.ok ? 'Fetch complete' : 'Fetch failed', res.ok ? 'ok' : 'error');
+  loadGitStatus();
+}
+
+// Generic operation runner
+const opEndpoints = {
+  'git-fetch':       { path: '/api/git/fetch', method: 'POST', label: 'git fetch' },
+  'git-pull':        { path: '/api/git/pull',  method: 'POST', label: 'git pull' },
+  'deploy-build':    { path: '/api/deploy/build',     method: 'POST', label: 'npm run build' },
+  'deploy-typecheck':{ path: '/api/deploy/typecheck', method: 'POST', label: 'tsc --noEmit' },
+  'deploy-install':  { path: '/api/deploy/install',   method: 'POST', label: 'npm install' },
+  'deploy-run':      { path: '/api/deploy/run',       method: 'POST', label: 'Full Deploy' },
+  'deploy-audit':    { path: '/api/deploy/audit',     method: 'POST', label: 'npm audit' },
+  'db-backup':       { path: '/api/db/backup',        method: 'POST', label: 'DB Backup' },
+};
+
+async function runOp(opName, loadingMsg) {
+  const op = opEndpoints[opName];
+  if (!op) return;
+  const statusEl = document.getElementById('op-status');
+  const outEl    = document.getElementById('op-output');
+  if (statusEl) { statusEl.innerHTML = '<span class="spin">⟳</span> Running…'; statusEl.style.color = 'var(--yellow)'; }
+  if (outEl) outEl.textContent = `▶ ${loadingMsg || op.label}…\n`;
+  toast(loadingMsg || `Running ${op.label}…`, 'info', 2000);
+
+  const res = await apiFetch(op.path, op.method);
+
+  const output = res.output || res.error || '(no output)';
+  if (opName === 'db-backup') {
+    const el = document.getElementById('backup-output');
+    if (el) el.textContent = output;
+    toast(res.ok ? 'Backup complete' : 'Backup failed', res.ok ? 'ok' : 'error');
+    loadBackups();
+    return;
+  }
+  if (outEl) outEl.textContent = output;
+  if (statusEl) {
+    statusEl.textContent = res.ok ? '✓ Completed' : '✗ Failed';
+    statusEl.style.color = res.ok ? 'var(--green)' : 'var(--red)';
+  }
+  if (outEl) outEl.scrollTop = outEl.scrollHeight;
+  toast(`${op.label} ${res.ok ? 'completed' : 'failed'}`, res.ok ? 'ok' : 'error');
+  if (opName === 'git-pull') loadGitStatus();
+}
+
+function confirmOp(opName, message, title) {
+  if (confirm(`${title || opName}\n\n${message}`)) {
+    runOp(opName, `Running ${title || opName}…`);
+  }
+}
+
+function appendOpOutput(text) {
+  const el = document.getElementById('op-output');
+  if (!el) return;
+  el.textContent += '\n' + text;
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearOpOutput() {
+  const el = document.getElementById('op-output');
+  if (el) el.textContent = '';
+  const statusEl = document.getElementById('op-status');
+  if (statusEl) { statusEl.textContent = ''; }
+}
+
+// ─── Logs ─────────────────────────────────────────────
+async function loadLogList() {
+  const logs = await apiFetch('/api/logs');
+  const sel  = document.getElementById('log-file-select');
+  const tbody = document.getElementById('log-files-table');
+  if (!Array.isArray(logs)) return;
+
+  sel.innerHTML = '<option value="">— Select log file —</option>' +
+    logs.map(l => `<option value="${escHtml(l.path)}" data-type="${escHtml(l.type)}">${escHtml(l.name)} (${escHtml(l.type)})</option>`).join('');
+
+  tbody.innerHTML = logs.length
+    ? logs.map(l => `<tr>
+        <td class="code text-sm">${escHtml(l.name)}</td>
+        <td><span class="tag">${escHtml(l.type)}</span></td>
+        <td class="text-sm">${fmtBytes(l.size)}</td>
+        <td class="text-sm text-muted">${new Date(l.modified).toLocaleString()}</td>
+        <td><button class="btn small" onclick="openLog(null,'${escHtml(l.path)}')">View</button></td>
+      </tr>`).join('')
+    : '<tr><td colspan="5" class="text-muted" style="padding:16px;">No log files found</td></tr>';
+}
+
+async function openLog(type, filePath) {
+  stopLiveTail();
+  currentLogType = type || 'custom';
+  const el = document.getElementById('log-content');
+  const label = document.getElementById('log-path-label');
+  el.textContent = 'Loading…';
+
+  const url = type ? `/api/logs/${type}` : null;
+  if (!url && !filePath) return;
+
+  let data;
+  if (url) {
+    data = await apiFetch(url);
+  } else {
+    // For direct file paths we use the list API to get the type
+    const sel = document.getElementById('log-file-select');
+    const matchedOpt = Array.from(sel.options).find(o => o.value === filePath);
+    const t = matchedOpt?.dataset?.type;
+    if (t && t !== 'custom') {
+      data = await apiFetch(`/api/logs/${t}`);
+      currentLogType = t;
+    } else {
+      el.textContent = '(Cannot view this log via panel — no type mapping found)';
+      return;
+    }
+  }
+
+  label.textContent = data?.path || type || '?';
+  el.textContent = data?.content || '(empty)';
+  el.scrollTop = el.scrollHeight;
+}
+
+function refreshCurrentLog() {
+  if (currentLogType) openLog(currentLogType);
+}
+
+async function clearCurrentLog() {
+  if (!currentLogType || !['nssm','server'].includes(currentLogType)) {
+    toast('Can only clear server/nssm logs', 'error'); return;
+  }
+  if (!confirm(`Clear ${currentLogType} log? This cannot be undone.`)) return;
+  const res = await apiFetch(`/api/logs/${currentLogType}`, 'DELETE');
+  toast(res.ok ? 'Log cleared' : (res.error || 'Failed'), res.ok ? 'ok' : 'error');
+  if (res.ok) openLog(currentLogType);
+}
+
+let liveSource = null;
+function toggleLiveTail() {
+  const btn = document.getElementById('btn-live-toggle');
+  const ind = document.getElementById('live-indicator');
+  if (liveSource) {
+    stopLiveTail();
+    btn.textContent = '▶ Go Live';
+    ind.classList.add('hidden');
+  } else {
+    if (!currentLogType) { toast('Select a log first', 'error'); return; }
+    startLiveTail(currentLogType);
+    btn.textContent = '■ Stop Live';
+    ind.classList.remove('hidden');
+  }
+}
+
+function startLiveTail(type) {
+  stopLiveTail();
+  const el = document.getElementById('log-content');
+  liveSource = new EventSource(`/api/logs/${type}/stream?token=${TOKEN}`);
+  liveSource.onmessage = e => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'init') { el.textContent = msg.content; }
+      else if (msg.type === 'append' && msg.lines) {
+        const lines = msg.lines.filter(Boolean);
+        if (lines.length) { el.textContent += '\n' + lines.join('\n'); }
+      }
+      el.scrollTop = el.scrollHeight;
+    } catch { el.textContent += '\n' + e.data; }
+  };
+  liveSource.onerror = () => { stopLiveTail(); toast('Live tail disconnected', 'error'); };
+}
+
+function stopLiveTail() {
+  if (liveSource) { liveSource.close(); liveSource = null; }
+  const btn = document.getElementById('btn-live-toggle');
+  const ind = document.getElementById('live-indicator');
+  if (btn) btn.textContent = '▶ Go Live';
+  if (ind) ind.classList.add('hidden');
+}
+
+// ─── Database ─────────────────────────────────────────
+async function loadDbStatus() {
+  const data = await apiFetch('/api/db/status');
+  const apiOk = data.apiReachable;
+  const dbOk  = data.ok;
+
+  setOvCard('db-api', apiOk, apiOk ? 'Reachable' : 'Unreachable', '🌐');
+  setOvCard('db-status', dbOk, dbOk ? 'Connected' : 'Offline', '🗄️');
+  document.getElementById('db-latency-val').textContent = data.latency ? `${data.latency}ms` : '—';
+
+  const detail = document.getElementById('db-health-detail');
+  if (data.health && typeof data.health === 'object') {
+    detail.innerHTML = Object.entries(data.health).map(([k, v]) => {
+      const ok = v === 'ok' || v === true || (typeof v === 'number' && v > 0);
+      const bad = v === 'error' || v === false || v === 'fail';
+      const color = ok ? 'text-green' : (bad ? 'text-red' : '');
+      return `<div class="info-row"><span class="info-key">${escHtml(k)}</span><span class="info-val ${color}">${escHtml(String(v))}</span></div>`;
+    }).join('');
+  } else {
+    detail.innerHTML = '<span class="text-muted">No health data available</span>';
+  }
+}
+
+async function loadBackups() {
+  const backups = await apiFetch('/api/db/backups');
+  const tbody = document.getElementById('backup-table');
+  if (!Array.isArray(backups) || !backups.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-muted" style="padding:16px;">No backup files found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = backups.map(b =>
+    `<tr><td class="code text-sm">${escHtml(b.name)}</td><td>${fmtBytes(b.size)}</td><td class="text-muted text-sm">${new Date(b.modified).toLocaleString()}</td><td class="text-muted text-sm" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">${escHtml(b.dir)}</td></tr>`
+  ).join('');
+}
+
+// ─── Processes ────────────────────────────────────────
+async function loadProcesses() {
+  const procs = await apiFetch('/api/processes');
+  const tbody = document.getElementById('procs-table');
+  if (!Array.isArray(procs) || !procs.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="padding:16px;">No node/cloudflared processes found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = procs.map(p =>
+    `<tr>
+      <td class="code">${p.Id || p.id || '—'}</td>
+      <td><span class="badge ${(p.ProcessName||'').includes('node') ? 'blue' : 'green'}">${escHtml(p.ProcessName||'')}</span></td>
+      <td>${p.CPU ?? '—'}</td>
+      <td>${p.MemMB != null ? `${p.MemMB} MB` : '—'}</td>
+      <td class="text-muted text-sm">${p.StartTime ? new Date(p.StartTime).toLocaleString() : '—'}</td>
+      <td><button class="btn small danger" onclick="killProc(${p.Id || p.id})">Kill</button></td>
+    </tr>`
+  ).join('');
+}
+
+async function killProc(pid) {
+  if (!confirm(`Kill process ${pid}? This may cause a service restart.`)) return;
+  const res = await apiFetch(`/api/processes/${pid}`, 'DELETE');
+  toast(res.output || (res.ok ? 'Killed' : res.error || 'Failed'), res.ok ? 'ok' : 'error');
+  if (res.ok) setTimeout(loadProcesses, 1500);
+}
+
+async function loadPorts() {
+  const ports = await apiFetch('/api/ports');
+  const el = document.getElementById('ports-body');
+  if (!Array.isArray(ports)) { el.innerHTML = '<span class="text-muted">Failed to check ports</span>'; return; }
+  el.innerHTML = `<div class="flex gap-16 flex-wrap">` +
+    ports.map(p => `<div class="status-card" style="padding:12px 16px;gap:10px;">
+      <div class="status-icon ${p.Open ? 'green' : 'red'}" style="font-size:14px;width:32px;height:32px;">${p.Open ? '●' : '○'}</div>
+      <div><div class="status-label">Port ${p.Port}</div><div class="status-value ${p.Open ? 'green' : 'red'}">${p.Open ? 'Open' : 'Closed'}</div></div>
+    </div>`).join('') + '</div>';
+}
+
+function toggleProcAutoRefresh() {
+  const checked = document.getElementById('auto-refresh-procs').checked;
+  if (checked) {
+    procRefreshInterval = setInterval(loadProcesses, 10000);
+    toast('Process auto-refresh enabled (10s)', 'info', 2500);
+  } else {
+    clearInterval(procRefreshInterval);
+    procRefreshInterval = null;
+  }
+}
+
+// ─── System ───────────────────────────────────────────
+async function loadSystem() {
+  const data = await apiFetch('/api/system');
+  if (!data || data.error) { toast('Failed to load system info', 'error'); return; }
+
+  // Host card
+  document.getElementById('sys-host-body').innerHTML = [
+    ['Hostname',      data.hostname],
+    ['Platform',      `${data.platform} ${data.arch}`],
+    ['OS Release',    data.osRelease],
+    ['Node.js',       data.nodeVersion],
+    ['Git',           data.gitVersion],
+    ['System Uptime', fmtUptime(data.uptime?.system)],
+    ['Panel Uptime',  fmtUptime(data.uptime?.process)],
+  ].map(([k, v]) => `<div class="info-row"><span class="info-key">${k}</span><span class="info-val">${escHtml(String(v||'—'))}</span></div>`).join('');
+
+  // CPU & Memory
+  const mem = data.memory || {};
+  const usedMem = (mem.total - mem.free) || 0;
+  const memPct  = mem.total ? Math.round(usedMem / mem.total * 100) : 0;
+  const cpu = data.cpu || {};
+  document.getElementById('sys-perf-body').innerHTML = `
+    <div class="info-row"><span class="info-key">CPU Model</span><span class="info-val text-sm">${escHtml(cpu.model||'—')}</span></div>
+    <div class="info-row"><span class="info-key">CPU Cores</span><span class="info-val">${cpu.count||'—'}</span></div>
+    <div class="info-row"><span class="info-key">CPU Usage</span><span class="info-val ${cpu.usage > 80 ? 'text-red' : cpu.usage > 50 ? 'text-yellow' : 'text-green'}">${cpu.usage != null ? cpu.usage + '%' : '—'}</span></div>
+    <div class="info-row"><span class="info-key">Total RAM</span><span class="info-val">${fmtBytes(mem.total)}</span></div>
+    <div class="info-row"><span class="info-key">Used RAM</span><span class="info-val">${fmtBytes(usedMem)} (${memPct}%)</span></div>
+    <div class="info-row"><span class="info-key">Free RAM</span><span class="info-val">${fmtBytes(mem.free)}</span></div>
+    <div class="mt-12"><div class="label mb-8">Memory ${memPct}%</div><div class="progress-bar"><div class="progress-fill ${memPct > 85 ? 'red' : memPct > 70 ? 'yellow' : 'green'}" style="width:${memPct}%"></div></div></div>`;
+
+  // Disks
+  const disks = Array.isArray(data.disks) ? data.disks : [];
+  document.getElementById('sys-disk-body').innerHTML = disks.length
+    ? disks.map(d => {
+        const total = (d.Used || 0) + (d.Free || 0);
+        const pct = total > 0 ? Math.round(d.Used / total * 100) : 0;
+        const color = pct > 90 ? 'red' : pct > 75 ? 'yellow' : 'green';
+        return `<div class="mb-8">
+          <div class="flex justify-between mb-8"><span class="bold">Drive ${escHtml(d.Name||'?')}:</span><span class="text-muted text-sm">${fmtBytes(d.Used)} / ${fmtBytes(total)} (${pct}%)</span></div>
+          <div class="progress-bar"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
+        </div>`;
+      }).join('')
+    : '<span class="text-muted">No disk info available</span>';
+
+  // Network
+  const ifaces = Array.isArray(data.interfaces) ? data.interfaces : [];
+  document.getElementById('sys-net-body').innerHTML = ifaces.length
+    ? `<div class="flex gap-12 flex-wrap">${ifaces.map(i => `<div class="status-card" style="padding:10px 14px;gap:8px;"><div><div class="status-label">${escHtml(i.InterfaceAlias||'?')}</div><div class="info-val code">${escHtml(i.IPAddress||'?')}</div></div></div>`).join('')}</div>`
+    : '<span class="text-muted">No network interfaces found</span>';
+
+  // Env
+  const env = data.env || {};
+  document.getElementById('sys-env-body').innerHTML = Object.entries(env).map(([k, v]) => {
+    const ok = v === true || (typeof v === 'string' && v !== '(not set)');
+    const color = (v === true) ? 'text-green' : (v === false) ? 'text-red' : '';
+    return `<div class="info-row"><span class="info-key">${k}</span><span class="info-val ${color}">${v === true ? '✓ Set' : v === false ? '✗ Missing' : escHtml(String(v))}</span></div>`;
+  }).join('');
+
+  // Paths
+  document.getElementById('sys-paths-body').innerHTML = [
+    ['Project Root',  data.projectRoot],
+    ['Logs Root',     data.logsRoot],
+    ['Backups Dir',   data.backupsDir],
+    ['Panel Port',    data.panelPort],
+    ['API Port',      data.apiPort],
+  ].map(([k, v]) => `<div class="info-row"><span class="info-key">${k}</span><span class="info-val code text-sm">${escHtml(String(v||'—'))}</span></div>`).join('');
+}
+
+// ─── Tunnel ───────────────────────────────────────────
+async function loadTunnel() {
+  const data = await apiFetch('/api/tunnel');
+  if (!data) return;
+  const proc = data.process || {};
+  const pub  = data.public  || {};
+
+  setOvCard('tun-proc', proc.Running, proc.Running ? `Running (PID ${proc.Pid})` : 'Not Running', '☁️');
+  setOvCard('tun-pub',  pub.ok, pub.ok ? `HTTP ${pub.status}` : 'Unreachable', '🌎');
+
+  // Set sidebar dot
+  setNavDot('sdot-tunnel', proc.Running);
+
+  document.getElementById('tun-detail-body').innerHTML = [
+    ['Running',    proc.Running ? '✓ Yes' : '✗ No'],
+    ['PID',        proc.Pid || '—'],
+    ['Memory',     proc.MemMB != null ? `${proc.MemMB} MB` : '—'],
+    ['CPU',        proc.CPU  != null ? `${proc.CPU}s` : '—'],
+    ['Started',    proc.StartTime ? new Date(proc.StartTime).toLocaleString() : '—'],
+  ].map(([k, v]) => `<div class="info-row"><span class="info-key">${k}</span><span class="info-val">${escHtml(String(v))}</span></div>`).join('');
+
+  document.getElementById('tun-pub-body').innerHTML = [
+    ['URL',     'https://api.flightpoints.uk/api/health'],
+    ['Status',  pub.ok ? '✓ Online' : '✗ Offline'],
+    ['HTTP',    pub.status || '?'],
+    ['Latency', pub.latency != null ? `${pub.latency}ms` : '—'],
+  ].map(([k, v]) => `<div class="info-row"><span class="info-key">${k}</span><span class="info-val ${k==='Status'&&pub.ok?'text-green':k==='Status'?'text-red':''}">${escHtml(String(v))}</span></div>`).join('');
+}
+
+// ─── Utilities ────────────────────────────────────────
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text || '—';
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtUptime(secs) {
+  if (!secs) return '—';
+  const d = Math.floor(secs / 86400);
+  const h = Math.floor((secs % 86400) / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  return (d > 0 ? `${d}d ` : '') + (h > 0 ? `${h}h ` : '') + `${m}m`;
+}
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  if (b < 1024) return `${b} B`;
+  if (b < 1048576) return `${(b/1024).toFixed(1)} KB`;
+  if (b < 1073741824) return `${(b/1048576).toFixed(1)} MB`;
+  return `${(b/1073741824).toFixed(2)} GB`;
+}
+
+// ─── Boot ─────────────────────────────────────────────
+checkAuth();
+</script>
+</body>
+</html>

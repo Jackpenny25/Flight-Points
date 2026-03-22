@@ -10,7 +10,8 @@
     "server": "tsx watch server/server.ts",
     "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
     "start": "concurrently \"npm run preview\" \"npm run server\"",
-    "deploy": "npm run build"
+    "deploy": "npm run build",
+    "panel": "node panel/panel-server.js"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

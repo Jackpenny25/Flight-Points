@@ -144,6 +144,20 @@ Always test using `npm run build` and `npm run server` at the end of large chang
 
 **DBeaver via Tunnel:** `cloudflared access tcp --hostname db.flightpoints.uk --url localhost:6543`.
 
+
+## Server-Side Checklist (Post-Implementation)
+**Control Panel:** Standalone server management GUI at port 4000.
+- Files: `panel/panel-server.js` (backend, pure Node.js built-ins only), `panel/index.html` (frontend SPA).
+- Auth: PIN via `PANEL_PIN` or falls back to `ADMIN_PIN` from `.env.local`. Rate-limited (5 attempts → 15min lockout). 2-hour sliding session.
+- Install as service: `panel\Install-PanelService.ps1` — creates NSSM service `flight-points-panel` on port 4000.
+- Start manually: `npm run panel` (added to package.json).
+- Configure Cloudflare tunnel subdomain (e.g. `panel.flightpoints.uk → localhost:4000`) for remote access.
+- Optional `.env.local` overrides: `PANEL_PORT` (default 4000), `PANEL_LOGS_ROOT` (default `C:\inetpub\wwwroot\Flight-Points\Logs`), `PANEL_BACKUPS_DIR` (default `C:\inetpub\wwwroot\Flight-Points\Backups`).
+- Key API endpoints: `/api/overview`, `/api/services/:name/:action`, `/api/git/*`, `/api/deploy/*`, `/api/logs/:type[/stream]`, `/api/db/*`, `/api/processes`, `/api/system`, `/api/tunnel`, `/api/ports`.
+- Log streaming via SSE (`/api/logs/:type/stream`).
+- Only kills `node` and `cloudflared` processes (no arbitrary kill).
+- Does NOT expose env variable values — only checks for presence/setting.
+
 ---
 
 ## Server-Side Checklist (Post-Implementation)
@@ -316,7 +330,29 @@ Entry template (copy for each chat):
        - Optional: rotate tunnel log file to remove stale historic error lines for clearer monitoring.
     Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
 
-**Last Updated:** 2026-03-20 (NSSM root cause found and fixed; site restored)
+**Last Updated:** 2026-03-22 (Control Panel added)
+
+- Date: 2026-03-22
+    Chat summary: Built a full standalone GUI Control Panel (`panel/`) — separate from the main website, runs on port 4000 as its own process/NSSM service. Rich dashboard covering services, git/deploy, logs, DB, processes, system, and tunnel status. All features previously requiring PowerShell windows are now accessible from a browser.
+    Files touched: `panel/panel-server.js`, `panel/index.html`, `panel/Install-PanelService.ps1`, `package.json`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - New NSSM service `flight-points-panel` on port 4000.
+       - Auth: PIN from `PANEL_PIN`/`ADMIN_PIN` + session token (2h sliding). Rate-limited (5 attempts → 15min lockout).
+       - Uses only Node.js built-in modules — zero npm install needed for panel.
+       - `npm run panel` added to package.json scripts.
+       - Panel API routes: overview, services CRUD, git status/log/fetch/pull, deploy (build/typecheck/install/run/audit), logs list/view/stream(SSE)/clear, DB status/backup/list, processes list/kill, system info, tunnel status, port check.
+       - Log streaming via SSE — live-tail of server/tunnel/deploy logs in browser.
+       - Process kill restricted to `node` and `cloudflared` only (safety).
+       - Env var check shows presence only (never exposes values).
+       - NSSM info via `sc.exe qc` + `nssm get` shell commands (avoids JS template literal backtick collisions).
+       - Install script auto-detects node.exe + nssm.exe, confirms .env.local PIN exists, sets AppEnvironmentExtra PATH.
+       - `PANEL_LOGS_ROOT`, `PANEL_BACKUPS_DIR`, `PANEL_PORT` all overridable from .env.local.
+    Validation performed: `node --check panel/panel-server.js` → exit 0. `npm run build` → exit 0.
+    Risks or follow-up:
+       - Add `panel.flightpoints.uk → localhost:4000` Cloudflare tunnel route for remote access.
+       - Run `panel\Install-PanelService.ps1` on production server to register as NSSM service.
+       - Consider adding HTTPS/TLS termination at Cloudflare (already handled by Cloudflare tunnel).
+    Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`
 
 - Date: 2026-03-20 (RESOLVED)
    Chat summary: Root cause of port 3001 unreachable was NSSM configured to launch `npm.ps1` (a PowerShell script) directly. NSSM uses CreateProcess which cannot execute .ps1 or .cmd files. Fixed by setting Application=cmd.exe and AppParameters="/c npm run server". Also set AppEnvironmentExtra to inject the correct PATH (nodejs dir + npm global) for the LocalSystem account. Server now starts successfully on port 3001.
