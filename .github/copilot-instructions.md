@@ -333,6 +333,17 @@ Entry template (copy for each chat):
 **Last Updated:** 2026-03-22 (Control Panel added)
 
 - Date: 2026-03-22
+    Chat summary: User hit `NSSM not found` when running panel installer on production server. Improved installer to detect additional common NSSM locations and print actionable install/path guidance.
+    Files touched: `panel/Install-PanelService.ps1`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - `Find-Nssm()` now checks extra paths: `C:\ProgramData\chocolatey\bin\nssm.exe`, `C:\Users\Administrator\scoop\shims\nssm.exe`, `C:\Windows\System32\nssm.exe`.
+       - On missing NSSM, script now prints direct remediation steps (choco install command + `-NssmPath` example) before failing.
+    Validation performed: PowerShell parser check (`ParseFile`) -> `Parse OK`.
+    Risks or follow-up:
+       - If NSSM is installed in a custom folder, operator still needs to pass `-NssmPath` explicitly.
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-22
     Chat summary: Fixed PowerShell parser errors in `panel\Install-PanelService.ps1` reported on server (`missing terminator`, `missing closing }`).
     Files touched: `panel/Install-PanelService.ps1`, `.github/copilot-instructions.md`
     Behavior/decision changes:

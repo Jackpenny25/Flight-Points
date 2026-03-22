@@ -28,7 +28,15 @@ function Find-Nssm {
     $found = Get-Command nssm -ErrorAction SilentlyContinue
     if ($found) { return $found.Source }
     # Common locations
-    foreach ($loc in @('C:\nssm\nssm.exe','C:\nssm\win64\nssm.exe','C:\Program Files\nssm\nssm.exe','C:\tools\nssm\nssm.exe')) {
+    foreach ($loc in @(
+        'C:\nssm\nssm.exe',
+        'C:\nssm\win64\nssm.exe',
+        'C:\Program Files\nssm\nssm.exe',
+        'C:\tools\nssm\nssm.exe',
+        'C:\ProgramData\chocolatey\bin\nssm.exe',
+        'C:\Users\Administrator\scoop\shims\nssm.exe',
+        'C:\Windows\System32\nssm.exe'
+    )) {
         if (Test-Path $loc) { return $loc }
     }
     return $null
@@ -46,6 +54,12 @@ function Find-Node {
 # Locate tools
 $nssm = if ($NssmPath) { $NssmPath } else { Find-Nssm }
 if (-not $nssm) {
+    Write-Host "Checked PATH and common locations for nssm.exe, but none were found." -ForegroundColor Yellow
+    Write-Host "Install NSSM, then re-run this script." -ForegroundColor Yellow
+    Write-Host "Example:" -ForegroundColor Yellow
+    Write-Host "  choco install nssm -y"
+    Write-Host "Or provide -NssmPath explicitly:" -ForegroundColor Yellow
+    Write-Host "  panel\Install-PanelService.ps1 -NssmPath 'C:\nssm\win64\nssm.exe'"
     Write-Error "NSSM not found. Install from https://nssm.cc/ and ensure it is on PATH or provide -NssmPath."
     exit 1
 }
