@@ -45,7 +45,7 @@ const BACKUPS_DIR  = process.env.PANEL_BACKUPS_DIR || 'C:\\inetpub\\wwwroot\\Fli
 const PANEL_LOG_DIR = path.join(LOGS_ROOT, 'Panel');
 const PANEL_DIAGNOSTICS_LOG = path.join(PANEL_LOG_DIR, 'panel-diagnostics.log');
 
-const SERVICES = ['flight-points', 'flight-points-tunnel'];
+const SERVICES = ['flight-points', 'flight-points-tunnel', 'flight-points-panel'];
 const TASKS = {
   'server-tunnel': 'Flight-Points_Server_Tunnel',
   'auto-deploy': 'FlightPoints-AutoDeploy',
@@ -592,6 +592,42 @@ async function handleServiceAction(req, res, name, action) {
   json(res, 200, { ok: (result.out || '').startsWith('OK'), output: result.out || result.err });
 }
 
+// POST /api/services/restart-app — restart flight-points + flight-points-tunnel (panel stays up)
+async function handleRestartApp(req, res) {
+  const result = await ps(`
+    $out = @()
+    try {
+      Restart-Service -Name 'flight-points' -Force -EA Stop
+      $out += 'OK: flight-points restarted'
+    } catch { $out += "ERROR flight-points: $($_.Exception.Message)" }
+    Start-Sleep -Seconds 2
+    try {
+      Restart-Service -Name 'flight-points-tunnel' -Force -EA Stop
+      $out += 'OK: flight-points-tunnel restarted'
+    } catch { $out += "ERROR flight-points-tunnel: $($_.Exception.Message)" }
+    $out -join [char]10
+  `, 90000);
+  const output = [result.out, result.err].filter(Boolean).join('\n') || 'Done';
+  json(res, 200, { ok: !result.err && result.out.includes('OK'), output });
+}
+
+// POST /api/panel/restart — restart panel + all managed services
+function handlePanelRestart(req, res) {
+  json(res, 200, { ok: true, message: 'Restart initiated. Panel and all services will restart in ~1s.' });
+  // Detached PowerShell process restarts all services; survives this process dying
+  const script = [
+    "Start-Sleep -Seconds 1",
+    "Restart-Service -Name 'flight-points'        -Force -ErrorAction SilentlyContinue",
+    "Restart-Service -Name 'flight-points-tunnel' -Force -ErrorAction SilentlyContinue",
+    "Restart-Service -Name 'flight-points-panel'  -Force -ErrorAction SilentlyContinue"
+  ].join('; ');
+  const child = require('child_process').spawn(
+    'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
+    { detached: true, stdio: 'ignore', windowsHide: true }
+  );
+  child.unref();
+}
+
 // GET /api/git/status
 async function handleGitStatus(req, res) {
   const [branch, commitInfo, statusOut, aheadBehind] = await Promise.all([
@@ -1034,6 +1070,10 @@ const server = http.createServer(async (req, res) => {
   if (method === 'GET' && p === '/api/overview')         return handleOverview(req, res);
   if (method === 'GET' && p === '/api/deploy-status')    return handleDeployStatus(req, res);
   if (method === 'GET' && p === '/api/ports')            return handlePortCheck(req, res);
+
+  // Panel self-restart
+  if (method === 'POST' && p === '/api/panel/restart')   return handlePanelRestart(req, res);
+  if (method === 'POST' && p === '/api/services/restart-app') return handleRestartApp(req, res);
 
   // Services
   if (method === 'GET' && p === '/api/services')         return handleServices(req, res);

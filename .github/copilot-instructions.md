@@ -355,7 +355,40 @@ Entry template (copy for each chat):
          Suggested context destinations: `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
 
 - Date: 2026-03-22
-    Chat summary: Migrated admin safeguard authentication away from PIN-first usage to authenticator-first with one long backup code fallback, across both main site safeguard verification and standalone panel login.
+    Chat summary: Fixed panel login bug, added form wrapper, and added comprehensive restart buttons.
+    Files touched: `panel/panel-server.cjs`, `panel/index.html`
+    Behavior/decision changes:
+      - BUG FIX: `apiFetch` was calling `doLogout()` (→ page reload) on every 401, even during login when TOKEN was empty. Result: wrong authenticator codes silently reloaded the page, users never saw the error. Fix: only call `doLogout()` when TOKEN is set; otherwise return the JSON body so `doLogin()` can show the error message.
+      - FIX: Login input now wrapped in `<form onsubmit="doLogin(); return false;">` to eliminate the browser DOM warning "Password field not contained in a form". Removed redundant keydown/Enter listener (form submit handles it). Changed `autocomplete` to `current-password`.
+      - `SERVICES` array now includes `'flight-points-panel'` so it appears in the services list.
+      - `loadServices()` now renders panel service with a "this panel" badge, no Start/Stop buttons, and its Restart button calls `restartPanel()` (triggers reconnect overlay) instead of the generic `svcAction`.
+      - New endpoint `POST /api/services/restart-app` (auth required): restarts `flight-points` then `flight-points-tunnel` sequentially (awaited, returns output), without killing the panel.
+      - New "Batch Actions" card at top of Services section with two buttons:
+        - "⟳ Restart API + Tunnel" → calls `restartApp()` → POST /api/services/restart-app → shows output in terminal div
+        - "🔄 Restart Everything" → calls `restartPanel()` (same as header button — triggers full restart + reconnect overlay)
+      - New `restartApp()` JS function: POSTs to restart-app, shows output in batch card terminal, shows toast, refreshes services list after 3s.
+    Validation performed: `npm run build` passed (1826 modules, 8.86s).
+    Risks or follow-up:
+      - Rate-lock concern: users who tried the wrong code multiple times before the fix was deployed may be locked for 15 minutes. Lockout resets automatically.
+      - Restart-app PS commands require the panel service to run with sufficient Windows permissions to call Restart-Service.
+    Suggested context destinations: `50-feature-behavior.md`, `60-open-items-and-handover.md`
+
+    Files touched: `panel/panel-server.cjs`, `panel/index.html`
+    Behavior/decision changes:
+       - New endpoint `POST /api/panel/restart` (auth required) in `panel-server.cjs`:
+         - Immediately responds with `{ ok: true, message: '...' }` before dying.
+         - Spawns a detached, unref'd `powershell.exe` process (survives panel death) that sleeps 1s then calls `Restart-Service` on: `flight-points`, `flight-points-tunnel`, `flight-points-panel` (in that order).
+       - New `🔄 Restart All` danger button added to the panel header (between Check Updates and Logout).
+       - `restartPanel()` JS function: confirms via `window.confirm`, calls the endpoint, clears session, shows a full-screen animated reconnect overlay.
+       - `startReconnectPoller()`: polls `GET /api/auth/check` with escalating delay (2.5s initial, +500ms per attempt, max 8s) until panel is back; then auto-reloads to login screen.
+       - Reconnect overlay has animated pulsing dots (blue → green on success).
+       - Sessions are in-memory so user must log back in after restart.
+    Validation performed: `npm run build` passed (1826 modules, 9.79s).
+    Risks or follow-up:
+       - Requires `flight-points-panel` NSSM service to be installed; if run manually (`npm run panel`), the panel process dies and does not auto-restart (user must restart manually).
+       - Panel service name is hardcoded as `flight-points-panel`; verify this matches the installed NSSM service name.
+    Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`
+
     Files touched: `server/server.ts`, `panel/panel-server.cjs`, `panel/index.html`, `panel/Install-PanelService.ps1`, `src/app/components/AdminSafeguardDialog.tsx`, `src/app/components/AdminSignups.tsx`, `src/app/components/Dashboard.tsx`, `src/app/components/PointsManager.tsx`, `src/app/components/CadetsManager.tsx`, `src/utils/api.ts`, `src/utils/permissions.ts`, `src/app/components/PrivacyPolicyModal.tsx`, `.gitignore`, `.github/copilot-instructions.md`
     Behavior/decision changes:
        - Main API safeguard verification (`POST /api/admin/verify-pin`) now validates either:
