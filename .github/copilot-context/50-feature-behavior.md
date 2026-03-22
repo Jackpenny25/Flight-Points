@@ -8,6 +8,16 @@
 - The panel UI now supports a brighter visual theme, a collapsible desktop sidebar, and an off-canvas mobile sidebar with overlay dismissal.
 - System and Database sections include live action-output terminals so remote admin actions can be run without opening a separate PowerShell window.
 
+## Control panel authentication behavior
+- Panel auth supports backup PIN plus optional TOTP via `PANEL_TOTP_SECRET`.
+- The login UX auto-switches between PIN-only wording and `Panel Backup PIN or Authenticator Code` wording when TOTP is configured.
+- `GET /api/auth/check` on the panel returns `totpEnabled` so the panel frontend can adapt its login copy and handling.
+
+## Main website admin safeguards (2026-03-22)
+- High-impact account and role-default actions in the Accounts tab now require a fresh admin safeguard verification dialog.
+- Verification accepts either the existing 6-digit admin PIN or a 6-digit authenticator code when `ADMIN_TOTP_SECRET` is configured.
+- Existing admin unlock flows in Dashboard, Cadets, and Points now also accept authenticator codes instead of being PIN-only.
+
 ## Account access controls (2026-03-18)
 - Accounts tab supports per-user access overrides for all roles (cadet, staff, pointgiver, snco, presentation).
 - Access editor supports:

@@ -1,6 +1,7 @@
 // src/utils/auth.ts
 import { useState } from 'react';
 import { sanitizePermissionOverrides } from './permissions';
+import { clearAdminSafeguardToken } from './adminSafeguard';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://flightpoints.uk/api';
 
@@ -74,6 +75,7 @@ export function logout() {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
   localStorage.removeItem('localStore_73a3871f_v1');
+  clearAdminSafeguardToken();
   // Remove any legacy auth-provider keys
   Object.keys(localStorage).forEach(key => {
     const legacyPrefixes = ['sb-', 'supa-'];

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../utils/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { Copy, KeyRound, UserPlus, Trash2, Pencil, Shield } from 'lucide-react';
 import { PERMISSION_ACTION_META, PERMISSION_TAB_META, sanitizePermissionOverrides, ROLE_PERMISSION_DEFAULTS } from '../../utils/permissions';
 import type { EffectivePermissions } from '../../utils/permissions';
+import { AdminSafeguardDialog } from './AdminSafeguardDialog';
+import { clearAdminSafeguardToken } from '../../utils/adminSafeguard';
 
 interface AdminSignupsProps {
   accessToken: string;
@@ -88,6 +90,10 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
   const [editingUsernameId, setEditingUsernameId] = useState<string | null>(null);
   const [editUsernameValue, setEditUsernameValue] = useState('');
   const [savingUsername, setSavingUsername] = useState(false);
+  const [safeguardDialogOpen, setSafeguardDialogOpen] = useState(false);
+  const [safeguardTitle, setSafeguardTitle] = useState('Admin Verification Required');
+  const [safeguardDescription, setSafeguardDescription] = useState('Enter your admin PIN or authenticator code to continue.');
+  const pendingSafeguardAction = useRef<null | (() => Promise<void>)>(null);
 
   // Generate username preview (mirrors server logic)
   function generateUsernamePreview(name: string): string {
@@ -156,6 +162,14 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
     }
   };
 
+  const openSafeguardDialog = (title: string, description: string, action: () => Promise<void>) => {
+    clearAdminSafeguardToken();
+    pendingSafeguardAction.current = action;
+    setSafeguardTitle(title);
+    setSafeguardDescription(description);
+    setSafeguardDialogOpen(true);
+  };
+
   const handleRoleDefaultToggle = (role: string, group: 'tabs' | 'actions', key: string, value: boolean) => {
     setRoleDefaultEdits(prev => ({
       ...prev,
@@ -167,19 +181,26 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
   };
 
   const handleSaveRoleDefault = async (role: string) => {
-    setSavingRoleDefault(true);
-    try {
-      const edits = roleDefaultEdits[role];
-      if (!edits) { toast.error('No edits to save'); return; }
-      const res = await api.updateRoleDefaults(role, edits);
-      if (res?.error) { toast.error(res.error); return; }
-      toast.success(`Default access for ${ROLE_DISPLAY_NAMES[role] || role} updated`);
-      await fetchRoleDefaults();
-    } catch (e: any) {
-      toast.error('Failed to save: ' + String(e));
-    } finally {
-      setSavingRoleDefault(false);
-    }
+    openSafeguardDialog(
+      'Protect Default Role Access',
+      `Enter your admin PIN or authenticator code to change the default permissions for ${ROLE_DISPLAY_NAMES[role] || role}.`,
+      async () => {
+        setSavingRoleDefault(true);
+        try {
+          const edits = roleDefaultEdits[role];
+          if (!edits) { toast.error('No edits to save'); return; }
+          const res = await api.updateRoleDefaults(role, edits);
+          if (res?.error) { toast.error(res.error); return; }
+          toast.success(`Default access for ${ROLE_DISPLAY_NAMES[role] || role} updated`);
+          await fetchRoleDefaults();
+        } catch (e: any) {
+          toast.error('Failed to save: ' + String(e));
+        } finally {
+          setSavingRoleDefault(false);
+          clearAdminSafeguardToken();
+        }
+      },
+    );
   };
 
   const handleResetRoleDefault = (role: string) => {
@@ -251,53 +272,78 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
   };
 
   const handleResetPassword = async (userId: string) => {
-    setResettingId(userId);
-    setResetCredentials(null);
-    try {
-      const res = await api.resetAccountPassword(userId);
-      if (res.error) {
-        toast.error(res.error);
-        return;
-      }
-      setResetCredentials({
-        username: res.username,
-        password: res.password,
-        name: res.name,
-      });
-      toast.success(`Password reset for ${res.name}`);
-    } catch (e: any) {
-      toast.error('Failed to reset password: ' + String(e));
-    } finally {
-      setResettingId(null);
-    }
+    const user = users.find((entry) => entry.id === userId);
+    openSafeguardDialog(
+      'Reset Account Password',
+      `Enter your admin PIN or authenticator code to generate a new password for ${user?.name || 'this account'}.`,
+      async () => {
+        setResettingId(userId);
+        setResetCredentials(null);
+        try {
+          const res = await api.resetAccountPassword(userId);
+          if (res.error) {
+            toast.error(res.error);
+            return;
+          }
+          setResetCredentials({
+            username: res.username,
+            password: res.password,
+            name: res.name,
+          });
+          toast.success(`Password reset for ${res.name}`);
+        } catch (e: any) {
+          toast.error('Failed to reset password: ' + String(e));
+        } finally {
+          setResettingId(null);
+          clearAdminSafeguardToken();
+        }
+      },
+    );
   };
 
   const handleDeleteUser = async (userId: string, userName: string) => {
     if (!confirm(`Delete account for "${userName}"? This cannot be undone.`)) return;
-    try {
-      const res = await api.deleteUser(userId);
-      if (res.error) {
-        toast.error(res.error);
-        return;
-      }
-      toast.success(`Account deleted for ${userName}`);
-      fetchData();
-    } catch (e: any) {
-      toast.error('Failed to delete account: ' + String(e));
-    }
+    openSafeguardDialog(
+      'Delete Account',
+      `Enter your admin PIN or authenticator code to permanently delete ${userName}'s account.`,
+      async () => {
+        try {
+          const res = await api.deleteUser(userId);
+          if (res.error) {
+            toast.error(res.error);
+            return;
+          }
+          toast.success(`Account deleted for ${userName}`);
+          fetchData();
+        } catch (e: any) {
+          toast.error('Failed to delete account: ' + String(e));
+        } finally {
+          clearAdminSafeguardToken();
+        }
+      },
+    );
   };
 
   const handleChangeRole = async (userId: string) => {
     const newRole = roleSelections[userId];
     if (!newRole) return;
-    try {
-      const res = await api.updateUserRole(userId, newRole);
-      if (res?.error) throw new Error(res.error);
-      toast.success('Role updated');
-      fetchData();
-    } catch (e: any) {
-      toast.error('Failed to update role: ' + String(e));
-    }
+    const user = users.find((entry) => entry.id === userId);
+    openSafeguardDialog(
+      'Change Account Role',
+      `Enter your admin PIN or authenticator code to change ${user?.name || 'this account'} to ${ROLE_DISPLAY_NAMES[newRole] || newRole}.`,
+      async () => {
+        try {
+          const res = await api.updateUserRole(userId, newRole);
+          if (res?.error) throw new Error(res.error);
+          toast.success('Role updated');
+          fetchData();
+        } catch (e: any) {
+          toast.error('Failed to update role: ' + String(e));
+        } finally {
+          clearAdminSafeguardToken();
+        }
+      },
+    );
   };
 
   const openPermissionsEditor = (user: UserAccount) => {
@@ -328,19 +374,28 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
   };
 
   const handleSavePermissions = async (userId: string) => {
-    try {
-      const payload = sanitizePermissionOverrides(permissionSelections[userId] || {});
-      const res = await api.updateUserPermissions(userId, payload);
-      if (res?.error) {
-        toast.error(res.error);
-        return;
-      }
-      toast.success('Access permissions updated');
-      setEditingPermissionsId(null);
-      fetchData();
-    } catch (e: any) {
-      toast.error('Failed to update access: ' + String(e));
-    }
+    const user = users.find((entry) => entry.id === userId);
+    openSafeguardDialog(
+      'Update Account Access',
+      `Enter your admin PIN or authenticator code to update the access overrides for ${user?.name || 'this account'}.`,
+      async () => {
+        try {
+          const payload = sanitizePermissionOverrides(permissionSelections[userId] || {});
+          const res = await api.updateUserPermissions(userId, payload);
+          if (res?.error) {
+            toast.error(res.error);
+            return;
+          }
+          toast.success('Access permissions updated');
+          setEditingPermissionsId(null);
+          fetchData();
+        } catch (e: any) {
+          toast.error('Failed to update access: ' + String(e));
+        } finally {
+          clearAdminSafeguardToken();
+        }
+      },
+    );
   };
 
   const handleChangeUsername = async (userId: string) => {
@@ -353,22 +408,30 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
       toast.error('Invalid username');
       return;
     }
-    setSavingUsername(true);
-    try {
-      const res = await api.updateUsername(userId, newUsername);
-      if (res?.error) {
-        toast.error(res.error);
-        return;
-      }
-      toast.success('Username updated');
-      setEditingUsernameId(null);
-      setEditUsernameValue('');
-      fetchData();
-    } catch (e: any) {
-      toast.error('Failed to update username: ' + String(e));
-    } finally {
-      setSavingUsername(false);
-    }
+    const user = users.find((entry) => entry.id === userId);
+    openSafeguardDialog(
+      'Change Username',
+      `Enter your admin PIN or authenticator code to change the login username for ${user?.name || 'this account'}.`,
+      async () => {
+        setSavingUsername(true);
+        try {
+          const res = await api.updateUsername(userId, newUsername);
+          if (res?.error) {
+            toast.error(res.error);
+            return;
+          }
+          toast.success('Username updated');
+          setEditingUsernameId(null);
+          setEditUsernameValue('');
+          fetchData();
+        } catch (e: any) {
+          toast.error('Failed to update username: ' + String(e));
+        } finally {
+          setSavingUsername(false);
+          clearAdminSafeguardToken();
+        }
+      },
+    );
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -392,6 +455,26 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
 
   return (
     <div className="space-y-6">
+      <AdminSafeguardDialog
+        open={safeguardDialogOpen}
+        onOpenChange={(open) => {
+          setSafeguardDialogOpen(open);
+          if (!open) {
+            pendingSafeguardAction.current = null;
+            clearAdminSafeguardToken();
+          }
+        }}
+        title={safeguardTitle}
+        description={safeguardDescription}
+        onVerified={async () => {
+          const action = pendingSafeguardAction.current;
+          pendingSafeguardAction.current = null;
+          if (action) {
+            await action();
+          }
+        }}
+      />
+
       {/* Create Account */}
       <Card>
         <CardHeader>

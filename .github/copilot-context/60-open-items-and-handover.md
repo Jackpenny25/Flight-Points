@@ -12,6 +12,11 @@
 	- Points/attendance/account-management key routes enforce permission actions
 	- Dashboard/TopNav/PointsManager/AttendanceManager consume effective permissions
 
+## Current state update (2026-03-22)
+- Control panel is publicly reachable at `https://panel.flightpoints.uk`.
+- Control panel runtime is `panel/panel-server.cjs` and should remain the service target.
+- Main website now supports optional TOTP-backed admin safeguards for the highest-impact account-management actions.
+
 ## Optional server enhancements
 1. Expand /api/health checks
 - Add revision_history table presence check
@@ -27,10 +32,20 @@
 - Suggested view: revision_history_readable
 - Include: changed_at, record_type, record_id, action, changed_by, changed_by_role, changed_fields, change_summary
 
+4. Tighten file-access model for uploads (optional)
+- Uploaded ticket evidence is still publicly served from `/uploads`.
+- Consider moving retrieval behind an authenticated route if the evidence should not be world-readable.
+
+5. Improve admin safeguard ergonomics (optional)
+- If needed later, allow the safeguard token to stay valid briefly across multiple account-management edits rather than prompting for every guarded action.
+- Consider adding QR provisioning or setup guidance for `ADMIN_TOTP_SECRET` similar to the panel documentation.
+
 ## Common pitfalls
 - Do not run TypeScript snippets in DBeaver/SQL editor
 - Do not use placeholder tokens for protected API tests
 - If /api/test works but /api/health returns 404, deploy code mismatch is likely
+- Do not place any hostname after the catch-all `http_status:404` ingress rule in the Cloudflare tunnel config.
+- Do not point NSSM directly at `npm.ps1` for service startup.
 
 ## Operational assumptions to preserve
 - No local-storage data mode

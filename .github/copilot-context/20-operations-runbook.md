@@ -5,6 +5,15 @@
 - FlightPoints-AutoDeploy: runs auto-deploy.ps1 every 2 minutes
 - FlightPoints-Weekly-Backup: weekly backup (Sunday 03:00)
 
+## Production service ownership (2026-03-20 to 2026-03-22)
+- Final verified ownership model:
+	- API: NSSM service `flight-points`
+	- Tunnel: NSSM service `flight-points-tunnel`
+	- Panel: NSSM service `flight-points-panel`
+- Avoid overlapping launchers. `Flight-Points_Server_Tunnel` should stay disabled when NSSM owns the tunnel lifecycle.
+- For NSSM-managed Node services, use `cmd.exe` as the executable with `/c npm run ...` when the target is an npm script. Do not point NSSM directly at `npm.ps1` or `npm.cmd`.
+- Verified API service working directory on the server: `C:\inetpub\wwwroot\Flight-Points\Code\Flight-Points`.
+
 ## Deploy flow (auto-deploy.ps1)
 1. Resolve git lock safety
 2. Reset and clean working tree
@@ -25,6 +34,26 @@
 - Primary log root on server: C:\inetpub\wwwroot\Flight-Points\Logs
 - Subfolders: Server, Tunnel, Deploy, Backup
 - Local fallback exists when server path is not writable
+- Panel logs live under `Logs\Panel`, including `panel-diagnostics.log` for panel-side health snapshots and troubleshooting.
+
+## Cloudflare tunnel notes
+- `panel.flightpoints.uk` is served through the same Cloudflare tunnel stack as the API/site.
+- Ingress ordering is critical: `http_status:404` must remain the last ingress rule.
+- If `cloudflared` is not on PATH, use the full executable path or discover it with `Get-Command cloudflared.exe`.
+- Literal PowerShell searches containing `[` should use `Select-String -SimpleMatch`.
+- Correct ingress validation syntax is `cloudflared tunnel --config <path> ingress validate`.
+
+## Panel operations
+- Restart command: `Restart-Service -Name flight-points-panel`
+- Status check: `Get-Service flight-points-panel`
+- TeamViewer launch from the panel works only if TeamViewer exists in one of the backend's known install paths.
+- Panel System view now exposes:
+	- TeamViewer launch
+	- DBeaver tunnel start
+	- `restart-server.ps1`
+	- `setup-auto-deploy.ps1`
+	- `install-backup-task.ps1`
+	- scheduled task run/stop/enable/disable actions
 
 ## Panel control surface (2026-03-22)
 - The standalone panel can now invoke several operator actions remotely:

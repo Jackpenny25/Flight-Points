@@ -72,7 +72,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
 
   const ensureAdminPin = () => {
     if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
-    toast.error('Unlock admin mode first (click the squadron logo and enter your PIN).');
+    toast.error('Unlock admin mode first using your admin PIN or authenticator code.');
     return false;
   };
 
@@ -100,7 +100,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
     setPinVerifyLoading(true);
     setPinVerifyError('');
     try {
-      const res = await api.verifyPin(pinVerifyValue);
+      const res = await api.verifyAdminCode(pinVerifyValue);
       if (res?.success) {
         setPinVerifyOpen(false);
         if (pendingDelete) {
@@ -112,7 +112,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
         setPendingBulkDelete(false);
         setPinVerifyValue('');
       } else {
-        setPinVerifyError(res?.error || 'PIN verification failed.');
+        setPinVerifyError(res?.error || 'Verification failed.');
       }
     } catch (e: any) {
       setPinVerifyError(String(e?.message || e));
@@ -635,9 +635,9 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
         <Dialog open={pinVerifyOpen} onOpenChange={setPinVerifyOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Verify Admin PIN</DialogTitle>
+              <DialogTitle>Verify Admin Safeguard</DialogTitle>
               <DialogDescription>
-                Enter your admin PIN to continue this sensitive operation.
+                Enter your admin PIN or authenticator code to continue this sensitive operation.
               </DialogDescription>
             </DialogHeader>
             <div className="py-2 space-y-2">
@@ -645,7 +645,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
                 type="password"
                 inputMode="numeric"
                 maxLength={6}
-                placeholder="PIN"
+                placeholder="PIN or code"
                 value={pinVerifyValue}
                 onChange={(e) => setPinVerifyValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 onKeyDown={(e) => {

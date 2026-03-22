@@ -1,5 +1,6 @@
 // src/utils/api.ts
 import { getToken, logout } from './auth';
+import { getAdminSafeguardToken } from './adminSafeguard';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://flightpoints.uk/api';
 
@@ -37,6 +38,15 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
   }
 
   return response;
+}
+
+async function fetchWithAdminSafeguard(url: string, options: RequestInit = {}) {
+  const safeguardToken = getAdminSafeguardToken();
+  const headers = {
+    ...(options.headers || {}),
+    ...(safeguardToken ? { 'X-Admin-Safeguard': safeguardToken } : {}),
+  };
+  return fetchWithAuth(url, { ...options, headers });
 }
 
 // Data interfaces
@@ -127,22 +137,22 @@ export const api = {
   // Admin Account Management
   getUsers: () => fetchWithAuth('/auth/users', { method: 'GET' }).then(parseJsonSafe),
   updateUserRole: (userId: string, role: string) =>
-    fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ role }) }).then(parseJsonSafe),
+    fetchWithAdminSafeguard(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ role }) }).then(parseJsonSafe),
   updateUsername: (userId: string, username: string) =>
-    fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ username }) }).then(parseJsonSafe),
+    fetchWithAdminSafeguard(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ username }) }).then(parseJsonSafe),
   updateUserPermissions: (userId: string, permissions: any) =>
-    fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ permissions }) }).then(parseJsonSafe),
+    fetchWithAdminSafeguard(`/auth/users/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ permissions }) }).then(parseJsonSafe),
   deleteUser: (userId: string) =>
-    fetchWithAuth(`/auth/users/${encodeURIComponent(userId)}`, { method: 'DELETE' }).then(parseJsonSafe),
+    fetchWithAdminSafeguard(`/auth/users/${encodeURIComponent(userId)}`, { method: 'DELETE' }).then(parseJsonSafe),
   createAccount: (data: { cadetId: string; role?: string }) =>
     fetchWithAuth('/admin/create-account', { method: 'POST', body: JSON.stringify(data) }).then(parseJsonSafe),
   resetAccountPassword: (userId: string) =>
-    fetchWithAuth('/admin/reset-account-password', { method: 'POST', body: JSON.stringify({ userId }) }).then(parseJsonSafe),
+    fetchWithAdminSafeguard('/admin/reset-account-password', { method: 'POST', body: JSON.stringify({ userId }) }).then(parseJsonSafe),
   
   // Role defaults
   getRoleDefaults: () => fetchWithAuth('/role-defaults', { method: 'GET' }).then(parseJsonSafe),
   updateRoleDefaults: (role: string, permissions: any) =>
-    fetchWithAuth(`/role-defaults/${encodeURIComponent(role)}`, { method: 'PUT', body: JSON.stringify(permissions) }).then(parseJsonSafe),
+    fetchWithAdminSafeguard(`/role-defaults/${encodeURIComponent(role)}`, { method: 'PUT', body: JSON.stringify(permissions) }).then(parseJsonSafe),
 
   // Cleanup retention
   cleanupRetention: () => fetchWithAuth('/admin/cleanup-retention', { method: 'POST' }).then(r => r.json()),
@@ -152,6 +162,8 @@ export const api = {
   
   // Verify PIN
   verifyPin: (pin: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ pin }) }).then(r => r.json()),
+  verifyAdminCode: (code: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ code }) }).then(r => r.json()),
+  getAdminSafeguardStatus: () => fetchWithAuth('/admin/pin-status', { method: 'GET' }).then(r => r.json()),
   
   // Admin utilities
   getPinStatus: () => fetchWithAuth('/admin/pin-status', { method: 'GET' }).then(r => r.json()),

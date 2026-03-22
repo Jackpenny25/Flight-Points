@@ -67,11 +67,11 @@ export function PointsManager({ userRole, canEditPoints = false, canDeletePoints
 
     const token = getToken();
     if (!token) {
-      toast.error('You must be signed in to verify admin PIN.');
+      toast.error('You must be signed in to verify the admin safeguard.');
       return false;
     }
 
-    const pin = prompt('Enter 6-digit admin PIN');
+    const pin = prompt('Enter 6-digit admin PIN or authenticator code');
     if (!pin) return false;
 
     const pinStr = String(pin).trim();
@@ -81,10 +81,10 @@ export function PointsManager({ userRole, canEditPoints = false, canDeletePoints
     }
 
     try {
-      const data = await api.verifyPin(pinStr);
+      const data = await api.verifyAdminCode(pinStr);
       if (data?.success) {
         sessionStorage.setItem('adminPinVerified', 'true');
-        toast.success('Admin PIN accepted');
+        toast.success('Admin safeguard accepted');
         return true;
       }
 

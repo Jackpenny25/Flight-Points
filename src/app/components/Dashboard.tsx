@@ -175,7 +175,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         setPinError('You must be signed in to verify PIN');
         return;
       }
-      const data = await api.verifyPin(pinInput);
+      const data = await api.verifyAdminCode(pinInput);
       if (!data?.success) {
         const err = String(data?.message || data?.error || 'Incorrect PIN');
         if (err.toLowerCase().includes('expired token') || err.toLowerCase().includes('invalid or expired token')) {
@@ -311,13 +311,13 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Admin Unlock</DialogTitle>
-            <DialogDescription>Enter the 6-digit admin PIN to unlock actions.</DialogDescription>
+            <DialogDescription>Enter the 6-digit admin PIN or authenticator code to unlock actions.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <Input
               value={pinInput}
               onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="PIN"
+              placeholder="PIN or code"
               maxLength={6}
               inputMode="numeric"
               autoFocus

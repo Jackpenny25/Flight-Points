@@ -21,6 +21,8 @@
 - /api/upload
 - /api/upload/ticket-evidence
 - /api/admin/verify-pin
+- /api/auth/users
+- /api/role-defaults
 - /api/revision-history/:type/:id
 - /api/test-error-alert (admin test path)
 
@@ -37,6 +39,7 @@
 - reward_suggestions: suggestion queue
 - reward_votes: votes per suggestion
 - app_users: login identities, role links, and per-user `permissions` (JSONB overrides)
+- role_permission_defaults: per-role default tab/action permission JSONB
 - tickets: issue tracking and evidence link
 - revision_history: immutable change audit trail
 
@@ -46,6 +49,21 @@
   - PUT `/api/auth/users/:id` supports `permissions` updates
 - Effective permissions are role defaults merged with account overrides.
 - Server-side enforcement now checks permission actions for key write paths (points, attendance, account management), not just role labels.
+
+## Role-default management
+- GET `/api/role-defaults`: returns full effective defaults for all roles to snco/admin users.
+- PUT `/api/role-defaults/:role`: updates one role's full permission object.
+- Frontend reset-to-built-in behavior uses exported `ROLE_PERMISSION_DEFAULTS` as its local fallback baseline.
+
+## Admin safeguard verification (2026-03-22)
+- `POST /api/admin/verify-pin` now accepts either a 6-digit admin PIN or a 6-digit authenticator code.
+- When verification succeeds, the route returns a short-lived admin safeguard token for high-impact admin actions.
+- Sensitive admin routes now expect `X-Admin-Safeguard` for:
+  - `PUT /api/auth/users/:id`
+  - `DELETE /api/auth/users/:id`
+  - `POST /api/admin/reset-account-password`
+  - `PUT /api/role-defaults/:role`
+- `GET /api/admin/pin-status` now reports whether TOTP is enabled for main-site admin safeguards.
 
 ## Revision history columns of interest
 - record_type, record_id, action, changed_by, changed_at

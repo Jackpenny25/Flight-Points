@@ -31,6 +31,9 @@
 - DATABASE_URL
 - JWT_SECRET
 - ADMIN_PIN
+- ADMIN_TOTP_SECRET (optional main-site admin safeguard TOTP)
+- PANEL_PIN
+- PANEL_TOTP_SECRET
 - SMTP_TO, SMTP_FROM, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASS (alerts)
 
 ## Repo safety
@@ -42,6 +45,14 @@
 - Dedicated domain routes for points, attendance reports, rewards, integrity, tickets, health
 - mapToDb/mapToClient perform naming conversion (camelCase <-> snake_case)
 - All data is API-backed only (no local storage mode)
+
+## Runtime services and control surface
+- Production service ownership is split:
+	- `flight-points`: API service on port 3001
+	- `flight-points-tunnel`: Cloudflare tunnel service
+	- `flight-points-panel`: standalone control panel service on port 4000
+- The control panel runtime is `panel/panel-server.cjs` and not the legacy `.js` entry.
+- The control panel is intentionally separate from the main website and uses only Node.js built-in modules.
 
 ## Known removed/deprecated items
 - setupFetch.ts

@@ -1115,7 +1115,7 @@ app.get('/api/auth/users', requireAuth, async (req: AuthRequest, res: Response) 
 });
 
 // Admin: update account role
-app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+app.put('/api/auth/users/:id', requireAuth, requireAdminSafeguard, async (req: AuthRequest, res: Response) => {
   if (!hasSignupAdminRole(req.user)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -1188,7 +1188,7 @@ app.put('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Respon
 });
 
 // Admin: delete account
-app.delete('/api/auth/users/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+app.delete('/api/auth/users/:id', requireAuth, requireAdminSafeguard, async (req: AuthRequest, res: Response) => {
   if (!hasSignupAdminRole(req.user)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -1223,7 +1223,7 @@ app.get('/api/role-defaults', requireAuth, async (req: AuthRequest, res: Respons
 });
 
 // PUT /api/role-defaults/:role — update defaults for a specific role
-app.put('/api/role-defaults/:role', requireAuth, async (req: AuthRequest, res: Response) => {
+app.put('/api/role-defaults/:role', requireAuth, requireAdminSafeguard, async (req: AuthRequest, res: Response) => {
   if (!hasSignupAdminRole(req.user)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -1336,7 +1336,7 @@ app.post('/api/admin/create-account', requireAuth, async (req: AuthRequest, res:
 });
 
 // Admin: reset account password
-app.post('/api/admin/reset-account-password', requireAuth, async (req: AuthRequest, res: Response) => {
+app.post('/api/admin/reset-account-password', requireAuth, requireAdminSafeguard, async (req: AuthRequest, res: Response) => {
   if (!hasSignupAdminRole(req.user)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -1486,10 +1486,88 @@ function mapRowsToClient(type: DataType, rows: Record<string, any>[]) {
 
 // ========== PIN MANAGEMENT ENDPOINTS ==========
 
+const ADMIN_TOTP_SECRET = String(process.env.ADMIN_TOTP_SECRET || '').trim();
+const ADMIN_SAFEGUARD_TTL_SECONDS = 10 * 60;
+
 function getConfiguredAdminPin() {
   // Only read from server-side env — never fall back to VITE_ prefixed vars which may leak to the client bundle
   const configuredPin = String(process.env.ADMIN_PIN || '').trim();
   return configuredPin;
+}
+
+function base32Decode(secret: string) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const bytes: number[] = [];
+  let bits = 0;
+  let value = 0;
+
+  for (const char of secret.toUpperCase().replace(/=/g, '')) {
+    const index = alphabet.indexOf(char);
+    if (index < 0) continue;
+    value = (value << 5) | index;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((value >> bits) & 0xff);
+    }
+  }
+
+  return Buffer.from(bytes);
+}
+
+function generateTotpCodes(secret: string) {
+  if (!secret) return [] as string[];
+  const key = base32Decode(secret);
+  const currentCounter = Math.floor(Date.now() / 1000 / 30);
+  const codes: string[] = [];
+
+  for (let offset = -1; offset <= 1; offset++) {
+    let counter = currentCounter + offset;
+    const buffer = Buffer.alloc(8);
+    for (let index = 7; index >= 0; index--) {
+      buffer[index] = counter & 0xff;
+      counter >>>= 8;
+    }
+    const hmac = crypto.createHmac('sha1', key).update(buffer).digest();
+    const truncationOffset = hmac[hmac.length - 1] & 0x0f;
+    const code = (((hmac[truncationOffset] & 0x7f) << 24)
+      | ((hmac[truncationOffset + 1] & 0xff) << 16)
+      | ((hmac[truncationOffset + 2] & 0xff) << 8)
+      | (hmac[truncationOffset + 3] & 0xff)) % 1000000;
+    codes.push(code.toString().padStart(6, '0'));
+  }
+
+  return codes;
+}
+
+function createAdminSafeguardToken(user: UserJwtPayload, method: 'pin' | 'totp') {
+  return jwt.sign(
+    {
+      purpose: 'admin-safeguard',
+      sub: user.id,
+      role: user.role,
+      method,
+    },
+    JWT_SECRET,
+    { expiresIn: ADMIN_SAFEGUARD_TTL_SECONDS },
+  );
+}
+
+function requireAdminSafeguard(req: AuthRequest, res: Response, next: NextFunction) {
+  const safeguardToken = String(req.header('X-Admin-Safeguard') || '').trim();
+  if (!safeguardToken) {
+    return res.status(403).json({ error: 'Admin safeguard verification required for this action' });
+  }
+
+  try {
+    const payload = jwt.verify(safeguardToken, JWT_SECRET) as jwt.JwtPayload;
+    if (payload?.purpose !== 'admin-safeguard' || payload?.sub !== req.user?.id) {
+      return res.status(403).json({ error: 'Invalid admin safeguard token' });
+    }
+    return next();
+  } catch {
+    return res.status(403).json({ error: 'Admin safeguard token expired or invalid' });
+  }
 }
 
 // GET /api/admin/pin-status - Get current user's PIN status
@@ -1508,6 +1586,8 @@ app.get('/api/admin/pin-status', requireAuth, async (req: AuthRequest, res: Resp
       is_default: false,
       last_changed: null,
       has_pin: /^\d{6}$/.test(configuredPin),
+      totp_enabled: !!ADMIN_TOTP_SECRET,
+      safeguard_ttl_seconds: ADMIN_SAFEGUARD_TTL_SECONDS,
     });
   } catch (error) {
     console.error('Error in GET /api/admin/pin-status:', error);
@@ -1522,9 +1602,10 @@ app.post('/api/admin/verify-pin', pinLimiter, requireAuth, async (req: AuthReque
       return res.status(403).json({ error: 'Only Flight Point Leads can verify admin PIN' });
     }
 
-    const { pin } = req.body || {};
-    if (!pin) {
-      return res.status(400).json({ error: 'PIN is required' });
+    const { pin, code, totp } = req.body || {};
+    const rawCode = String(code || totp || pin || '').trim();
+    if (!rawCode) {
+      return res.status(400).json({ error: 'Admin PIN or authenticator code is required' });
     }
 
     const configuredPin = getConfiguredAdminPin();
@@ -1532,16 +1613,25 @@ app.post('/api/admin/verify-pin', pinLimiter, requireAuth, async (req: AuthReque
       return res.status(500).json({ error: 'Admin PIN is not configured correctly. Set a 6-digit ADMIN_PIN in .env.local.' });
     }
 
-    const pinStr = String(pin).trim();
-    if (!/^\d{6}$/.test(pinStr)) {
-      return res.status(400).json({ error: 'PIN must be 6 digits' });
+    if (!/^\d{6}$/.test(rawCode)) {
+      return res.status(400).json({ error: 'Code must be 6 digits' });
     }
 
-    if (pinStr !== configuredPin) {
-      return res.status(401).json({ error: 'Incorrect PIN' });
+    const totpValid = !!ADMIN_TOTP_SECRET && generateTotpCodes(ADMIN_TOTP_SECRET).includes(rawCode);
+    const pinValid = rawCode === configuredPin;
+
+    if (!pinValid && !totpValid) {
+      return res.status(401).json({ error: ADMIN_TOTP_SECRET ? 'Incorrect PIN or authenticator code' : 'Incorrect PIN' });
     }
 
-    res.json({ success: true });
+    const method: 'pin' | 'totp' = totpValid ? 'totp' : 'pin';
+    res.json({
+      success: true,
+      method,
+      safeguardToken: createAdminSafeguardToken(req.user!, method),
+      expiresInSeconds: ADMIN_SAFEGUARD_TTL_SECONDS,
+      totpEnabled: !!ADMIN_TOTP_SECRET,
+    });
   } catch (error) {
     console.error('Error in POST /api/admin/verify-pin:', error);
     res.status(500).json({ error: 'Failed to verify PIN' });

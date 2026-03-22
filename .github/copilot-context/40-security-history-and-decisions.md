@@ -30,6 +30,24 @@
   - Prod: flightpoints.uk, api.flightpoints.uk
 - CSP via Helmet configured with restricted defaults and allowed font/image/connect sources
 
+## Security follow-up and hardening (2026-03-20)
+- Upgraded production dependencies after audit findings:
+  - `express-rate-limit`
+  - `multer`
+  - `next`
+- `npm audit --omit=dev` was reduced to zero production vulnerabilities after the dependency upgrade pass.
+- `/api/auth/lookup-email` was changed to return a normalized fallback shape rather than a distinct not-found response, reducing username enumeration value.
+- PostgreSQL SSL handling in `server/db.ts` now distinguishes between compatibility mode (`PGSSLMODE=require`) and certificate-verifying modes (`verify-ca` / `verify-full`).
+- Remaining open security concern: uploaded evidence files are still served from a public static path and may need an authenticated download model later.
+
+## Analytics CSP exception
+- Cloudflare Insights was explicitly allowed with a narrow script source and hash-based inline allowance rather than reopening broad inline script execution.
+
+## Admin safeguard second factor (2026-03-22)
+- Optional `ADMIN_TOTP_SECRET` now enables authenticator-code verification for high-impact admin actions in the main website.
+- High-impact account-management and role-default changes now require a short-lived server-issued safeguard token, not only a client-side UI flag.
+- Existing PIN-based admin unlock remains available as a backup path when TOTP is not configured.
+
 ## Integrity and auditing
 - revision_history table auto-created
 - recordRevision used for create/update/delete and attendance status updates
