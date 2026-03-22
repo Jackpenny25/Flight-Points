@@ -44,6 +44,8 @@ const LOGS_ROOT    = process.env.PANEL_LOGS_ROOT   || 'C:\\inetpub\\wwwroot\\Fli
 const BACKUPS_DIR  = process.env.PANEL_BACKUPS_DIR || 'C:\\inetpub\\wwwroot\\Flight-Points\\Backups';
 const PANEL_LOG_DIR = path.join(LOGS_ROOT, 'Panel');
 const PANEL_DIAGNOSTICS_LOG = path.join(PANEL_LOG_DIR, 'panel-diagnostics.log');
+const POWERSHELL_EXE = process.env.PANEL_POWERSHELL_PATH
+  || path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
 const SERVICES = ['flight-points', 'flight-points-tunnel', 'flight-points-panel'];
 const TASKS = {
@@ -248,9 +250,10 @@ function shell(cmd, timeout = 30000) {
 function ps(script, timeout = 30000) {
   const tmp = path.join(os.tmpdir(), `fp_panel_${crypto.randomBytes(6).toString('hex')}.ps1`);
   fs.writeFileSync(tmp, script, 'utf8');
+  const psExe = fs.existsSync(POWERSHELL_EXE) ? POWERSHELL_EXE : 'powershell.exe';
   return new Promise(resolve => {
     exec(
-      `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${tmp}"`,
+      `"${psExe}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${tmp}"`,
       { timeout, windowsHide: true, cwd: ROOT, maxBuffer: 5 * 1024 * 1024 },
       (err, stdout, stderr) => {
         fs.unlink(tmp, () => {});
@@ -621,8 +624,9 @@ function handlePanelRestart(req, res) {
     "Restart-Service -Name 'flight-points-tunnel' -Force -ErrorAction SilentlyContinue",
     "Restart-Service -Name 'flight-points-panel'  -Force -ErrorAction SilentlyContinue"
   ].join('; ');
+  const psExe = fs.existsSync(POWERSHELL_EXE) ? POWERSHELL_EXE : 'powershell.exe';
   const child = require('child_process').spawn(
-    'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
+    psExe, ['-NoProfile', '-NonInteractive', '-Command', script],
     { detached: true, stdio: 'ignore', windowsHide: true }
   );
   child.unref();

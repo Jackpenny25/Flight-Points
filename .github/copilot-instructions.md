@@ -414,4 +414,20 @@ Entry template (copy for each chat):
        - If `ADMIN_TOTP_SECRET` is not configured, safeguard verification now intentionally fails (500) until configured.
        - Generated backup file should be migrated into `ADMIN_BACKUP_CODE` in `.env.local` and then stored securely in ops password vault.
        - Existing variable names like `adminPinVerified` remain in session storage for compatibility; behavior is safeguard-code based despite legacy naming.
-    Suggested context destinations: `20-operations-runbook.md`, `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
+      Suggested context destinations: `20-operations-runbook.md`, `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-22
+      Chat summary: Fixed panel restart failures caused by `powershell.exe` not being resolvable in the service PATH.
+      Files touched: `panel/panel-server.cjs`, `.github/copilot-instructions.md`
+      Behavior/decision changes:
+         - Added `POWERSHELL_EXE` absolute-path resolution (`%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`) with optional override via `PANEL_POWERSHELL_PATH`.
+         - Updated shared `ps()` helper to invoke the resolved absolute path (fallback to `powershell.exe` only if the absolute file does not exist).
+         - Updated detached restart spawn in `handlePanelRestart()` to use the same resolved PowerShell executable.
+         - Result: all restart-related actions that rely on the PowerShell helper are no longer dependent on service PATH content.
+      Validation performed:
+         - `node --check panel/panel-server.cjs` executed without syntax errors.
+         - Confirmed `C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe` exists (`Test-Path` returned `True`) in this environment.
+      Risks or follow-up:
+         - If production host uses a custom PowerShell location, set `PANEL_POWERSHELL_PATH` in `.env.local`.
+         - Panel service should be restarted once so the new executable resolution is loaded.
+      Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
