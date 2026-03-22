@@ -333,6 +333,20 @@ Entry template (copy for each chat):
 **Last Updated:** 2026-03-22 (Control Panel added)
 
 - Date: 2026-03-22
+    Chat summary: Fixed PowerShell parser errors in `panel\Install-PanelService.ps1` reported on server (`missing terminator`, `missing closing }`).
+    Files touched: `panel/Install-PanelService.ps1`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Replaced parser-sensitive Unicode punctuation in status/error strings with ASCII equivalents.
+       - Simplified manual-run echo line to avoid escaped-quote edge case:
+          - from `Write-Host "  node \`"$panelScript\`""`
+          - to `Write-Host ('  node "' + $panelScript + '"')`
+       - Kept installer behavior unchanged (same service creation/config logic).
+    Validation performed: Parsed script with PowerShell AST parser (`[System.Management.Automation.Language.Parser]::ParseFile`) -> `Parse OK`.
+    Risks or follow-up:
+       - Server must execute from repo root using `panel\Install-PanelService.ps1`; running `./Install-PanelService.ps1` from root fails because file is in `panel\`.
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-22
     Chat summary: Built a full standalone GUI Control Panel (`panel/`) — separate from the main website, runs on port 4000 as its own process/NSSM service. Rich dashboard covering services, git/deploy, logs, DB, processes, system, and tunnel status. All features previously requiring PowerShell windows are now accessible from a browser.
     Files touched: `panel/panel-server.js`, `panel/index.html`, `panel/Install-PanelService.ps1`, `package.json`, `.github/copilot-instructions.md`
     Behavior/decision changes:

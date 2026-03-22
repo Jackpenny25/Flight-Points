@@ -43,7 +43,7 @@ function Find-Node {
     return $null
 }
 
-# ── Locate tools ──────────────────────────────────────────────────────────────
+# Locate tools
 $nssm = if ($NssmPath) { $NssmPath } else { Find-Nssm }
 if (-not $nssm) {
     Write-Error "NSSM not found. Install from https://nssm.cc/ and ensure it is on PATH or provide -NssmPath."
@@ -61,7 +61,7 @@ Write-Host "Node:    $nodeExe"
 Write-Host "Project: $ProjectDir"
 Write-Host ""
 
-# ── Uninstall ─────────────────────────────────────────────────────────────────
+# Uninstall
 if ($Uninstall) {
     Write-Host "Stopping and removing service: $ServiceName"
     & $nssm stop $ServiceName 2>$null
@@ -71,10 +71,10 @@ if ($Uninstall) {
     exit 0
 }
 
-# ── Check .env.local has a PIN ─────────────────────────────────────────────────────
+# Check .env.local has a PIN
 $envFile = Join-Path $ProjectDir '.env.local'
 if (-not (Test-Path $envFile)) {
-    Write-Error ".env.local not found at $envFile. Cannot continue — PANEL_PIN/ADMIN_PIN must be set."
+    Write-Error ".env.local not found at $envFile. Cannot continue - PANEL_PIN/ADMIN_PIN must be set."
     exit 1
 }
 $envContent = Get-Content $envFile -Raw
@@ -83,14 +83,14 @@ if ($envContent -notmatch '(PANEL_PIN|ADMIN_PIN)\s*=\s*.+') {
     exit 1
 }
 
-# ── Read PANEL_PORT from .env.local ───────────────────────────────────────────
+# Read PANEL_PORT from .env.local
 $panelPort = 4000
 if ($envContent -match 'PANEL_PORT\s*=\s*(\d+)') {
     $panelPort = [int]$Matches[1]
 }
 Write-Host "Panel will run on port $panelPort"
 
-# ── Log & data dirs ────────────────────────────────────────────────────────────
+# Log and data dirs
 $nssmLogDir = 'C:\inetpub\wwwroot\Flight-Points\Logs\Panel'
 if (-not (Test-Path $nssmLogDir)) {
     New-Item -ItemType Directory -Path $nssmLogDir -Force | Out-Null
@@ -99,22 +99,22 @@ if (-not (Test-Path $nssmLogDir)) {
 $stdoutLog = Join-Path $nssmLogDir 'panel-stdout.log'
 $stderrLog = Join-Path $nssmLogDir 'panel-stderr.log'
 
-# ── Stop existing service if present ──────────────────────────────────────────
+# Stop existing service if present
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existing) {
-    Write-Host "Service '$ServiceName' already exists — stopping and reconfiguring…"
+    Write-Host "Service '$ServiceName' already exists - stopping and reconfiguring..."
     & $nssm stop $ServiceName 2>$null
     Start-Sleep -Seconds 2
 }
 
-# ── Install / configure NSSM service ──────────────────────────────────────────
+# Install / configure NSSM service
 $panelScript = Join-Path $ProjectDir 'panel\panel-server.js'
 if (-not (Test-Path $panelScript)) {
     Write-Error "panel\panel-server.js not found at $panelScript. Ensure the panel folder is deployed."
     exit 1
 }
 
-Write-Host "Installing NSSM service '$ServiceName'…"
+Write-Host "Installing NSSM service '$ServiceName'..."
 
 & $nssm install $ServiceName $nodeExe
 & $nssm set $ServiceName AppParameters "`"$panelScript`""
@@ -140,7 +140,7 @@ $pathExtra = @($nodeBin, $npmGlobal, 'C:\Windows\System32', 'C:\Windows', $pgBin
 & $nssm set $ServiceName AppEnvironmentExtra "PATH=$($pathExtra -join ';')"
 
 Write-Host ""
-Write-Host "Starting service…"
+Write-Host "Starting service..."
 & $nssm start $ServiceName
 Start-Sleep -Seconds 3
 
@@ -156,5 +156,5 @@ if ($svc -and $svc.Status -eq 'Running') {
 } else {
     Write-Warning "Service may not have started. Check: $stdoutLog"
     Write-Host "You can also run the panel manually to see errors:"
-    Write-Host "  node `"$panelScript`""
+    Write-Host ('  node "' + $panelScript + '"')
 }
