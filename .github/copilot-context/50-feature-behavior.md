@@ -1,5 +1,13 @@
 # Feature Behavior Notes
 
+## Control panel expansion (2026-03-22)
+- The standalone panel now exposes more of the Windows host directly from the browser:
+	- scheduled task cards for `FlightPoints-AutoDeploy`, `FlightPoints-Weekly-Backup`, and `Flight-Points_Server_Tunnel`
+	- operator utility cards for TeamViewer launch, DBeaver tunnel startup, server restart script, and task setup helpers
+	- database utility status for `pg_dump`, the DBeaver tunnel script, backup root, and weekly backup task detection
+- The panel UI now supports a brighter visual theme, a collapsible desktop sidebar, and an off-canvas mobile sidebar with overlay dismissal.
+- System and Database sections include live action-output terminals so remote admin actions can be run without opening a separate PowerShell window.
+
 ## Account access controls (2026-03-18)
 - Accounts tab supports per-user access overrides for all roles (cadet, staff, pointgiver, snco, presentation).
 - Access editor supports:

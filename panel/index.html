@@ -6,29 +6,40 @@
 <title>Flight-Points Control Panel</title>
 <style>
 :root{
-  --bg:#0d1117;--bg2:#161b22;--bg3:#1c2128;--bg4:#21262d;
-  --border:#30363d;--border2:#3d444d;
-  --text:#e6edf3;--muted:#7d8590;--muted2:#484f58;
-  --green:#3fb950;--green-bg:#0f291e;
-  --yellow:#d29922;--yellow-bg:#272115;
-  --red:#f85149;--red-bg:#2d1317;
-  --blue:#58a6ff;--blue-bg:#0d2149;
-  --purple:#bc8cff;
-  --accent:#238636;--accent-hover:#2ea043;
+  --bg:#101a23;--bg2:#182431;--bg3:#213041;--bg4:#294055;
+  --border:#35516a;--border2:#4a6983;
+  --text:#f2f7fb;--muted:#a9bccd;--muted2:#607b90;
+  --green:#52d273;--green-bg:#143925;
+  --yellow:#f0bf52;--yellow-bg:#3a2d11;
+  --red:#ff7b72;--red-bg:#431b1b;
+  --blue:#72b7ff;--blue-bg:#183a60;
+  --purple:#a8b8ff;
+  --accent:#2ea866;--accent-hover:#39ba75;
   --font-mono:'Consolas','Courier New',monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;}
+html,body{height:100%;background:radial-gradient(circle at top, #17344b 0%, var(--bg) 45%, #0c141c 100%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;}
 
 /* ── Layout ───────────────────────────────────────────── */
 #app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
-#header{display:flex;align-items:center;gap:12px;height:56px;padding:0 20px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10;}
+#header{display:flex;align-items:center;gap:12px;min-height:64px;padding:10px 20px;background:rgba(24,36,49,.94);border-bottom:1px solid var(--border);flex-shrink:0;z-index:20;backdrop-filter:blur(14px);}
 #main{display:flex;flex:1;overflow:hidden;}
-#sidebar{width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;}
+#sidebar{width:240px;background:linear-gradient(180deg, rgba(24,36,49,.98), rgba(18,29,39,.98));border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;transition:transform .24s ease,width .24s ease;}
 #content{flex:1;overflow-y:auto;padding:24px;}
+body.sidebar-collapsed #sidebar{width:78px;}
+body.sidebar-collapsed .nav-section,
+body.sidebar-collapsed .nav-item span:not(.nav-icon):not(.nav-dot),
+body.sidebar-collapsed .sidebar-footer > div:first-child,
+body.sidebar-collapsed .sidebar-footer > div:last-child{display:none;}
+body.sidebar-collapsed .nav-item{justify-content:center;padding:12px 8px;}
+body.sidebar-collapsed .nav-dot{margin-left:0;position:absolute;right:12px;}
+#sidebar-overlay{position:fixed;inset:64px 0 0 0;background:rgba(8,13,18,.56);backdrop-filter:blur(2px);z-index:15;display:none;}
+body.mobile-sidebar-open #sidebar-overlay{display:block;}
+.sidebar-toggle{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);cursor:pointer;}
+.sidebar-toggle:hover{background:var(--bg4);}
 
 /* ── Header ──────────────────────────────────────────── */
-.logo{font-size:18px;font-weight:700;color:var(--blue);display:flex;align-items:center;gap:8px;white-space:nowrap;}
+.logo{font-size:18px;font-weight:700;color:var(--blue);display:flex;align-items:center;gap:8px;white-space:nowrap;letter-spacing:.02em;}
 .logo span{font-size:20px;}
 .header-status{display:flex;align-items:center;gap:16px;margin-left:8px;}
 .h-status-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
@@ -36,8 +47,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .h-status-item .dot.green{background:var(--green);}
 .h-status-item .dot.red{background:var(--red);}
 .h-status-item .dot.yellow{background:var(--yellow);}
-.header-quick{display:flex;gap:8px;margin-left:auto;align-items:center;}
-.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);cursor:pointer;font-size:12px;font-weight:500;transition:all .15s;white-space:nowrap;}
+.header-quick{display:flex;gap:8px;margin-left:auto;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:rgba(33,48,65,.92);color:var(--text);cursor:pointer;font-size:12px;font-weight:600;transition:all .15s;white-space:nowrap;box-shadow:0 6px 16px rgba(0,0,0,.12);}
 .btn:hover{background:var(--bg4);border-color:var(--muted2);}
 .btn.primary{background:var(--accent);border-color:var(--accent-hover);color:#fff;}
 .btn.primary:hover{background:var(--accent-hover);}
@@ -60,17 +71,26 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .sidebar-footer{margin-top:auto;padding:16px;color:var(--muted);font-size:11px;border-top:1px solid var(--border);}
 
 /* ── Cards ───────────────────────────────────────────── */
-.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px;}
-.card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg3);}
+.card{background:linear-gradient(180deg, rgba(24,36,49,.95), rgba(18,29,39,.95));border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:0 10px 24px rgba(0,0,0,.16);}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:rgba(33,48,65,.92);}
 .card-title{font-size:13px;font-weight:600;color:var(--text);}
 .card-body{padding:16px;}
 .card-actions{display:flex;gap:8px;flex-wrap:wrap;}
-.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
-.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
-.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
+.grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;}
 
 /* ── Status ──────────────────────────────────────────── */
-.status-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;display:flex;align-items:center;gap:14px;}
+.status-card{background:rgba(24,36,49,.94);border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;align-items:center;gap:14px;min-width:0;}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+.section-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
+.action-card{padding:14px;border:1px solid var(--border);border-radius:12px;background:rgba(33,48,65,.62);}
+.action-card h4{font-size:13px;margin-bottom:6px;}
+.action-card p{font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.45;}
+.stack-8{display:flex;flex-direction:column;gap:8px;}
+.stack-12{display:flex;flex-direction:column;gap:12px;}
+.mobile-wide{width:auto;}
 .status-icon{font-size:22px;width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .status-icon.green{background:#0f291e;}
 .status-icon.red{background:#2d1317;}
@@ -103,7 +123,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .progress-fill.red{background:var(--red);}
 
 /* ── Terminal ────────────────────────────────────────── */
-.terminal{background:#000;border:1px solid var(--border);border-radius:6px;font-family:var(--font-mono);font-size:12px;line-height:1.5;color:#c9d1d9;overflow-y:auto;padding:12px;white-space:pre-wrap;word-break:break-word;}
+.terminal{background:#071018;border:1px solid var(--border);border-radius:10px;font-family:var(--font-mono);font-size:12px;line-height:1.5;color:#d8e6f1;overflow-y:auto;padding:12px;white-space:pre-wrap;word-break:break-word;}
 .terminal .line-ok{color:var(--green);}
 .terminal .line-err{color:var(--red);}
 .terminal .line-warn{color:var(--yellow);}
@@ -118,7 +138,7 @@ tr:hover td{background:rgba(255,255,255,.02);}
 .code{font-family:var(--font-mono);font-size:12px;color:var(--blue);}
 
 /* ── Forms ───────────────────────────────────────────── */
-input,select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:13px;width:100%;outline:none;}
+input,select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;width:100%;outline:none;}
 input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,166,255,.15);}
 .field{margin-bottom:12px;}
 .label{font-size:12px;color:var(--muted);margin-bottom:4px;display:block;}
@@ -182,6 +202,38 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
 .live-indicator{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--green);}
 .live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.2s ease-in-out infinite;}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+@media (max-width: 1100px){
+  .grid-4{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .grid-3{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+
+@media (max-width: 860px){
+  #header{padding:10px 14px;align-items:flex-start;}
+  #content{padding:16px;}
+  .grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}
+  #sidebar{position:fixed;left:0;top:64px;bottom:0;z-index:18;transform:translateX(-100%);width:260px;}
+  body.mobile-sidebar-open #sidebar{transform:translateX(0);}
+  body.sidebar-collapsed #sidebar{width:260px;}
+  body.sidebar-collapsed .nav-section,
+  body.sidebar-collapsed .nav-item span:not(.nav-icon):not(.nav-dot),
+  body.sidebar-collapsed .sidebar-footer > div:first-child,
+  body.sidebar-collapsed .sidebar-footer > div:last-child{display:initial;}
+  body.sidebar-collapsed .nav-item{justify-content:flex-start;padding:8px 16px;}
+  .header-status{display:none;}
+  .header-quick{width:100%;margin-left:0;justify-content:flex-start;}
+  .login-box{width:min(92vw,360px);padding:28px 22px;}
+}
+
+@media (max-width: 520px){
+  .btn{padding:8px 10px;font-size:11px;}
+  .mobile-wide{width:100%;justify-content:center;}
+  .card-header{padding:10px 12px;}
+  .card-body{padding:12px;}
+  .status-card{padding:12px;}
+  .log-toolbar{flex-wrap:wrap;}
+  .terminal{font-size:11px;}
+}
 </style>
 </head>
 <body>
@@ -212,6 +264,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
 
   <!-- Header -->
   <div id="header">
+    <button class="sidebar-toggle" type="button" onclick="toggleSidebar()">☰</button>
     <div class="logo"><span>✈</span> FP Panel</div>
     <div class="header-status">
       <div class="h-status-item"><div class="dot" id="hs-api"></div><span id="hs-api-txt">API</span></div>
@@ -227,6 +280,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
   </div>
 
   <div id="main">
+    <div id="sidebar-overlay" onclick="closeMobileSidebar()"></div>
     <!-- Sidebar -->
     <div id="sidebar">
       <div class="nav-section">Main</div>
@@ -474,9 +528,12 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
 
       <!-- ══════════════════ DATABASE ══════════════════ -->
       <div class="section" id="sec-database">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div class="section-head">
           <h2 style="font-size:18px;font-weight:700;">Database</h2>
-          <button class="btn small" onclick="loadDbStatus()">⟳ Refresh</button>
+          <div class="section-actions">
+            <button class="btn small mobile-wide" onclick="loadDbStatus()">⟳ Refresh</button>
+            <button class="btn small mobile-wide" onclick="loadBackups()">📂 Load Backups</button>
+          </div>
         </div>
 
         <div class="grid-3">
@@ -489,6 +546,16 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
         <div class="card mt-16">
           <div class="card-header"><span class="card-title">🏥 Health Check Detail</span></div>
           <div class="card-body" id="db-health-detail"><span class="text-muted">Loading…</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">🧰 Database Utilities</span></div>
+          <div class="card-body stack-12">
+            <div class="action-grid" id="db-utility-cards">
+              <div class="action-card"><h4>Loading utilities…</h4><p>Checking pg_dump, backup schedule, and DBeaver tunnel availability.</p></div>
+            </div>
+            <div class="terminal" id="db-utility-output" style="height:140px;overflow-y:auto;">Database utility output will appear here.</div>
+          </div>
         </div>
 
         <!-- Backup -->
@@ -551,9 +618,32 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
 
       <!-- ══════════════════ SYSTEM ══════════════════ -->
       <div class="section" id="sec-system">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div class="section-head">
           <h2 style="font-size:18px;font-weight:700;">System Information</h2>
-          <button class="btn small" onclick="loadSystem()">⟳ Refresh</button>
+          <div class="section-actions">
+            <button class="btn small mobile-wide" onclick="loadSystem()">⟳ Refresh</button>
+            <button class="btn small mobile-wide" onclick="loadPorts()">🔌 Check Ports</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">🎛 Operator Controls</span></div>
+          <div class="card-body stack-12">
+            <div class="action-grid" id="sys-utility-cards">
+              <div class="action-card"><h4>Loading controls…</h4><p>Discovering TeamViewer, restart scripts, deployment helpers, and DBeaver tunnel shortcuts.</p></div>
+            </div>
+            <div class="terminal" id="sys-utility-output" style="height:140px;overflow-y:auto;">Operator action output will appear here.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">🗓 Scheduled Tasks</span></div>
+          <div class="card-body stack-12">
+            <div class="action-grid" id="scheduled-task-cards">
+              <div class="action-card"><h4>Loading tasks…</h4><p>Collecting current state for auto-deploy and backup schedules.</p></div>
+            </div>
+            <div class="terminal" id="task-output" style="height:140px;overflow-y:auto;">Scheduled task output will appear here.</div>
+          </div>
         </div>
 
         <div class="grid-2">
@@ -642,6 +732,7 @@ let currentSection = 'overview';
 let liveEventSource = null;
 let currentLogType = null;
 let procRefreshInterval = null;
+let latestSystemData = null;
 
 // ─── Auth ──────────────────────────────────────────────
 let TOTP_ENABLED = false;
@@ -780,6 +871,7 @@ function nav(section) {
   const sec = document.getElementById(`sec-${section}`);
   if (sec) sec.classList.add('active');
   currentSection = section;
+  closeMobileSidebar();
 
   // Load data for the section
   switch(section) {
@@ -793,6 +885,22 @@ function nav(section) {
     case 'tunnel':    loadTunnel(); break;
   }
 }
+
+function toggleSidebar() {
+  if (window.innerWidth <= 860) {
+    document.body.classList.toggle('mobile-sidebar-open');
+    return;
+  }
+  document.body.classList.toggle('sidebar-collapsed');
+}
+
+function closeMobileSidebar() {
+  document.body.classList.remove('mobile-sidebar-open');
+}
+
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 860) closeMobileSidebar();
+});
 
 // ─── Init ──────────────────────────────────────────────
 function initDashboard() {
@@ -1226,6 +1334,8 @@ async function loadDbStatus() {
   } else {
     detail.innerHTML = '<span class="text-muted">No health data available</span>';
   }
+
+  loadDbUtilities();
 }
 
 async function loadBackups() {
@@ -1293,6 +1403,7 @@ function toggleProcAutoRefresh() {
 async function loadSystem() {
   const data = await apiFetch('/api/system');
   if (!data || data.error) { toast('Failed to load system info', 'error'); return; }
+  latestSystemData = data;
 
   // Host card
   document.getElementById('sys-host-body').innerHTML = [
@@ -1355,6 +1466,105 @@ async function loadSystem() {
     ['Panel Port',    data.panelPort],
     ['API Port',      data.apiPort],
   ].map(([k, v]) => `<div class="info-row"><span class="info-key">${k}</span><span class="info-val code text-sm">${escHtml(String(v||'—'))}</span></div>`).join('');
+
+  loadSystemUtilities();
+  loadTaskControls();
+}
+
+async function loadDbUtilities() {
+  const data = await apiFetch('/api/db/utilities');
+  const root = document.getElementById('db-utility-cards');
+  if (!root) return;
+  if (!data || data.error) {
+    root.innerHTML = '<div class="action-card"><h4>Unable to load database utilities</h4><p>The panel could not read backup tooling information from the server.</p></div>';
+    return;
+  }
+
+  const backupTask = data.weeklyBackupTask;
+  root.innerHTML = [
+    renderInfoCard('pg_dump', data.pgDumpPath ? 'Backup tooling is installed and ready.' : 'PostgreSQL backup binary was not found in the standard locations.', data.pgDumpPath || 'Not detected'),
+    renderInfoCard('DBeaver tunnel', data.dbTunnelScript ? (data.dbeaverTunnelOpen ? 'Tunnel is currently listening on port 6543.' : 'Tunnel script is available for one-click startup.') : 'The DBeaver tunnel script is missing from the repo root.', data.dbTunnelScript || 'Script unavailable'),
+    renderInfoCard('Weekly backup task', backupTask ? `Scheduled task is ${escHtml(backupTask.State || 'Unknown')} and ${backupTask.Enabled ? 'enabled' : 'disabled'}.` : 'Weekly backup task was not found on this host.', backupTask ? backupTask.TaskName : 'Task unavailable')
+  ].join('');
+}
+
+async function loadSystemUtilities() {
+  const data = await apiFetch('/api/system/utilities');
+  const root = document.getElementById('sys-utility-cards');
+  if (!root) return;
+  if (!data || data.error) {
+    root.innerHTML = '<div class="action-card"><h4>Unable to load operator controls</h4><p>The panel could not discover available scripts or installed tools.</p></div>';
+    return;
+  }
+
+  root.innerHTML = [
+    renderActionCard('TeamViewer', data.teamViewerPath ? (data.teamViewerRunning ? 'TeamViewer is already running on this host.' : 'Launch TeamViewer remotely from the panel.') : 'TeamViewer was not found in common install locations.', data.teamViewerPath || 'Executable not detected', data.teamViewerPath ? [{ label: data.teamViewerRunning ? 'Launch Again' : 'Start TeamViewer', action: "runUtilityAction('start-teamviewer','sys-utility-output')", tone: 'primary' }] : []),
+    renderActionCard('DBeaver tunnel', data.dbTunnelScript ? (data.dbeaverTunnelOpen ? 'Port 6543 is already open for DBeaver access.' : 'Open the secure DB tunnel without logging onto the server directly.') : 'The DBeaver tunnel helper script is not available.', data.dbTunnelScript || 'Script unavailable', data.dbTunnelScript ? [{ label: data.dbeaverTunnelOpen ? 'Re-open Tunnel' : 'Start Tunnel', action: "runUtilityAction('dbeaver-tunnel','sys-utility-output')", tone: 'primary' }] : []),
+    renderActionCard('API restart script', data.restartServerScript ? 'Runs the repo restart helper directly from the panel.' : 'Restart script not found in the repo root.', data.restartServerScript || 'Script unavailable', data.restartServerScript ? [{ label: 'Run restart-server.ps1', action: "runUtilityAction('restart-server','sys-utility-output')" }] : []),
+    renderActionCard('Deploy helpers', data.setupAutoDeployScript || data.backupTaskScript ? 'Reapply local scheduled-task setup helpers when needed.' : 'Optional setup scripts are not present on this host.', [data.setupAutoDeployScript || 'No auto-deploy setup script', data.backupTaskScript || 'No backup-task installer'].join(' • '), [
+      data.setupAutoDeployScript ? { label: 'Setup Auto Deploy', action: "runUtilityAction('setup-auto-deploy','sys-utility-output')" } : null,
+      data.backupTaskScript ? { label: 'Install Backup Task', action: "runUtilityAction('install-backup-task','sys-utility-output')" } : null,
+    ].filter(Boolean))
+  ].join('');
+}
+
+async function loadTaskControls() {
+  const tasks = await apiFetch('/api/tasks');
+  const root = document.getElementById('scheduled-task-cards');
+  if (!root) return;
+  if (!Array.isArray(tasks) || !tasks.length) {
+    root.innerHTML = '<div class="action-card"><h4>No scheduled tasks found</h4><p>The expected deploy and backup tasks were not detected on this machine.</p></div>';
+    return;
+  }
+  root.innerHTML = tasks.map(task => {
+    const state = task.State || 'Unknown';
+    const enabled = task.Enabled ? 'Enabled' : 'Disabled';
+    return renderActionCard(
+      task.TaskName || task.Key,
+      `State: ${state}. ${enabled}. Last Run: ${task.LastRunTime || 'Unknown'}.`,
+      `Next Run: ${task.NextRunTime || 'Unknown'}`,
+      [
+        { label: 'Run', action: `runTaskAction('${task.Key}','run')`, tone: 'primary' },
+        { label: 'Stop', action: `runTaskAction('${task.Key}','stop')`, tone: 'danger' },
+        { label: task.Enabled ? 'Disable' : 'Enable', action: `runTaskAction('${task.Key}','${task.Enabled ? 'disable' : 'enable'}')` }
+      ]
+    );
+  }).join('');
+}
+
+async function runTaskAction(key, action) {
+  setOutput('task-output', `▶ ${action} ${key}…`);
+  const res = await apiFetch(`/api/tasks/${key}/${action}`, 'POST');
+  setOutput('task-output', res.output || res.error || 'No output');
+  toast(res.ok ? 'Task action completed' : 'Task action failed', res.ok ? 'ok' : 'error');
+  loadTaskControls();
+}
+
+async function runUtilityAction(action, outputId) {
+  setOutput(outputId, `▶ ${action}…`);
+  const res = await apiFetch(`/api/system/actions/${action}`, 'POST');
+  setOutput(outputId, res.output || res.error || 'No output');
+  toast(res.ok ? 'Action completed' : 'Action failed', res.ok ? 'ok' : 'error');
+  if (currentSection === 'system') loadSystemUtilities();
+  if (action === 'dbeaver-tunnel' || currentSection === 'database') loadDbUtilities();
+}
+
+function renderInfoCard(title, description, meta) {
+  return `<div class="action-card"><h4>${escHtml(title)}</h4><p>${escHtml(description || '—')}</p><div class="code text-sm">${escHtml(meta || '—')}</div></div>`;
+}
+
+function renderActionCard(title, description, meta, actions) {
+  const buttons = Array.isArray(actions) && actions.length
+    ? `<div class="flex gap-8 flex-wrap">${actions.map(action => `<button class="btn small ${action.tone || ''} mobile-wide" onclick="${action.action}">${escHtml(action.label)}</button>`).join('')}</div>`
+    : '<div class="text-muted text-sm">No actions available</div>';
+  return `<div class="action-card stack-8"><h4>${escHtml(title)}</h4><p>${escHtml(description || '—')}</p><div class="code text-sm">${escHtml(meta || '—')}</div>${buttons}</div>`;
+}
+
+function setOutput(id, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.scrollTop = el.scrollHeight;
 }
 
 // ─── Tunnel ───────────────────────────────────────────

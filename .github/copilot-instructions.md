@@ -531,6 +531,30 @@ Entry template (copy for each chat):
        - Production panel service may still be configured to launch `panel-server.js`; attached stderr shows historical or active `.js` service configuration and should be corrected by rerunning `panel\Install-PanelService.ps1` or updating NSSM `AppParameters` to `panel\panel-server.cjs`.
        - Cloudflare tunnel config must keep `http_status:404` as the final ingress rule; any hostname placed after it will never match.
     Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-22
+    Chat summary: User hit `cloudflared` not recognized while trying to add DNS route for panel hostname.
+    Files touched: `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Operator guidance: use full executable path (e.g. `C:\Program Files\cloudflared\cloudflared.exe`) when PATH is not configured.
+       - Added fallback commands to discover binary path with `Get-Command cloudflared.exe` and `Get-ChildItem` common install locations.
+    Validation performed:
+       - Error type `CommandNotFoundException` confirms PATH resolution issue, not tunnel-id or DNS failure.
+    Risks or follow-up:
+       - DNS route command still requires cloudflared authenticated context; if that is unavailable, create equivalent CNAME manually in Cloudflare DNS.
+    Suggested context destinations: `20-operations-runbook.md`
+
+- Date: 2026-03-22
+    Chat summary: User successfully added DNS route for `panel.flightpoints.uk` but still received HTTP 404 due to ingress rule order.
+    Files touched: `cloudflared/config.example.yml`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Fixed example tunnel config so `panel.flightpoints.uk` is above catch-all `http_status:404`.
+       - Standardized panel origin in example to `http://127.0.0.1:4000`.
+    Validation performed:
+       - Reviewed current file and confirmed prior invalid order (`http_status:404` before panel hostname) would force 404 for panel host.
+    Risks or follow-up:
+       - Production tunnel service may read `C:\Windows\System32\config\systemprofile\.cloudflared\config.yml`; update the live file at the path actually used by the service.
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
      - IMPORTANT: If the service ever needs to be recreated, use cmd.exe as the binary, NOT npm.ps1/npm.cmd
      - Project is installed at: C:\inetpub\wwwroot\Flight-Points\Code\Flight-Points (subfolder under Code)
      - Backup works correctly — .dump files are binary format, not corrupted; confirmed pg_dump path: C:\Program Files\PostgreSQL\18\bin\pg_dump.exe
@@ -609,3 +633,47 @@ Entry template (copy for each chat):
        - Ensure only one tunnel lifecycle owner remains enabled after fix (either NSSM service or task, not both).
        - Recheck service recovery options so tunnel auto-restarts on crash.
     Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-22
+    Chat summary: User ran tunnel fix commands successfully but hit two command-syntax issues: Select-String regex parsing and cloudflared config flag position.
+    Files touched: `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - For literal search of `Settings: map[config:` use `Select-String -SimpleMatch` (or escape `[` as ``\[``) to avoid regex parser errors.
+       - Correct cloudflared ingress validation syntax is `cloudflared tunnel --config <path> ingress validate` (config flag belongs before `ingress validate`).
+    Validation performed:
+       - User output confirmed tunnel service remained `Running` after restart.
+    Risks or follow-up:
+       - Must verify active config path from live tunnel logs, then validate panel hostname returns 200 instead of 404.
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-22
+    Chat summary: User verified public panel endpoint now returns HTTP 200 via Cloudflare (`https://panel.flightpoints.uk`) after DNS route + ingress ordering fixes.
+    Files touched: `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Public tunnel path for panel is confirmed operational.
+       - Prior 404 issue is resolved.
+    Validation performed:
+       - `Invoke-WebRequest https://panel.flightpoints.uk -UseBasicParsing` returned `StatusCode: 200` with panel HTML content.
+    Risks or follow-up:
+       - Keep `http_status:404` as final ingress rule to prevent regression.
+       - Confirm panel service uses `panel-server.cjs` and monitor `Logs\\Panel\\panel-diagnostics.log` for status telemetry.
+    Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-22
+    Chat summary: Expanded the standalone Control Panel so it can cover more day-to-day server administration without opening the server desktop. Added scheduled task controls, more system/database utility surfaces, brighter responsive styling, a collapsible sidebar, and a TeamViewer launch action.
+    Files touched: `panel/index.html`, `.github/copilot-context/20-operations-runbook.md`, `.github/copilot-context/50-feature-behavior.md`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Panel UI now has a brighter theme with improved phone/tablet behavior and an off-canvas mobile sidebar.
+       - Added desktop sidebar collapse toggle in the header.
+       - Database section now includes `Database Utilities` with pg_dump detection, DBeaver tunnel script detection, weekly backup task visibility, and a dedicated utility output terminal.
+       - System section now includes `Operator Controls` with buttons for TeamViewer launch, DBeaver tunnel start, `restart-server.ps1`, `setup-auto-deploy.ps1`, and `install-backup-task.ps1` when those tools/scripts are available.
+       - System section now includes `Scheduled Tasks` cards that can run, stop, enable, and disable the known Windows tasks exposed by the panel backend.
+       - New client helpers call `/api/tasks`, `/api/system/utilities`, `/api/system/actions/:action`, and `/api/db/utilities`.
+    Validation performed:
+       - VS Code error check: no errors in `panel/index.html` or `panel/panel-server.cjs`.
+       - `npm run build` passed after the UI changes.
+    Risks or follow-up:
+       - Scheduled task actions still depend on the panel service account having permission to control tasks on the host.
+       - TeamViewer start button only works when TeamViewer is installed in one of the common paths the backend checks.
+       - Utility scripts execute as-is; if production paths or execution policy differ, the output terminal should be used to diagnose failures.
+    Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`

@@ -26,6 +26,20 @@
 - Subfolders: Server, Tunnel, Deploy, Backup
 - Local fallback exists when server path is not writable
 
+## Panel control surface (2026-03-22)
+- The standalone panel can now invoke several operator actions remotely:
+	- launch TeamViewer if installed in a common Windows path
+	- run `start-dbeaver-tunnel.ps1`
+	- run `restart-server.ps1`
+	- run `setup-auto-deploy.ps1`
+	- run `install-backup-task.ps1`
+- Scheduled tasks exposed in the panel support `run`, `stop`, `enable`, and `disable` actions.
+- Database utilities shown in the panel also check whether port `6543` is already open for the DBeaver tunnel.
+- New panel-only client behavior:
+	- collapsible sidebar on desktop
+	- slide-out sidebar with overlay on small screens
+	- brighter theme intended for phone/tablet use during remote administration
+
 ## Alerting
 - Deploy failures: email + data/deploy-status.json status=failed
 - Deploy recoveries: status=success clears Integrity banner

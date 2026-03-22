@@ -45,6 +45,29 @@ const PANEL_LOG_DIR = path.join(LOGS_ROOT, 'Panel');
 const PANEL_DIAGNOSTICS_LOG = path.join(PANEL_LOG_DIR, 'panel-diagnostics.log');
 
 const SERVICES = ['flight-points', 'flight-points-tunnel'];
+const TASKS = {
+  'server-tunnel': 'Flight-Points_Server_Tunnel',
+  'auto-deploy': 'FlightPoints-AutoDeploy',
+  'weekly-backup': 'FlightPoints-Weekly-Backup'
+};
+const TEAMVIEWER_PATHS = [
+  'C:\\Program Files\\TeamViewer\\TeamViewer.exe',
+  'C:\\Program Files (x86)\\TeamViewer\\TeamViewer.exe',
+  'C:\\Program Files\\TeamViewer\\TeamViewer_Service.exe',
+  'C:\\Program Files (x86)\\TeamViewer\\TeamViewer_Service.exe'
+];
+const PG_DUMP_PATHS = [
+  'C:\\Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe',
+  'C:\\Program Files\\PostgreSQL\\17\\bin\\pg_dump.exe',
+  'C:\\Program Files\\PostgreSQL\\16\\bin\\pg_dump.exe',
+  'C:\\Program Files\\PostgreSQL\\15\\bin\\pg_dump.exe'
+];
+const UTILITY_SCRIPTS = {
+  'dbeaver-tunnel': path.join(ROOT, 'start-dbeaver-tunnel.ps1'),
+  'restart-server': path.join(ROOT, 'restart-server.ps1'),
+  'install-backup-task': path.join(ROOT, 'install-backup-task.ps1'),
+  'setup-auto-deploy': path.join(ROOT, 'setup-auto-deploy.ps1')
+};
 
 if (!PANEL_PIN) {
   console.error('[panel] FATAL: PANEL_PIN or ADMIN_PIN must be set in .env.local');
@@ -66,6 +89,24 @@ function appendDiagnosticLog(event, details) {
   } catch {
     // Diagnostics must never crash the panel.
   }
+}
+
+function firstExistingPath(paths) {
+  for (const candidate of paths) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function discoverTooling() {
+  return {
+    teamViewerPath: firstExistingPath(TEAMVIEWER_PATHS),
+    pgDumpPath: firstExistingPath(PG_DUMP_PATHS),
+    dbTunnelScript: fs.existsSync(UTILITY_SCRIPTS['dbeaver-tunnel']) ? UTILITY_SCRIPTS['dbeaver-tunnel'] : null,
+    restartServerScript: fs.existsSync(UTILITY_SCRIPTS['restart-server']) ? UTILITY_SCRIPTS['restart-server'] : null,
+    backupTaskScript: fs.existsSync(UTILITY_SCRIPTS['install-backup-task']) ? UTILITY_SCRIPTS['install-backup-task'] : null,
+    setupAutoDeployScript: fs.existsSync(UTILITY_SCRIPTS['setup-auto-deploy']) ? UTILITY_SCRIPTS['setup-auto-deploy'] : null
+  };
 }
 
 // ─── Session Store ────────────────────────────────────────────────────────────
@@ -399,6 +440,101 @@ async function handleServices(req, res) {
   json(res, 200, svcs);
 }
 
+async function getTasksJson() {
+  const result = await ps(`
+    $list = @()
+    $map = @{
+      'server-tunnel' = 'Flight-Points_Server_Tunnel'
+      'auto-deploy' = 'FlightPoints-AutoDeploy'
+      'weekly-backup' = 'FlightPoints-Weekly-Backup'
+    }
+    foreach ($key in $map.Keys) {
+      $name = $map[$key]
+      try {
+        $task = Get-ScheduledTask -TaskName $name -EA Stop
+        $info = Get-ScheduledTaskInfo -TaskName $name -EA SilentlyContinue
+        $list += [PSCustomObject]@{
+          Key = $key
+          Name = $name
+          State = $task.State.ToString()
+          Enabled = [bool]$task.Settings.Enabled
+          LastRunTime = if($info){$info.LastRunTime.ToString('u')}else{''}
+          NextRunTime = if($info){$info.NextRunTime.ToString('u')}else{''}
+          LastTaskResult = if($info){$info.LastTaskResult}else{$null}
+        }
+      } catch {
+        $list += [PSCustomObject]@{ Key=$key; Name=$name; State='NotFound'; Enabled=$false; LastRunTime=''; NextRunTime=''; LastTaskResult=$null }
+      }
+    }
+    $list | ConvertTo-Json -Depth 4
+  `, 45000);
+  try {
+    const parsed = JSON.parse(result.out);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return [];
+  }
+}
+
+async function handleTasks(req, res) {
+  json(res, 200, await getTasksJson());
+}
+
+async function handleTaskAction(req, res, key, action) {
+  const taskName = TASKS[key];
+  if (!taskName) return json(res, 400, { error: 'Unknown task' });
+  const actions = {
+    run: `Start-ScheduledTask -TaskName '${taskName}' -EA Stop`,
+    stop: `Stop-ScheduledTask -TaskName '${taskName}' -EA Stop`,
+    enable: `Enable-ScheduledTask -TaskName '${taskName}' -EA Stop`,
+    disable: `Disable-ScheduledTask -TaskName '${taskName}' -EA Stop`
+  };
+  if (!actions[action]) return json(res, 400, { error: 'Invalid task action' });
+  const result = await ps(`
+    try {
+      ${actions[action]}
+      Write-Output 'OK: ${taskName} ${action}'
+    } catch {
+      Write-Output ('ERROR: ' + $_.Exception.Message)
+    }
+  `, 60000);
+  json(res, 200, { ok: (result.out || '').startsWith('OK'), output: result.out || result.err });
+}
+
+async function handleSystemUtilities(req, res) {
+  const tooling = discoverTooling();
+  const tasks = await getTasksJson();
+  const dbeaverPort = await ps(`$r = Test-NetConnection -ComputerName localhost -Port 6543 -InformationLevel Quiet -WarningAction SilentlyContinue; if($r){'true'}else{'false'}`);
+  const teamViewerRunning = await ps(`$p = Get-Process -Name TeamViewer,TeamViewer_Service -EA SilentlyContinue; if($p){'true'}else{'false'}`);
+  json(res, 200, {
+    ...tooling,
+    dbeaverTunnelOpen: (dbeaverPort.out || '').trim() === 'true',
+    teamViewerRunning: (teamViewerRunning.out || '').trim() === 'true',
+    tasks
+  });
+}
+
+async function handleUtilityAction(req, res, action) {
+  if (action === 'start-teamviewer') {
+    const teamViewerPath = firstExistingPath(TEAMVIEWER_PATHS);
+    if (!teamViewerPath) return json(res, 404, { error: 'TeamViewer executable not found in common locations' });
+    const result = await ps(`
+      try {
+        Start-Process -FilePath '${teamViewerPath}' -EA Stop
+        Write-Output 'OK: TeamViewer started'
+      } catch {
+        Write-Output ('ERROR: ' + $_.Exception.Message)
+      }
+    `, 30000);
+    return json(res, 200, { ok: (result.out || '').startsWith('OK'), output: result.out || result.err, path: teamViewerPath });
+  }
+
+  const scriptPath = UTILITY_SCRIPTS[action];
+  if (!scriptPath || !fs.existsSync(scriptPath)) return json(res, 404, { error: 'Utility script not found' });
+  const result = await ps(`Set-Location '${ROOT}'; & '${scriptPath}'`, 180000);
+  json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') || 'Done' });
+}
+
 // POST /api/services/:name/:action
 async function handleServiceAction(req, res, name, action) {
   if (!SERVICES.includes(name)) return json(res, 400, { error: 'Unknown service' });
@@ -656,6 +792,20 @@ async function handleDbBackups(req, res) {
   json(res, 200, backups.sort((a, b) => new Date(b.modified) - new Date(a.modified)));
 }
 
+async function handleDbUtilities(req, res) {
+  const tooling = discoverTooling();
+  const tasks = await getTasksJson();
+  const backupTask = tasks.find(task => task.Key === 'weekly-backup') || null;
+  const dbeaverPort = await ps(`$r = Test-NetConnection -ComputerName localhost -Port 6543 -InformationLevel Quiet -WarningAction SilentlyContinue; if($r){'true'}else{'false'}`);
+  json(res, 200, {
+    pgDumpPath: tooling.pgDumpPath,
+    dbTunnelScript: tooling.dbTunnelScript,
+    dbeaverTunnelOpen: (dbeaverPort.out || '').trim() === 'true',
+    weeklyBackupTask: backupTask,
+    backupRoot: BACKUPS_DIR
+  });
+}
+
 // ─── Processes ────────────────────────────────────────────────────────────────
 async function handleProcesses(req, res) {
   const result = await ps(`
@@ -711,8 +861,12 @@ async function handleSystem(req, res) {
     PANEL_PIN:    !!process.env.PANEL_PIN,
     PGSSLMODE:    process.env.PGSSLMODE || '(not set)',
     SMTP_SERVER:  !!process.env.SMTP_SERVER,
+    PANEL_TOTP_SECRET: !!process.env.PANEL_TOTP_SECRET,
     NODE_ENV:     process.env.NODE_ENV || '(not set)'
   };
+
+  const tooling = discoverTooling();
+  const tasks = await getTasksJson();
 
   json(res, 200, {
     hostname:    os.hostname(),
@@ -731,7 +885,9 @@ async function handleSystem(req, res) {
     cpu:         { count: os.cpus().length, model: os.cpus()[0]?.model || 'Unknown', usage: parseFloat(cpuResult.out) || 0 },
     disks,
     interfaces: ifaces,
-    env:         envStatus
+    env:         envStatus,
+    tooling,
+    tasks
   });
 }
 
@@ -745,7 +901,7 @@ async function handleTunnel(req, res) {
 // ─── Network Port Check ───────────────────────────────────────────────────────
 async function handlePortCheck(req, res) {
   const result = await ps(`
-    @(3001, 4000, 5432) | ForEach-Object {
+    @(3001, 4000, 5432, 6543, 20241) | ForEach-Object {
       $port = $_
       $conn = Test-NetConnection -ComputerName localhost -Port $port -InformationLevel Quiet -WarningAction SilentlyContinue
       [PSCustomObject]@{ Port=$port; Open=$conn }
@@ -860,6 +1016,14 @@ const server = http.createServer(async (req, res) => {
   if (method === 'POST' && p === '/api/deploy/run')      return handleDeployRun(req, res);
   if (method === 'POST' && p === '/api/deploy/audit')    return handleDeployAudit(req, res);
 
+  // Scheduled tasks / utility actions
+  if (method === 'GET'  && p === '/api/tasks')            return handleTasks(req, res);
+  const taskAct = p.match(/^\/api\/tasks\/([^/]+)\/(run|stop|enable|disable)$/);
+  if (method === 'POST' && taskAct)                       return handleTaskAction(req, res, taskAct[1], taskAct[2]);
+  if (method === 'GET'  && p === '/api/system/utilities') return handleSystemUtilities(req, res);
+  const utilityAct = p.match(/^\/api\/system\/actions\/([a-z0-9-]+)$/);
+  if (method === 'POST' && utilityAct)                    return handleUtilityAction(req, res, utilityAct[1]);
+
   // Logs
   if (method === 'GET'  && p === '/api/logs')            return handleListLogs(req, res);
   const logStream = p.match(/^\/api\/logs\/([a-z0-9-]+)\/stream$/);
@@ -878,6 +1042,7 @@ const server = http.createServer(async (req, res) => {
   if (method === 'GET'  && p === '/api/db/status')       return handleDbStatus(req, res);
   if (method === 'POST' && p === '/api/db/backup')       return handleDbBackup(req, res);
   if (method === 'GET'  && p === '/api/db/backups')      return handleDbBackups(req, res);
+  if (method === 'GET'  && p === '/api/db/utilities')    return handleDbUtilities(req, res);
 
   // Processes
   if (method === 'GET' && p === '/api/processes')        return handleProcesses(req, res);
