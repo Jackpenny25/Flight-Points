@@ -10,11 +10,9 @@ Dont commit yourself as it confuses me.
 
 - No secrets should be stored in this repo and escpially in this file as it is public(Same for the other context files) dont add anything that can make the website vulnerable.
 
-- Please update this file with ANY infomation and update the other context files with any important information you think is relevant to the project. This is the single source of truth for the project and should be updated with any learnings and decisions.
+- Please update this file with ANY infomation and update the other context files with any important information you think is relevant to the project. This is the single source of truth for the project and should be updated with any learnings and decisions.  
 
--UPDATE AFTER EVERY MESSAGE AND ANY RELEVANT INFO that will be useful for future development and handover. This is the single source of truth for the project and should be updated with any learnings and decisions.
-
----
+-When I ask you to sort through the inbox and move important information to the context files please do so and make sure to update this file with any important information you think is relevant to the project. This is the single source of truth for the project and should be updated with any learnings and decisions and please always consider adding features to the integrity tab and the panel which can make it easier for the handover and the control of the system. Also please update the privacy policy with any new features that may have privacy implications.
 
 ## Flight-Points Copilot Instructions
 **Single source of truth for project development. Update frequently with learnings and decisions.**
@@ -313,6 +311,13 @@ Entry template (copy for each chat):
      - DB ssl change (PGSSLMODE handling) is backward compat for require/verify-ca/verify-full but may differ if production uses non-standard PGSSLMODE value
     Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
 
+- Date: 2026-03-23
+   Chat summary: Created a slide-by-slide PowerPoint outline for introducing Flight Points to cadets. Covers aim, structure, points, leaderboard, rewards, attendance, tickets, accounts, roles, and key rules. Also includes AI tool recommendations.
+   Files touched: `docs/cadet-intro-presentation.md`
+   Behavior/decision changes: No code changes. New documentation artefact only.
+   Validation performed: File created successfully.
+   Risks or follow-up: Squadron branding/colours and cadet photos need to be added before presenting. SNCO should review Key Rules slide before use.
+   Suggested context destinations: None — this is a one-off presentation resource.
 - Date: 2026-03-20 (session continued)
     Chat summary: NSSM tunnel service was recreated with direct `cloudflared.exe` Application and separate AppParameters; service started successfully and cloudflared registered 4 tunnel connections (lhr14/lhr15/lhr20/lhr01). Public outage root cause is resolved at tunnel process level.
     Files touched: `.github/copilot-instructions.md` (documentation), Windows service/task state on server (not in repo)
