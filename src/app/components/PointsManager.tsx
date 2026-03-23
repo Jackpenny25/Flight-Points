@@ -71,12 +71,12 @@ export function PointsManager({ userRole, canEditPoints = false, canDeletePoints
       return false;
     }
 
-    const pin = prompt('Enter 6-digit admin PIN or authenticator code');
+    const pin = prompt('Enter 6-digit authenticator code or long backup code');
     if (!pin) return false;
 
     const pinStr = String(pin).trim();
-    if (!/^\d{6}$/.test(pinStr)) {
-      toast.error('PIN must be 6 digits.');
+    if (!/^\d{6}$/.test(pinStr) && pinStr.length < 24) {
+      toast.error('Enter a 6-digit authenticator code or your long backup code.');
       return false;
     }
 
@@ -88,11 +88,11 @@ export function PointsManager({ userRole, canEditPoints = false, canDeletePoints
         return true;
       }
 
-      const err = String(data?.message || data?.error || 'Incorrect PIN');
+      const err = String(data?.message || data?.error || 'Incorrect authenticator or backup code');
       toast.error(err);
       return false;
     } catch (e: any) {
-      toast.error(String(e?.message || e || 'Failed to verify PIN'));
+      toast.error(String(e?.message || e || 'Failed to verify safeguard code'));
       return false;
     }
   };

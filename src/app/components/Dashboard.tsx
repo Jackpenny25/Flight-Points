@@ -154,7 +154,7 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
 
   const openPinDialog = () => {
     if (!canUseAdminPin) {
-      alert('Only Flight Point Leads can unlock admin PIN actions.');
+      alert('Only Flight Point Leads can unlock admin safeguard actions.');
       return;
     }
     if (adminUnlocked) return;
@@ -172,12 +172,12 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
   const submitPin = async () => {
     try {
       if (!accessToken || !user?.id) {
-        setPinError('You must be signed in to verify PIN');
+        setPinError('You must be signed in to verify your safeguard code');
         return;
       }
       const data = await api.verifyAdminCode(pinInput);
       if (!data?.success) {
-        const err = String(data?.message || data?.error || 'Incorrect PIN');
+        const err = String(data?.message || data?.error || 'Incorrect authenticator or backup code');
         if (err.toLowerCase().includes('expired token') || err.toLowerCase().includes('invalid or expired token')) {
           logout();
           setPinDialogOpen(false);
@@ -306,20 +306,19 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
         </div>
       </header>
 
-      {/* Admin PIN Dialog */}
+      {/* Admin Safeguard Dialog */}
       <Dialog open={pinDialogOpen} onOpenChange={setPinDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Admin Unlock</DialogTitle>
-            <DialogDescription>Enter the 6-digit admin PIN or authenticator code to unlock actions.</DialogDescription>
+            <DialogDescription>Enter your 6-digit authenticator code or long backup code to unlock actions.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <Input
               value={pinInput}
-              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="PIN or code"
-              maxLength={6}
-              inputMode="numeric"
+              onChange={(e) => setPinInput(e.target.value.slice(0, 128))}
+              placeholder="Authenticator code or backup code"
+              maxLength={128}
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {

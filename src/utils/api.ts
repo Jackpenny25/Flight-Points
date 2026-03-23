@@ -84,6 +84,11 @@ export const api = {
   updateReward: (id: string, data: any) => fetchWithAuth(`/data/rewards/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => r.json()),
   deleteReward: (id: string) => fetchWithAuth(`/data/rewards/${id}`, { method: 'DELETE' }).then(r => r.json()),
 
+  // Potential Rewards (SNCO planning list)
+  getPotentialRewards: () => fetchWithAuth('/rewards/potential-list', { method: 'GET' }).then(r => r.json()),
+  addPotentialReward: (text: string) => fetchWithAuth('/rewards/potential-list', { method: 'POST', body: JSON.stringify({ text }) }).then(r => r.json()),
+  deletePotentialReward: (id: string) => fetchWithAuth(`/rewards/potential-list/${id}`, { method: 'DELETE' }).then(r => r.json()),
+
   // Reward Suggestions
   getRewardSuggestions: () => fetchWithAuth('/reward-suggestions', { method: 'GET' }).then(r => r.json()),
   createRewardSuggestion: (data: { title: string; description?: string }) => fetchWithAuth('/reward-suggestions', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
@@ -160,8 +165,8 @@ export const api = {
   // Deploy Status
   getDeployStatus: () => fetchWithAuth('/deploy-status', { method: 'GET' }).then(r => r.json()),
   
-  // Verify PIN
-  verifyPin: (pin: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ pin }) }).then(r => r.json()),
+  // Verify admin safeguard code
+  verifyPin: (pin: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ code: pin }) }).then(r => r.json()),
   verifyAdminCode: (code: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ code }) }).then(r => r.json()),
   getAdminSafeguardStatus: () => fetchWithAuth('/admin/pin-status', { method: 'GET' }).then(r => r.json()),
   

@@ -34,8 +34,8 @@ export function AdminSafeguardDialog({
 
   const handleVerify = async () => {
     const trimmed = code.trim();
-    if (!/^\d{6}$/.test(trimmed)) {
-      setError('Enter a 6-digit admin PIN or authenticator code.');
+    if (!/^\d{6}$/.test(trimmed) && trimmed.length < 24) {
+      setError('Enter a 6-digit authenticator code or your long backup code.');
       return;
     }
 
@@ -67,11 +67,10 @@ export function AdminSafeguardDialog({
         <div className="space-y-3 py-2">
           <Input
             value={code}
-            onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-            placeholder="6-digit PIN or code"
-            inputMode="numeric"
+            onChange={(event) => setCode(event.target.value.slice(0, 128))}
+            placeholder="Authenticator code or backup code"
             autoFocus
-            maxLength={6}
+            maxLength={128}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault();

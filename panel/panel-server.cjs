@@ -31,8 +31,9 @@ const PANEL_DIR  = __dirname;
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const PORT       = parseInt(process.env.PANEL_PORT || '4000', 10);
-const PANEL_PIN  = process.env.PANEL_PIN || process.env.ADMIN_PIN || '';
-const PANEL_TOTP_SECRET = process.env.PANEL_TOTP_SECRET || ''; // Optional: base32 TOTP secret
+const PANEL_TOTP_SECRET = String(process.env.PANEL_TOTP_SECRET || process.env.ADMIN_TOTP_SECRET || '').trim();
+const ADMIN_BACKUP_CODE_MIN_LENGTH = parseInt(process.env.ADMIN_BACKUP_CODE_MIN_LENGTH || '24', 10);
+const ADMIN_BACKUP_CODE_PATH = path.join(ROOT, 'data', 'admin-backup-code.txt');
 const API_PORT   = parseInt(process.env.PORT || '3001', 10);
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours sliding window
 const PANEL_MAX_LOGIN_ATTEMPTS = parseInt(process.env.PANEL_MAX_LOGIN_ATTEMPTS || '10', 10);
@@ -43,8 +44,10 @@ const LOGS_ROOT    = process.env.PANEL_LOGS_ROOT   || 'C:\\inetpub\\wwwroot\\Fli
 const BACKUPS_DIR  = process.env.PANEL_BACKUPS_DIR || 'C:\\inetpub\\wwwroot\\Flight-Points\\Backups';
 const PANEL_LOG_DIR = path.join(LOGS_ROOT, 'Panel');
 const PANEL_DIAGNOSTICS_LOG = path.join(PANEL_LOG_DIR, 'panel-diagnostics.log');
+const POWERSHELL_EXE = process.env.PANEL_POWERSHELL_PATH
+  || path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
-const SERVICES = ['flight-points', 'flight-points-tunnel'];
+const SERVICES = ['flight-points', 'flight-points-tunnel', 'flight-points-panel'];
 const TASKS = {
   'server-tunnel': 'Flight-Points_Server_Tunnel',
   'auto-deploy': 'FlightPoints-AutoDeploy',
@@ -69,17 +72,62 @@ const UTILITY_SCRIPTS = {
   'setup-auto-deploy': path.join(ROOT, 'setup-auto-deploy.ps1')
 };
 
-if (!PANEL_PIN) {
-  console.error('[panel] FATAL: PANEL_PIN or ADMIN_PIN must be set in .env.local');
+function generateBackupCode() {
+  return crypto.randomBytes(48).toString('base64url');
+}
+
+function normalizeBackupCode(value) {
+  return String(value || '').trim();
+}
+
+function loadOrCreateBackupCode() {
+  const envCode = normalizeBackupCode(process.env.ADMIN_BACKUP_CODE || '');
+  if (envCode) {
+    if (envCode.length < ADMIN_BACKUP_CODE_MIN_LENGTH) {
+      console.error(`[panel] FATAL: ADMIN_BACKUP_CODE must be at least ${ADMIN_BACKUP_CODE_MIN_LENGTH} characters.`);
+      process.exit(1);
+    }
+    return envCode;
+  }
+
+  try {
+    if (fs.existsSync(ADMIN_BACKUP_CODE_PATH)) {
+      const fileCode = normalizeBackupCode(fs.readFileSync(ADMIN_BACKUP_CODE_PATH, 'utf8'));
+      if (fileCode.length >= ADMIN_BACKUP_CODE_MIN_LENGTH) return fileCode;
+    }
+
+    const generated = generateBackupCode();
+    fs.mkdirSync(path.dirname(ADMIN_BACKUP_CODE_PATH), { recursive: true });
+    fs.writeFileSync(ADMIN_BACKUP_CODE_PATH, generated, { encoding: 'utf8', mode: 0o600 });
+    console.warn(`[panel] Generated admin backup code at ${ADMIN_BACKUP_CODE_PATH}. Move it to ADMIN_BACKUP_CODE in .env.local.`);
+    return generated;
+  } catch (error) {
+    console.error('[panel] FATAL: Failed to load or create backup code:', error);
+    process.exit(1);
+  }
+}
+
+function codesMatchConstantTime(submitted, expected) {
+  const submittedBuffer = Buffer.from(submitted, 'utf8');
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  if (submittedBuffer.length !== expectedBuffer.length) return false;
+  return crypto.timingSafeEqual(submittedBuffer, expectedBuffer);
+}
+
+const PANEL_BACKUP_CODE = loadOrCreateBackupCode();
+
+if (!PANEL_TOTP_SECRET) {
+  console.error('[panel] FATAL: PANEL_TOTP_SECRET or ADMIN_TOTP_SECRET must be set in .env.local');
+  process.exit(1);
+}
+
+if (!PANEL_BACKUP_CODE || PANEL_BACKUP_CODE.length < ADMIN_BACKUP_CODE_MIN_LENGTH) {
+  console.error('[panel] FATAL: ADMIN_BACKUP_CODE is missing or too short.');
   process.exit(1);
 }
 
 // Log auth method on startup
-if (PANEL_TOTP_SECRET) {
-  console.log('[panel] ✓ Auth: TOTP enabled (PIN as backup)');
-} else {
-  console.log('[panel] ✓ Auth: PIN only');
-}
+console.log('[panel] ✓ Auth: TOTP enabled (long backup code fallback)');
 
 function appendDiagnosticLog(event, details) {
   try {
@@ -202,9 +250,10 @@ function shell(cmd, timeout = 30000) {
 function ps(script, timeout = 30000) {
   const tmp = path.join(os.tmpdir(), `fp_panel_${crypto.randomBytes(6).toString('hex')}.ps1`);
   fs.writeFileSync(tmp, script, 'utf8');
+  const psExe = fs.existsSync(POWERSHELL_EXE) ? POWERSHELL_EXE : 'powershell.exe';
   return new Promise(resolve => {
     exec(
-      `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${tmp}"`,
+      `"${psExe}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${tmp}"`,
       { timeout, windowsHide: true, cwd: ROOT, maxBuffer: 5 * 1024 * 1024 },
       (err, stdout, stderr) => {
         fs.unlink(tmp, () => {});
@@ -338,22 +387,17 @@ async function getTunnelSummary() {
 async function handleLogin(req, res, body) {
   const ip = req.socket.remoteAddress || 'unknown';
   if (isLocked(ip)) return json(res, 429, { error: `Too many attempts. Try again in ${PANEL_LOCKOUT_MINUTES} minutes.` });
-  const pin = String(body.pin || '');
-  const totp = String(body.totp || '');
-  
-  let valid = false;
-  if (PANEL_TOTP_SECRET && totp) {
-    // TOTP mode
-    const tokens = generateTotp(PANEL_TOTP_SECRET);
-    valid = tokens && tokens.includes(totp);
-  } else if (pin) {
-    // PIN mode (or PIN as backup for TOTP)
-    valid = pin === PANEL_PIN;
-  }
+  const submittedCode = String(body.code || body.totp || body.pin || '').trim();
+  const tokens = generateTotp(PANEL_TOTP_SECRET) || [];
+  const totpValid = /^\d{6}$/.test(submittedCode) && tokens.includes(submittedCode);
+  const backupValid = submittedCode.length >= ADMIN_BACKUP_CODE_MIN_LENGTH
+    ? codesMatchConstantTime(submittedCode, PANEL_BACKUP_CODE)
+    : false;
+  const valid = totpValid || backupValid;
   
   if (!valid) {
     recordAttempt(ip, false);
-    return json(res, 401, { error: 'Invalid credentials' });
+    return json(res, 401, { error: 'Invalid authenticator or backup code' });
   }
   recordAttempt(ip, true);
   json(res, 200, { token: createSession() });
@@ -549,6 +593,43 @@ async function handleServiceAction(req, res, name, action) {
     }
   `, 60000);
   json(res, 200, { ok: (result.out || '').startsWith('OK'), output: result.out || result.err });
+}
+
+// POST /api/services/restart-app — restart flight-points + flight-points-tunnel (panel stays up)
+async function handleRestartApp(req, res) {
+  const result = await ps(`
+    $out = @()
+    try {
+      Restart-Service -Name 'flight-points' -Force -EA Stop
+      $out += 'OK: flight-points restarted'
+    } catch { $out += "ERROR flight-points: $($_.Exception.Message)" }
+    Start-Sleep -Seconds 2
+    try {
+      Restart-Service -Name 'flight-points-tunnel' -Force -EA Stop
+      $out += 'OK: flight-points-tunnel restarted'
+    } catch { $out += "ERROR flight-points-tunnel: $($_.Exception.Message)" }
+    $out -join [char]10
+  `, 90000);
+  const output = [result.out, result.err].filter(Boolean).join('\n') || 'Done';
+  json(res, 200, { ok: !result.err && result.out.includes('OK'), output });
+}
+
+// POST /api/panel/restart — restart panel + all managed services
+function handlePanelRestart(req, res) {
+  json(res, 200, { ok: true, message: 'Restart initiated. Panel and all services will restart in ~1s.' });
+  // Detached PowerShell process restarts all services; survives this process dying
+  const script = [
+    "Start-Sleep -Seconds 1",
+    "Restart-Service -Name 'flight-points'        -Force -ErrorAction SilentlyContinue",
+    "Restart-Service -Name 'flight-points-tunnel' -Force -ErrorAction SilentlyContinue",
+    "Restart-Service -Name 'flight-points-panel'  -Force -ErrorAction SilentlyContinue"
+  ].join('; ');
+  const psExe = fs.existsSync(POWERSHELL_EXE) ? POWERSHELL_EXE : 'powershell.exe';
+  const child = require('child_process').spawn(
+    psExe, ['-NoProfile', '-NonInteractive', '-Command', script],
+    { detached: true, stdio: 'ignore', windowsHide: true }
+  );
+  child.unref();
 }
 
 // GET /api/git/status
@@ -857,11 +938,11 @@ async function handleSystem(req, res) {
   const envStatus = {
     DATABASE_URL: !!process.env.DATABASE_URL,
     JWT_SECRET:   !!process.env.JWT_SECRET,
-    ADMIN_PIN:    !!process.env.ADMIN_PIN,
-    PANEL_PIN:    !!process.env.PANEL_PIN,
+    ADMIN_TOTP_SECRET: !!process.env.ADMIN_TOTP_SECRET,
+    PANEL_TOTP_SECRET: !!process.env.PANEL_TOTP_SECRET,
+    ADMIN_BACKUP_CODE: !!process.env.ADMIN_BACKUP_CODE,
     PGSSLMODE:    process.env.PGSSLMODE || '(not set)',
     SMTP_SERVER:  !!process.env.SMTP_SERVER,
-    PANEL_TOTP_SECRET: !!process.env.PANEL_TOTP_SECRET,
     NODE_ENV:     process.env.NODE_ENV || '(not set)'
   };
 
@@ -984,7 +1065,7 @@ const server = http.createServer(async (req, res) => {
   // ── Auth routes (no token required) ──
   if (method === 'POST' && p === '/api/auth/login')  return handleLogin(req, res, body);
   if (method === 'POST' && p === '/api/auth/logout') { sessions.delete(getToken(req)); return json(res, 200, { ok: true }); }
-  if (method === 'GET'  && p === '/api/auth/check')  return json(res, 200, { ok: validateSession(getToken(req)), totpEnabled: !!PANEL_TOTP_SECRET });
+  if (method === 'GET'  && p === '/api/auth/check')  return json(res, 200, { ok: validateSession(getToken(req)), totpEnabled: true, backupCodeMinLength: ADMIN_BACKUP_CODE_MIN_LENGTH });
 
   // ── All routes below require auth ──
   if (!requireAuth(req, res)) return;
@@ -993,6 +1074,10 @@ const server = http.createServer(async (req, res) => {
   if (method === 'GET' && p === '/api/overview')         return handleOverview(req, res);
   if (method === 'GET' && p === '/api/deploy-status')    return handleDeployStatus(req, res);
   if (method === 'GET' && p === '/api/ports')            return handlePortCheck(req, res);
+
+  // Panel self-restart
+  if (method === 'POST' && p === '/api/panel/restart')   return handlePanelRestart(req, res);
+  if (method === 'POST' && p === '/api/services/restart-app') return handleRestartApp(req, res);
 
   // Services
   if (method === 'GET' && p === '/api/services')         return handleServices(req, res);

@@ -72,7 +72,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
 
   const ensureAdminPin = () => {
     if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
-    toast.error('Unlock admin mode first using your admin PIN or authenticator code.');
+    toast.error('Unlock admin mode first using your authenticator or backup code.');
     return false;
   };
 
@@ -94,7 +94,7 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
 
   const verifyPinAndContinue = async () => {
     if (!pinVerifyValue) {
-      setPinVerifyError('PIN is required.');
+      setPinVerifyError('A safeguard code is required.');
       return;
     }
     setPinVerifyLoading(true);
@@ -637,17 +637,16 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             <DialogHeader>
               <DialogTitle>Verify Admin Safeguard</DialogTitle>
               <DialogDescription>
-                Enter your admin PIN or authenticator code to continue this sensitive operation.
+                Enter your 6-digit authenticator code or long backup code to continue this sensitive operation.
               </DialogDescription>
             </DialogHeader>
             <div className="py-2 space-y-2">
               <Input
                 type="password"
-                inputMode="numeric"
-                maxLength={6}
-                placeholder="PIN or code"
+                maxLength={128}
+                placeholder="Authenticator code or backup code"
                 value={pinVerifyValue}
-                onChange={(e) => setPinVerifyValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) => setPinVerifyValue(e.target.value.slice(0, 128))}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();

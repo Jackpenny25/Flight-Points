@@ -244,20 +244,35 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
     <div class="login-logo">✈️</div>
     <div class="login-title">Control Panel</div>
     <div class="login-sub">Flight-Points Server</div>
-    <div class="field">
-      <div id="auth-mode-label" style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;"></div>
-      <input class="pin-input" id="pin-input" type="password" placeholder="Panel PIN or 6-digit code" maxlength="10" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" onfocus="handleLoginInputFocus()" onblur="handleLoginInputBlur()">
-    </div>
-    <button class="btn primary" style="width:100%;justify-content:center;padding:10px;" onclick="doLogin()">Unlock</button>
-    <div class="login-error" id="login-error"></div>
+    <form onsubmit="doLogin(); return false;" autocomplete="off">
+      <div class="field">
+        <div id="auth-mode-label" style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;"></div>
+        <input class="pin-input" id="pin-input" type="password" placeholder="Authenticator code or backup code" maxlength="128" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" onfocus="handleLoginInputFocus()" onblur="handleLoginInputBlur()">
+      </div>
+      <button type="submit" class="btn primary" style="width:100%;justify-content:center;padding:10px;">Unlock</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
     <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-      Panel PIN: backup code in .env.local | Code: 6 digits from authenticator app
+      Use your authenticator app code. Backup: one long code from ADMIN_BACKUP_CODE.
     </div>
   </div>
 </div>
 
 <!-- ─── Toast Container ──────────────────────────────────────── -->
 <div id="toast-container"></div>
+
+<!-- ─── Reconnect Overlay (shown after Restart All) ─────────── -->
+<div id="reconnect-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(10,16,22,.93);backdrop-filter:blur(10px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;">
+  <div style="font-size:48px;">🔄</div>
+  <div style="font-size:22px;font-weight:700;color:#f2f7fb;">Restarting Everything…</div>
+  <div style="color:#a9bccd;font-size:14px;" id="reconnect-msg">Waiting for panel to come back online…</div>
+  <div style="display:flex;gap:8px;margin-top:8px;">
+    <div id="reconnect-dot1" style="width:10px;height:10px;border-radius:50%;background:#35516a;transition:background .3s;"></div>
+    <div id="reconnect-dot2" style="width:10px;height:10px;border-radius:50%;background:#35516a;transition:background .3s;"></div>
+    <div id="reconnect-dot3" style="width:10px;height:10px;border-radius:50%;background:#35516a;transition:background .3s;"></div>
+  </div>
+  <div style="font-size:12px;color:#607b90;" id="reconnect-attempt">Attempt 0</div>
+</div>
 
 <!-- ─── App Shell ────────────────────────────────────────────── -->
 <div id="app" class="hidden">
@@ -275,6 +290,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
       <button class="btn small" onclick="quickAction('restart','flight-points')">⟳ Restart API</button>
       <button class="btn small" onclick="quickAction('restart','flight-points-tunnel')">⟳ Restart Tunnel</button>
       <button class="btn small" id="btn-check-updates" onclick="checkUpdates()">↑ Check Updates</button>
+      <button class="btn small danger" onclick="restartPanel()" title="Restart panel server + API + tunnel">🔄 Restart All</button>
       <button class="btn small danger" onclick="doLogout()">Logout</button>
     </div>
   </div>
@@ -354,6 +370,18 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
           <h2 style="font-size:18px;font-weight:700;">Services</h2>
           <button class="btn small" onclick="loadServices()">⟳ Refresh</button>
+        </div>
+
+        <!-- Batch Actions -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><span class="card-title">⚡ Batch Actions</span></div>
+          <div class="card-body">
+            <div class="flex gap-8 flex-wrap" style="margin-bottom:10px;">
+              <button class="btn primary" onclick="restartApp()">⟳ Restart API + Tunnel</button>
+              <button class="btn danger" onclick="restartPanel()" title="Restarts API, Tunnel AND this panel — you will need to log back in">🔄 Restart Everything</button>
+            </div>
+            <div class="terminal" id="svc-batch-output" style="height:100px;overflow-y:auto;">Batch action output will appear here.</div>
+          </div>
         </div>
 
         <div id="services-list">
@@ -742,7 +770,7 @@ function getLoginInput() {
 }
 
 function getLoginPlaceholder() {
-  return TOTP_ENABLED ? 'Panel PIN or 6-digit code' : 'Panel PIN';
+  return TOTP_ENABLED ? 'Authenticator code or backup code' : 'Authenticator code';
 }
 
 function handleLoginInputFocus() {
@@ -761,7 +789,7 @@ function handleLoginInputBlur() {
 function syncLoginUi() {
   const label = document.getElementById('auth-mode-label');
   const input = getLoginInput();
-  if (label) label.textContent = TOTP_ENABLED ? 'Panel Backup PIN or Authenticator Code' : 'Panel PIN';
+  if (label) label.textContent = TOTP_ENABLED ? 'Authenticator or Backup Code' : 'Authenticator Code';
   if (input) {
     input.value = '';
     input.placeholder = getLoginPlaceholder();
@@ -774,19 +802,11 @@ async function doLogin() {
   errEl.textContent = '';
   
   if (!input) {
-    errEl.textContent = 'Please enter PIN or code';
+    errEl.textContent = 'Please enter your authenticator or backup code';
     return;
   }
-  
-  // Determine if it's a PIN (4-10 digits) or TOTP (exactly 6 digits)
-  let pin = '', totp = '';
-  if (input.length === 6 && /^\d{6}$/.test(input) && TOTP_ENABLED) {
-    totp = input;
-  } else {
-    pin = input;
-  }
-  
-  const res = await apiFetch('/api/auth/login', 'POST', { pin, totp });
+
+  const res = await apiFetch('/api/auth/login', 'POST', { code: input });
   if (res.token) {
     TOKEN = res.token;
     sessionStorage.setItem('panel_token', TOKEN);
@@ -805,7 +825,48 @@ async function doLogout() {
   location.reload();
 }
 
-document.getElementById('pin-input').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+async function restartPanel() {
+  if (!confirm('This will restart the panel server, the API service (flight-points), and the tunnel service (flight-points-tunnel).\n\nYou will be logged out and need to log back in once the panel is back.\n\nContinue?')) return;
+  const overlay = document.getElementById('reconnect-overlay');
+  overlay.style.display = 'flex';
+  try {
+    await apiFetch('/api/panel/restart', 'POST');
+  } catch (_) { /* expected — server may die before responding */ }
+  TOKEN = '';
+  sessionStorage.removeItem('panel_token');
+  startReconnectPoller();
+}
+
+function startReconnectPoller() {
+  let attempt = 0;
+  const dots = [document.getElementById('reconnect-dot1'), document.getElementById('reconnect-dot2'), document.getElementById('reconnect-dot3')];
+  const msgEl = document.getElementById('reconnect-msg');
+  const attEl = document.getElementById('reconnect-attempt');
+  // Animate dots
+  let dotIdx = 0;
+  const dotAnim = setInterval(() => {
+    dots.forEach((d, i) => d.style.background = i === dotIdx ? '#72b7ff' : '#35516a');
+    dotIdx = (dotIdx + 1) % 3;
+  }, 500);
+  function poll() {
+    attempt++;
+    attEl.textContent = `Attempt ${attempt}`;
+    fetch('/api/auth/check').then(r => r.json()).then(() => {
+      // Panel is back — go to login
+      clearInterval(dotAnim);
+      dots.forEach(d => d.style.background = '#52d273');
+      msgEl.textContent = 'Panel is back online! Redirecting to login…';
+      setTimeout(() => location.reload(), 1200);
+    }).catch(() => {
+      // Still down — retry with increasing delay (max 8s)
+      const delay = Math.min(2000 + attempt * 500, 8000);
+      msgEl.textContent = `Panel not ready yet. Retrying in ${Math.round(delay/1000)}s…`;
+      setTimeout(poll, delay);
+    });
+  }
+  // Wait a couple seconds before first attempt so the restart can begin
+  setTimeout(poll, 2500);
+}
 
 // Check if already authenticated
 async function checkAuth() {
@@ -841,7 +902,12 @@ async function apiFetch(path, method = 'GET', body = null) {
     };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(path, opts);
-    if (res.status === 401) { doLogout(); return {}; }
+    if (res.status === 401) {
+      // Only trigger logout+reload when there's an active session (token expired).
+      // During login TOKEN is empty, so just return the error body for display.
+      if (TOKEN) { doLogout(); return {}; }
+      try { return await res.json(); } catch { return {}; }
+    }
     return await res.json();
   } catch (e) {
     console.error('apiFetch error', e);
@@ -1034,21 +1100,35 @@ async function loadServices() {
   el.innerHTML = data.map(s => {
     const running = s.Status === 'Running';
     const color = running ? 'green' : s.Status === 'NotFound' ? 'gray' : 'red';
+    const isPanel = s.Name === 'flight-points-panel';
+    const restartAction = isPanel ? `restartPanel()` : `svcAction('${s.Name}','restart')`;
+    const restartTitle = isPanel ? 'Restarting the panel will disconnect you — you will need to log back in' : '';
     return `<div class="card" style="margin-bottom:12px;">
       <div class="card-header">
         <div class="flex items-center gap-12">
           <span class="badge ${color}"><span class="dot-pulse ${color}"></span> ${escHtml(s.Status)}</span>
           <span class="bold">${escHtml(s.Name)}</span>
           <span class="tag">${escHtml(s.StartType)}</span>
+          ${isPanel ? '<span class="badge yellow" style="font-size:10px;">this panel</span>' : ''}
         </div>
         <div class="flex gap-8">
-          <button class="btn small" onclick="svcAction('${s.Name}','start')" ${running ? 'disabled' : ''}>▶ Start</button>
-          <button class="btn small danger" onclick="svcAction('${s.Name}','stop')" ${!running ? 'disabled' : ''}>■ Stop</button>
-          <button class="btn small primary" onclick="svcAction('${s.Name}','restart')">⟳ Restart</button>
+          ${isPanel ? '' : `<button class="btn small" onclick="svcAction('${s.Name}','start')" ${running ? 'disabled' : ''}>▶ Start</button>`}
+          ${isPanel ? '' : `<button class="btn small danger" onclick="svcAction('${s.Name}','stop')" ${!running ? 'disabled' : ''}>■ Stop</button>`}
+          <button class="btn small primary" onclick="${restartAction}" title="${restartTitle}">⟳ Restart</button>
         </div>
       </div>
     </div>`;
   }).join('');
+}
+
+async function restartApp() {
+  const out = document.getElementById('svc-batch-output');
+  out.textContent = 'Restarting flight-points and flight-points-tunnel…';
+  const res = await apiFetch('/api/services/restart-app', 'POST');
+  out.textContent = res.output || (res.ok ? 'Done' : 'Failed');
+  toast(res.ok ? 'API + Tunnel restarted' : (res.output || 'Restart failed'), res.ok ? 'ok' : 'error');
+  setTimeout(loadServices, 3000);
+  setTimeout(refreshHeaderStatus, 4000);
 }
 
 async function svcAction(name, action) {

@@ -138,7 +138,7 @@ export function PrivacyPolicyModal() {
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2 mb-3">
                 <li><strong>localStorage:</strong> Caches cadet data, points, and attendance for offline access and faster performance.  Also stores file metadata indexes and UI preferences.  This data never leaves your device.</li>
-                <li><strong>sessionStorage:</strong> Stores temporary admin PIN verification status and UI state (automatically cleared when browser closes)</li>
+                <li><strong>sessionStorage:</strong> Stores temporary admin safeguard verification status and UI state (automatically cleared when browser closes)</li>
                 <li>You can clear browser storage at any time through your browser settings without affecting the central database</li>
               </ul>
 
@@ -236,7 +236,7 @@ export function PrivacyPolicyModal() {
                 This application uses browser storage technologies to function properly: 
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-2">
-                <li><strong>Session Storage:</strong> Maintains your login session and temporary admin PIN verification status</li>
+                <li><strong>Session Storage:</strong> Maintains your login session and temporary admin safeguard verification status</li>
                 <li><strong>Local Storage:</strong> Caches application data for offline access, stores file metadata indexes, and UI preferences</li>
                 <li><strong>Authentication Cookies:</strong> Our authentication system may set necessary cookies or tokens for login sessions</li>
               </ul>

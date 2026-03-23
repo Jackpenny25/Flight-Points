@@ -88,10 +88,16 @@ export function Rewards({ userRole }: RewardsProps) {
   // Moderation
   const [moderatingId, setModeratingId] = useState<string | null>(null);
 
+  // Potential rewards (SNCO planning list — stored in DB, syncs across devices)
+  const [potentialItems, setPotentialItems] = useState<{ id: string; text: string }[]>([]);
+  const [potentialInput, setPotentialInput] = useState('');
+  const [potentialSaving, setPotentialSaving] = useState(false);
+
   useEffect(() => {
     fetchRewards();
     fetchCadets();
     fetchSuggestions();
+    if (canManageRewards) fetchPotentialRewards();
   }, []);
 
   const fetchRewards = async () => {
@@ -125,6 +131,15 @@ export function Rewards({ userRole }: RewardsProps) {
       setSuggestions([]);
     } finally {
       setSuggestionsLoading(false);
+    }
+  };
+
+  const fetchPotentialRewards = async () => {
+    try {
+      const data = await api.getPotentialRewards();
+      setPotentialItems(Array.isArray(data) ? data : []);
+    } catch {
+      setPotentialItems([]);
     }
   };
 
@@ -709,6 +724,75 @@ export function Rewards({ userRole }: RewardsProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Potential Rewards — SNCO only */}
+      {canManageRewards && (
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="bg-emerald-50 rounded-t-lg">
+            <CardTitle className="text-emerald-900">Potential Rewards</CardTitle>
+            <CardDescription>Ideas being considered for future rewards. Only visible to you.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4 space-y-3">
+            {potentialItems.length === 0 ? (
+              <p className="text-sm text-slate-400 italic">No ideas yet — add one below.</p>
+            ) : (
+              <ul className="space-y-1">
+                {potentialItems.map((item) => (
+                  <li key={item.id} className="flex items-start gap-2 text-sm text-slate-700">
+                    <span className="mt-0.5 text-slate-400">•</span>
+                    <span className="flex-1">{item.text}</span>
+                    <button
+                      onClick={async () => {
+                        await api.deletePotentialReward(item.id);
+                        setPotentialItems(prev => prev.filter(i => i.id !== item.id));
+                      }}
+                      className="text-slate-300 hover:text-red-400 transition-colors leading-none mt-0.5"
+                      aria-label="Remove"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex gap-2 pt-1">
+              <Input
+                value={potentialInput}
+                onChange={(e) => setPotentialInput(e.target.value)}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' && potentialInput.trim() && !potentialSaving) {
+                    setPotentialSaving(true);
+                    try {
+                      const item = await api.addPotentialReward(potentialInput.trim());
+                      if (item?.id) setPotentialItems(prev => [...prev, item]);
+                      setPotentialInput('');
+                    } finally { setPotentialSaving(false); }
+                  }
+                }}
+                placeholder="Add an idea..."
+                className="text-sm"
+                disabled={potentialSaving}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={potentialSaving || !potentialInput.trim()}
+                onClick={async () => {
+                  if (!potentialInput.trim() || potentialSaving) return;
+                  setPotentialSaving(true);
+                  try {
+                    const item = await api.addPotentialReward(potentialInput.trim());
+                    if (item?.id) setPotentialItems(prev => [...prev, item]);
+                    setPotentialInput('');
+                  } finally { setPotentialSaving(false); }
+                }}
+              >
+                {potentialSaving ? '...' : 'Add'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Claimed Rewards */}
       {claimedRewards.length > 0 && (

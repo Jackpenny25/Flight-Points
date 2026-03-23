@@ -92,7 +92,7 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
   const [savingUsername, setSavingUsername] = useState(false);
   const [safeguardDialogOpen, setSafeguardDialogOpen] = useState(false);
   const [safeguardTitle, setSafeguardTitle] = useState('Admin Verification Required');
-  const [safeguardDescription, setSafeguardDescription] = useState('Enter your admin PIN or authenticator code to continue.');
+  const [safeguardDescription, setSafeguardDescription] = useState('Enter your authenticator code or long backup code to continue.');
   const pendingSafeguardAction = useRef<null | (() => Promise<void>)>(null);
 
   // Generate username preview (mirrors server logic)
@@ -183,7 +183,7 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
   const handleSaveRoleDefault = async (role: string) => {
     openSafeguardDialog(
       'Protect Default Role Access',
-      `Enter your admin PIN or authenticator code to change the default permissions for ${ROLE_DISPLAY_NAMES[role] || role}.`,
+      `Enter your authenticator code or long backup code to change the default permissions for ${ROLE_DISPLAY_NAMES[role] || role}.`,
       async () => {
         setSavingRoleDefault(true);
         try {
@@ -275,7 +275,7 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
     const user = users.find((entry) => entry.id === userId);
     openSafeguardDialog(
       'Reset Account Password',
-      `Enter your admin PIN or authenticator code to generate a new password for ${user?.name || 'this account'}.`,
+      `Enter your authenticator code or long backup code to generate a new password for ${user?.name || 'this account'}.`,
       async () => {
         setResettingId(userId);
         setResetCredentials(null);
@@ -305,7 +305,7 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
     if (!confirm(`Delete account for "${userName}"? This cannot be undone.`)) return;
     openSafeguardDialog(
       'Delete Account',
-      `Enter your admin PIN or authenticator code to permanently delete ${userName}'s account.`,
+      `Enter your authenticator code or long backup code to permanently delete ${userName}'s account.`,
       async () => {
         try {
           const res = await api.deleteUser(userId);
@@ -330,7 +330,7 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
     const user = users.find((entry) => entry.id === userId);
     openSafeguardDialog(
       'Change Account Role',
-      `Enter your admin PIN or authenticator code to change ${user?.name || 'this account'} to ${ROLE_DISPLAY_NAMES[newRole] || newRole}.`,
+      `Enter your authenticator code or long backup code to change ${user?.name || 'this account'} to ${ROLE_DISPLAY_NAMES[newRole] || newRole}.`,
       async () => {
         try {
           const res = await api.updateUserRole(userId, newRole);
@@ -377,7 +377,7 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
     const user = users.find((entry) => entry.id === userId);
     openSafeguardDialog(
       'Update Account Access',
-      `Enter your admin PIN or authenticator code to update the access overrides for ${user?.name || 'this account'}.`,
+      `Enter your authenticator code or long backup code to update the access overrides for ${user?.name || 'this account'}.`,
       async () => {
         try {
           const payload = sanitizePermissionOverrides(permissionSelections[userId] || {});
@@ -411,7 +411,7 @@ export default function AdminSignups({ accessToken, currentUserId, currentUserRo
     const user = users.find((entry) => entry.id === userId);
     openSafeguardDialog(
       'Change Username',
-      `Enter your admin PIN or authenticator code to change the login username for ${user?.name || 'this account'}.`,
+      `Enter your authenticator code or long backup code to change the login username for ${user?.name || 'this account'}.`,
       async () => {
         setSavingUsername(true);
         try {
