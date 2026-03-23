@@ -577,8 +577,26 @@ app.use(helmet({
       formAction: ["'self'"],
     },
   },
+  strictTransportSecurity: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+  referrerPolicy: {
+    policy: 'strict-origin-when-cross-origin',
+  },
+  crossOriginOpenerPolicy: { policy: 'same-origin' },
+  crossOriginResourcePolicy: { policy: 'same-origin' },
   crossOriginEmbedderPolicy: false,
 }));
+
+app.use((_req, res, next) => {
+  res.setHeader(
+    'Permissions-Policy',
+    'accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=(), xr-spatial-tracking=()'
+  );
+  next();
+});
 
 // Middleware
 // Lock CORS to exact allowed origins (no wildcards)
@@ -605,8 +623,23 @@ app.use(express.json({ limit: '1mb' }));
 // Serve static assets BEFORE CORS middleware — static files are public and don't
 // need cross-origin protection. This also prevents spurious CORS errors when
 // something accesses localhost:3001 directly (e.g. health checks, system monitor).
-app.use('/uploads', express.static(UPLOADS_DIR));
-app.use(express.static(path.join(__dirname, '../dist')));
+app.use('/uploads', express.static(UPLOADS_DIR, {
+  setHeaders: (res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  },
+}));
+app.use(express.static(path.join(__dirname, '../dist'), {
+  setHeaders: (res, filePath) => {
+    const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase();
+    if (normalizedPath.endsWith('/robots.txt') || normalizedPath.endsWith('/sitemap.xml')) {
+      res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
+      res.setHeader('Pragma', 'public');
+      res.setHeader('Expires', new Date(Date.now() + 3600 * 1000).toUTCString());
+    }
+  },
+}));
 
 app.use('/api/', apiLimiter);
 
@@ -3903,6 +3936,12 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next();
   }
+
+  // Avoid rewriting sensitive-looking paths to index.html.
+  if (/\/(?:\.[^/]+|\.git(?:\/|$)|\.env(?:\.|$)|server(?:\/|$)|package(?:-lock)?\.json$|tsconfig\.json$)/i.test(req.path)) {
+    return res.status(404).send('Not found');
+  }
+
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 

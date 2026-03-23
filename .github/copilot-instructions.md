@@ -353,3 +353,59 @@ Entry template (copy for each chat):
         - The admin safeguard token is intentionally short-lived and currently focused on high-impact Accounts/role-default operations, not every destructive route in the application.
         - TeamViewer button still depends on TeamViewer being installed at one of the backend-detected paths.
       Suggested context destinations: `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-23
+    Chat summary: Fixed OWASP header findings by hardening Express + IIS headers, added robots/sitemap assets, and ran a safe non-destructive pentest pass (dependencies, live headers, CORS behavior, and sensitive-path probes).
+    Files touched: `server/server.ts`, `web.config`, `public/web.config`, `public/robots.txt`, `public/sitemap.xml`, `dist/web.config`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - `server/server.ts`:
+          - Helmet now explicitly enforces HSTS (`max-age=31536000; includeSubDomains; preload`), referrer policy (`strict-origin-when-cross-origin`), `Cross-Origin-Opener-Policy: same-origin`, and `Cross-Origin-Resource-Policy: same-origin`.
+          - Added explicit `Permissions-Policy` response header middleware (helmet typings did not support `permissionsPolicy` option in this repo setup).
+          - Static middleware now sets hardening headers for uploads and adds explicit cache headers for `robots.txt` and `sitemap.xml` when served by Node.
+       - `web.config` and `public/web.config`:
+          - Added IIS `customHeaders` for CSP, HSTS, Permissions-Policy, COOP, CORP, Referrer-Policy, and `X-Content-Type-Options`.
+          - Added IIS outbound rules to apply explicit `Cache-Control` and `Pragma` headers for `/robots.txt` and `/sitemap.xml` responses.
+       - Added `public/robots.txt` and `public/sitemap.xml` so scanners hit real files rather than fallback behavior.
+    Validation performed:
+       - `npm run build` passed after changes.
+       - `npm audit --omit=dev --json` returned 0 production vulnerabilities.
+       - Live header probes (`flightpoints.uk`, `/robots.txt`, `/sitemap.xml`, `api.flightpoints.uk/api/health`) show CSP/HSTS/COOP/CORP present; Permissions-Policy was still absent on live at test time (new config not deployed yet).
+       - CORS probe with malicious origin to API preflight returned status 500 and no ACAO header (blocked origin path).
+       - Sensitive path probes like `/.env` and `/.git/config` returned HTTP 200 with HTML SPA body (rewrite fallback), not raw file disclosure.
+    Risks or follow-up:
+       - Run deployment so new IIS and server header rules are active in production, then re-run OWASP scan.
+       - Consider changing SPA fallback behavior for dotfiles to return 404 instead of index HTML to reduce scanner noise and improve hardening clarity.
+       - Existing unrelated TypeScript issues remain in other frontend files when running `npx tsc --noEmit`; not introduced by this change.
+    Suggested context destinations: `20-operations-runbook.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-23 (session continued)
+    Chat summary: Added explicit sensitive-path blocking rules to Express and IIS so dotfiles/config probes are denied instead of being rewritten to SPA index.
+    Files touched: `server/server.ts`, `web.config`, `public/web.config`, `dist/web.config`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - `server/server.ts` SPA fallback now returns HTTP 404 for sensitive path patterns such as dotfiles, `.git`, `.env*`, `server/*`, `package*.json`, and `tsconfig.json`.
+       - `web.config` and `public/web.config` now include a pre-SPA rewrite rule `Block Sensitive Paths` returning custom 404 for the same categories.
+    Validation performed:
+       - `npm run build` passed after changes.
+       - Live probes still show 200 HTML for sensitive paths because production has not yet deployed these new rules.
+       - Live header probes still show `Permissions-Policy` missing and `Referrer-Policy: no-referrer`, confirming old deployment is still active.
+    Risks or follow-up:
+       - Deploy latest build/config to production to activate sensitive-path 404 behavior and new `Permissions-Policy` header.
+       - Re-run OWASP scan after deployment to verify the remaining alerts are cleared.
+    Suggested context destinations: `20-operations-runbook.md`, `40-security-history-and-decisions.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-03-23 (session continued)
+    Chat summary: Performed requested retest pentest pass after code hardening. Live production still shows pre-deploy behavior for several checks.
+    Files touched: `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - No new runtime behavior changes in this retest; validation-only run.
+    Validation performed:
+       - Live header probes on `https://flightpoints.uk`, `https://flightpoints.uk/robots.txt`, `https://flightpoints.uk/sitemap.xml`, and `https://api.flightpoints.uk/api/health`.
+       - Confirmed headers present: CSP, HSTS, COOP, CORP, X-Content-Type-Options.
+       - Confirmed headers still missing on live: `Permissions-Policy`; `Referrer-Policy` still `no-referrer` (not the newly configured value).
+       - Sensitive-path probes (`/.env`, `/.git/config`, `/server/server.ts`, `/package.json`, `/tsconfig.json`) still return 200 with HTML SPA shell, confirming production rewrite rules have not picked up the new 404 block rules yet.
+       - CORS probe with malicious origin still blocked (`OPTIONS /api/health` returns 500 and no ACAO header).
+       - Dependency audit (`npm audit --omit=dev --json`) still reports 0 production vulnerabilities.
+    Risks or follow-up:
+       - Remaining OWASP findings are deployment-state issues; code fixes exist in repo but are not yet active in production responses.
+       - Deploy latest build and IIS configs (`web.config` + `public/web.config` + updated `dist`) then rerun OWASP and the same probe script.
+    Suggested context destinations: `20-operations-runbook.md`, `40-security-history-and-decisions.md`, `60-open-items-and-handover.md`
