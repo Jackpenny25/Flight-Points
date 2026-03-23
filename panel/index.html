@@ -1599,9 +1599,13 @@ async function loadTaskControls() {
   root.innerHTML = tasks.map(task => {
     const state = task.State || 'Unknown';
     const enabled = task.Enabled ? 'Enabled' : 'Disabled';
+    const detailParts = [
+      `State: ${state}. ${enabled}. Last Run: ${task.LastRunTime || 'Unknown'}.`,
+      task.Error ? `Error: ${task.Error}` : null,
+    ].filter(Boolean);
     return renderActionCard(
       task.TaskName || task.Key,
-      `State: ${state}. ${enabled}. Last Run: ${task.LastRunTime || 'Unknown'}.`,
+      detailParts.join(' '),
       `Next Run: ${task.NextRunTime || 'Unknown'}`,
       [
         { label: 'Run', action: `runTaskAction('${task.Key}','run')`, tone: 'primary' },
@@ -1653,12 +1657,19 @@ async function loadTunnel() {
   if (!data) return;
   const proc = data.process || {};
   const pub  = data.public  || {};
+  const serviceRunning = String(data.service || '').toLowerCase() === 'running';
+  const tunnelHealthy = !!data.ok || !!proc.Running || serviceRunning || !!pub.ok;
 
-  setOvCard('tun-proc', proc.Running, proc.Running ? `Running (PID ${proc.Pid})` : 'Not Running', '☁️');
+  setOvCard(
+    'tun-proc',
+    tunnelHealthy,
+    proc.Running ? `Running (PID ${proc.Pid})` : (serviceRunning ? 'Service Running' : 'Not Running'),
+    '☁️'
+  );
   setOvCard('tun-pub',  pub.ok, pub.ok ? `HTTP ${pub.status}` : 'Unreachable', '🌎');
 
   // Set sidebar dot
-  setNavDot('sdot-tunnel', proc.Running);
+  setNavDot('sdot-tunnel', tunnelHealthy);
 
   document.getElementById('tun-detail-body').innerHTML = [
     ['Running',    proc.Running ? '✓ Yes' : '✗ No'],

@@ -7,7 +7,7 @@
 
 const http    = require('http');
 const https   = require('https');
-const { exec } = require('child_process');
+const { exec, execSync } = require('child_process');
 const fs      = require('fs');
 const path    = require('path');
 const os      = require('os');
@@ -46,6 +46,69 @@ const PANEL_LOG_DIR = path.join(LOGS_ROOT, 'Panel');
 const PANEL_DIAGNOSTICS_LOG = path.join(PANEL_LOG_DIR, 'panel-diagnostics.log');
 const POWERSHELL_EXE = process.env.PANEL_POWERSHELL_PATH
   || path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+
+const TOOL_CANDIDATES = {
+  git: [
+    'C:\\Program Files\\Git\\cmd\\git.exe',
+    'C:\\Program Files\\Git\\bin\\git.exe',
+    'C:\\Program Files (x86)\\Git\\cmd\\git.exe',
+    'C:\\Program Files (x86)\\Git\\bin\\git.exe',
+    // User-level Git for Windows installs
+    path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Git', 'cmd', 'git.exe'),
+    path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Git', 'bin', 'git.exe'),
+    // Scoop
+    path.join(os.homedir(), 'scoop', 'apps', 'git', 'current', 'cmd', 'git.exe'),
+    // Chocolatey
+    'C:\\ProgramData\\chocolatey\\bin\\git.exe',
+    'C:\\tools\\Git\\cmd\\git.exe',
+  ],
+  node: [
+    'C:\\Program Files\\nodejs\\node.exe',
+    'C:\\Program Files (x86)\\nodejs\\node.exe',
+    path.join(os.homedir(), 'AppData', 'Roaming', 'nvm', 'current', 'node.exe'),
+    path.join(os.homedir(), 'scoop', 'apps', 'nodejs', 'current', 'node.exe'),
+  ],
+  npm: [
+    'C:\\Program Files\\nodejs\\npm.cmd',
+    'C:\\Program Files (x86)\\nodejs\\npm.cmd',
+    path.join(os.homedir(), 'AppData', 'Roaming', 'nvm', 'current', 'npm.cmd'),
+    path.join(os.homedir(), 'scoop', 'apps', 'nodejs', 'current', 'npm.cmd'),
+  ],
+  npx: [
+    'C:\\Program Files\\nodejs\\npx.cmd',
+    'C:\\Program Files (x86)\\nodejs\\npx.cmd',
+    path.join(os.homedir(), 'AppData', 'Roaming', 'nvm', 'current', 'npx.cmd'),
+    path.join(os.homedir(), 'scoop', 'apps', 'nodejs', 'current', 'npx.cmd'),
+  ],
+};
+
+const RESOLVED_TOOLS = Object.fromEntries(
+  Object.entries(TOOL_CANDIDATES).map(([name, paths]) => {
+    const found = paths.find(p => fs.existsSync(p)) || null;
+    if (found) return [name, found];
+    // Dynamic fallback: use where.exe to find tools in the current PATH
+    try {
+      const w = execSync(`where.exe ${name}`, { encoding: 'utf8', timeout: 5000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      const first = (w || '').split(/\r?\n/).map(l => l.trim()).find(l => l.length > 0 && fs.existsSync(l));
+      if (first) return [name, first];
+    } catch { /* not in PATH — fall through */ }
+    return [name, null];
+  })
+);
+// Log resolved tools at startup to help diagnose PATH issues under NSSM
+console.log('[panel] Tool resolution:', Object.entries(RESOLVED_TOOLS).map(([k, v]) => `${k}=${v || 'NOT FOUND'}`).join(', '));
+
+const EXTRA_PATH_DIRS = Array.from(new Set([
+  ...Object.values(RESOLVED_TOOLS).filter(Boolean).map(p => path.dirname(p)),
+  'C:\\Program Files\\Git\\cmd',
+  'C:\\Program Files\\nodejs',
+  'C:\\Windows\\System32',
+]));
+
+const PANEL_EXEC_ENV = {
+  ...process.env,
+  PATH: `${EXTRA_PATH_DIRS.join(';')};${process.env.PATH || ''}`,
+};
 
 const SERVICES = ['flight-points', 'flight-points-tunnel', 'flight-points-panel'];
 const TASKS = {
@@ -137,6 +200,12 @@ function appendDiagnosticLog(event, details) {
   } catch {
     // Diagnostics must never crash the panel.
   }
+}
+
+function cmd(tool, args = '') {
+  const resolved = RESOLVED_TOOLS[tool];
+  const exe = resolved ? `"${resolved}"` : tool;
+  return `${exe}${args ? ` ${args}` : ''}`;
 }
 
 function firstExistingPath(paths) {
@@ -236,7 +305,7 @@ function generateTotp(secret) {
 // ─── Execution Helpers ────────────────────────────────────────────────────────
 function shell(cmd, timeout = 30000) {
   return new Promise(resolve => {
-    exec(cmd, { timeout, windowsHide: true, cwd: ROOT, maxBuffer: 5 * 1024 * 1024 },
+    exec(cmd, { timeout, windowsHide: true, cwd: ROOT, maxBuffer: 5 * 1024 * 1024, env: PANEL_EXEC_ENV },
       (err, stdout, stderr) => resolve({
         ok: !err,
         out: (stdout || '').trim(),
@@ -254,7 +323,7 @@ function ps(script, timeout = 30000) {
   return new Promise(resolve => {
     exec(
       `"${psExe}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${tmp}"`,
-      { timeout, windowsHide: true, cwd: ROOT, maxBuffer: 5 * 1024 * 1024 },
+      { timeout, windowsHide: true, cwd: ROOT, maxBuffer: 5 * 1024 * 1024, env: PANEL_EXEC_ENV },
       (err, stdout, stderr) => {
         fs.unlink(tmp, () => {});
         resolve({
@@ -345,7 +414,7 @@ function getDbHealthSummary(health) {
 async function getTunnelSummary() {
   const services = await getServicesMap();
   const cfResult = await ps(`
-    $p = Get-Process -Name cloudflared -EA SilentlyContinue
+    $p = Get-Process -Name cloudflared,cloudflared-windows-amd64 -EA SilentlyContinue | Select-Object -First 1
     if ($p) {
       [PSCustomObject]@{
         Running=$true; Pid=$p.Id
@@ -407,14 +476,14 @@ async function handleLogin(req, res, body) {
 async function handleOverview(req, res) {
   const [apiResult, branch, commit, svcMap, tunnel] = await Promise.all([
     fetchLocal('/api/health', 4000),
-    shell('git rev-parse --abbrev-ref HEAD'),
-    shell('git log -1 --format="%h||%s||%ai"'),
+    shell(cmd('git', 'rev-parse --abbrev-ref HEAD')),
+    shell(cmd('git', 'log -1 --format="%h||%s||%ai"')),
     getServicesMap(),
     getTunnelSummary()
   ]);
   const [behind, localMods] = await Promise.all([
-    shell('git rev-list --count HEAD..@{u} 2>nul'),
-    shell('git status --porcelain')
+    shell(`${cmd('git', 'rev-list --count HEAD..@{u}')} 2>nul`),
+    shell(cmd('git', 'status --porcelain'))
   ]);
   const parts = (commit.ok ? commit.out : '').split('||');
   const db = getDbHealthSummary(apiResult.body);
@@ -447,7 +516,7 @@ async function handleOverview(req, res) {
 async function getServicesMap() {
   const result = await ps(`
     $out = @{}
-    foreach ($n in @('flight-points','flight-points-tunnel')) {
+    foreach ($n in @('flight-points','flight-points-tunnel','flight-points-panel')) {
       try { $s = Get-Service -Name $n -EA Stop; $out[$n] = $s.Status.ToString() }
       catch { $out[$n] = 'NotFound' }
     }
@@ -465,7 +534,7 @@ async function handleServices(req, res) {
   // Also get NSSM details
   const result = await ps(`
     $svc = @()
-    foreach ($n in @('flight-points','flight-points-tunnel')) {
+    foreach ($n in @('flight-points','flight-points-tunnel','flight-points-panel')) {
       try {
         $s = Get-Service -Name $n -EA Stop
         $svc += [PSCustomObject]@{
@@ -507,7 +576,7 @@ async function getTasksJson() {
           LastTaskResult = if($info){$info.LastTaskResult}else{$null}
         }
       } catch {
-        $list += [PSCustomObject]@{ Key=$key; Name=$name; State='NotFound'; Enabled=$false; LastRunTime=''; NextRunTime=''; LastTaskResult=$null }
+        $list += [PSCustomObject]@{ Key=$key; Name=$name; State='NotFound'; Enabled=$false; LastRunTime=''; NextRunTime=''; LastTaskResult=$null; Error=$_.Exception.Message }
       }
     }
     $list | ConvertTo-Json -Depth 4
@@ -635,10 +704,10 @@ function handlePanelRestart(req, res) {
 // GET /api/git/status
 async function handleGitStatus(req, res) {
   const [branch, commitInfo, statusOut, aheadBehind] = await Promise.all([
-    shell('git rev-parse --abbrev-ref HEAD'),
-    shell('git log -1 --format="%H||%h||%s||%ai||%an"'),
-    shell('git status --porcelain'),
-    shell('git rev-list --left-right --count HEAD...@{u} 2>nul')
+    shell(cmd('git', 'rev-parse --abbrev-ref HEAD')),
+    shell(cmd('git', 'log -1 --format="%H||%h||%s||%ai||%an"')),
+    shell(cmd('git', 'status --porcelain')),
+    shell(cmd('git', 'rev-list --left-right --count HEAD...@{u}') + ' 2>nul')
   ]);
   const parts = (commitInfo.ok ? commitInfo.out : '').split('||');
   const ab = (aheadBehind.ok ? aheadBehind.out : '0\t0').split(/\s+/);
@@ -654,7 +723,7 @@ async function handleGitStatus(req, res) {
 
 // GET /api/git/log
 async function handleGitLog(req, res) {
-  const result = await shell('git log -30 --format="%h||%s||%an||%ar||%ai"');
+  const result = await shell(cmd('git', 'log -30 --format="%h||%s||%an||%ar||%ai"'));
   const entries = (result.ok ? result.out.split('\n').filter(Boolean) : []).map(l => {
     const [hash, msg, author, rel, abs] = l.split('||');
     return { hash, msg: msg||'', author: author||'', relative: rel||'', date: abs||'' };
@@ -664,31 +733,31 @@ async function handleGitLog(req, res) {
 
 // POST /api/git/fetch
 async function handleGitFetch(req, res) {
-  const result = await shell('git fetch --prune origin 2>&1', 60000);
+  const result = await shell(cmd('git', 'fetch --prune origin') + ' 2>&1', 60000);
   json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') || 'Fetch complete (nothing new)' });
 }
 
 // POST /api/git/pull
 async function handleGitPull(req, res) {
-  const result = await shell('git pull --ff-only origin main 2>&1', 90000);
+  const result = await shell(cmd('git', 'pull --ff-only origin main') + ' 2>&1', 90000);
   json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') });
 }
 
 // POST /api/deploy/build
 async function handleDeployBuild(req, res) {
-  const result = await shell('npm run build 2>&1', 180000);
+  const result = await shell(cmd('npm', 'run build') + ' 2>&1', 180000);
   json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') });
 }
 
 // POST /api/deploy/typecheck
 async function handleDeployTypecheck(req, res) {
-  const result = await shell('npx tsc --noEmit 2>&1', 90000);
+  const result = await shell(cmd('npx', 'tsc --noEmit') + ' 2>&1', 90000);
   json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') || 'TypeScript check passed with no errors' });
 }
 
 // POST /api/deploy/install
 async function handleDeployInstall(req, res) {
-  const result = await shell('npm install 2>&1', 180000);
+  const result = await shell(cmd('npm', 'install') + ' 2>&1', 180000);
   json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') });
 }
 
@@ -702,7 +771,7 @@ async function handleDeployRun(req, res) {
 
 // POST /api/deploy/audit  (npm audit)
 async function handleDeployAudit(req, res) {
-  const result = await shell('npm audit --omit=dev 2>&1', 60000);
+  const result = await shell(cmd('npm', 'audit --omit=dev') + ' 2>&1', 60000);
   json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') });
 }
 
@@ -926,8 +995,8 @@ async function handleSystem(req, res) {
     ps(`Get-PSDrive -PSProvider FileSystem | Where-Object {$_.Used -ne $null} | Select-Object Name,Used,Free | ConvertTo-Json`),
     ps(`Get-NetIPAddress -AddressFamily IPv4 -EA SilentlyContinue | Where-Object {$_.IPAddress -notmatch '^169\\.254' -and $_.InterfaceAlias -notmatch '^Loopback'} | Select-Object InterfaceAlias,IPAddress | ConvertTo-Json`),
     ps(`try{$c=(Get-Counter '\\Processor(_Total)\\% Processor Time' -SampleInterval 1 -MaxSamples 1 -EA SilentlyContinue).CounterSamples.CookedValue;[Math]::Round($c,1)}catch{'0'}`),
-    shell('node --version'),
-    shell('git --version')
+    shell(cmd('node', '--version')),
+    shell(cmd('git', '--version'))
   ]);
 
   let disks = [], ifaces = [];

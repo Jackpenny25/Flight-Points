@@ -216,6 +216,23 @@ Entry template (copy for each chat):
 
 ### Inbox Entries
 
+- Date: 2026-03-23
+   Chat summary: Fixed 5 broken features in `panel/panel-server.cjs` that were visible in panel screenshots.
+   Files touched: `panel/panel-server.cjs`
+   Behavior/decision changes:
+     1. **execSync added to require**: `const { exec, execSync } = require('child_process')` — needed for dynamic tool discovery.
+     2. **TOOL_CANDIDATES expanded**: Added user-level Git paths (`%HOMEDIR%\AppData\Local\Programs\Git\cmd\git.exe`), Scoop, Chocolatey, and nvm paths for git/node/npm/npx so NSSM service context finds them even without system PATH entries.
+     3. **RESOLVED_TOOLS dynamic fallback**: After static path scan, now calls `where.exe <tool>` via `execSync` as a fallback. Startup console log shows which paths resolved (or "NOT FOUND") to help diagnose NSSM PATH issues.
+     4. **`ps()` now injects PANEL_EXEC_ENV**: Added `env: PANEL_EXEC_ENV` to the exec call inside `ps()`. Previously only `shell()` had it; PS scripts calling tools (e.g. cloudflared scripts) had no augmented PATH.
+     5. **Cloudflared process detection**: `getTunnelSummary()` now checks `Get-Process -Name cloudflared,cloudflared-windows-amd64` to cover both process name variants used by different cloudflared builds.
+     6. **`flight-points-panel` added to service queries**: Both `getServicesMap()` and `handleServices()` now include the panel service in the PS `foreach` loop so the panel shows its own status.
+   Validation performed: `npm run build` exit 0; `node --check panel/panel-server.cjs` no errors.
+   Risks or follow-up:
+     - If git is installed in a completely custom path not covered by hardcoded candidates AND `where.exe git` fails under NSSM service PATH, git will still show "NOT FOUND". User should check startup log `[panel] Tool resolution:` line to diagnose.
+     - NSSM service needs to be restarted to pick up the new panel-server.cjs code.
+     - Consider adding PANEL_GIT_PATH env variable override for custom git installs.
+   Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`
+
 - Date: 2026-03-18
    Chat summary: Added "Default Role Access" section to Accounts tab — lets admins/sncos adjust the default permissions for each role through a checkbox UI. Changes stored in DB, applied to all users of that role unless they have per-user overrides.
    Files touched: `server/server.ts`, `src/utils/permissions.ts`, `src/utils/api.ts`, `src/app/components/AdminSignups.tsx`, `.github/copilot-instructions.md`
@@ -357,98 +374,4 @@ Entry template (copy for each chat):
         - `ADMIN_TOTP_SECRET` must be a Base32 secret (`A-Z`, `2-7`) and server clock drift will break TOTP if Windows time is inaccurate.
         - The admin safeguard token is intentionally short-lived and currently focused on high-impact Accounts/role-default operations, not every destructive route in the application.
         - TeamViewer button still depends on TeamViewer being installed at one of the backend-detected paths.
-         Suggested context destinations: `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
-
-- Date: 2026-03-22
-    Chat summary: Fixed panel login bug, added form wrapper, and added comprehensive restart buttons.
-    Files touched: `panel/panel-server.cjs`, `panel/index.html`
-    Behavior/decision changes:
-      - BUG FIX: `apiFetch` was calling `doLogout()` (→ page reload) on every 401, even during login when TOKEN was empty. Result: wrong authenticator codes silently reloaded the page, users never saw the error. Fix: only call `doLogout()` when TOKEN is set; otherwise return the JSON body so `doLogin()` can show the error message.
-      - FIX: Login input now wrapped in `<form onsubmit="doLogin(); return false;">` to eliminate the browser DOM warning "Password field not contained in a form". Removed redundant keydown/Enter listener (form submit handles it). Changed `autocomplete` to `current-password`.
-      - `SERVICES` array now includes `'flight-points-panel'` so it appears in the services list.
-      - `loadServices()` now renders panel service with a "this panel" badge, no Start/Stop buttons, and its Restart button calls `restartPanel()` (triggers reconnect overlay) instead of the generic `svcAction`.
-      - New endpoint `POST /api/services/restart-app` (auth required): restarts `flight-points` then `flight-points-tunnel` sequentially (awaited, returns output), without killing the panel.
-      - New "Batch Actions" card at top of Services section with two buttons:
-        - "⟳ Restart API + Tunnel" → calls `restartApp()` → POST /api/services/restart-app → shows output in terminal div
-        - "🔄 Restart Everything" → calls `restartPanel()` (same as header button — triggers full restart + reconnect overlay)
-      - New `restartApp()` JS function: POSTs to restart-app, shows output in batch card terminal, shows toast, refreshes services list after 3s.
-    Validation performed: `npm run build` passed (1826 modules, 8.86s).
-    Risks or follow-up:
-      - Rate-lock concern: users who tried the wrong code multiple times before the fix was deployed may be locked for 15 minutes. Lockout resets automatically.
-      - Restart-app PS commands require the panel service to run with sufficient Windows permissions to call Restart-Service.
-    Suggested context destinations: `50-feature-behavior.md`, `60-open-items-and-handover.md`
-
-    Files touched: `panel/panel-server.cjs`, `panel/index.html`
-    Behavior/decision changes:
-       - New endpoint `POST /api/panel/restart` (auth required) in `panel-server.cjs`:
-         - Immediately responds with `{ ok: true, message: '...' }` before dying.
-         - Spawns a detached, unref'd `powershell.exe` process (survives panel death) that sleeps 1s then calls `Restart-Service` on: `flight-points`, `flight-points-tunnel`, `flight-points-panel` (in that order).
-       - New `🔄 Restart All` danger button added to the panel header (between Check Updates and Logout).
-       - `restartPanel()` JS function: confirms via `window.confirm`, calls the endpoint, clears session, shows a full-screen animated reconnect overlay.
-       - `startReconnectPoller()`: polls `GET /api/auth/check` with escalating delay (2.5s initial, +500ms per attempt, max 8s) until panel is back; then auto-reloads to login screen.
-       - Reconnect overlay has animated pulsing dots (blue → green on success).
-       - Sessions are in-memory so user must log back in after restart.
-    Validation performed: `npm run build` passed (1826 modules, 9.79s).
-    Risks or follow-up:
-       - Requires `flight-points-panel` NSSM service to be installed; if run manually (`npm run panel`), the panel process dies and does not auto-restart (user must restart manually).
-       - Panel service name is hardcoded as `flight-points-panel`; verify this matches the installed NSSM service name.
-    Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`
-
-    Files touched: `server/server.ts`, `panel/panel-server.cjs`, `panel/index.html`, `panel/Install-PanelService.ps1`, `src/app/components/AdminSafeguardDialog.tsx`, `src/app/components/AdminSignups.tsx`, `src/app/components/Dashboard.tsx`, `src/app/components/PointsManager.tsx`, `src/app/components/CadetsManager.tsx`, `src/utils/api.ts`, `src/utils/permissions.ts`, `src/app/components/PrivacyPolicyModal.tsx`, `.gitignore`, `.github/copilot-instructions.md`
-    Behavior/decision changes:
-       - Main API safeguard verification (`POST /api/admin/verify-pin`) now validates either:
-          - TOTP (`ADMIN_TOTP_SECRET`, 6-digit), or
-          - a long backup code (minimum 24 chars).
-       - PIN acceptance was removed from active validation logic; endpoint path name is kept for compatibility.
-       - Safeguard token `method` now reports `totp` or `backup` (instead of pin/totp).
-       - Added startup backup-code loader in `server/server.ts`:
-          - uses `ADMIN_BACKUP_CODE` if present,
-          - otherwise reads `data/admin-backup-code.txt`,
-          - otherwise generates a random high-entropy code and writes it to `data/admin-backup-code.txt`.
-       - Added constant-time comparison (`crypto.timingSafeEqual`) for backup code checks.
-       - Panel auth updated similarly in `panel/panel-server.cjs`: authenticator required with long backup-code fallback, no PIN mode.
-       - Panel login UI text and request payload updated (`code` instead of pin/totp split), and input max length expanded for long backup codes.
-       - Panel install script now requires `ADMIN_TOTP_SECRET` and `ADMIN_BACKUP_CODE` in `.env.local`.
-       - Frontend safeguard dialogs/prompts now accept authenticator code or long backup code (removed numeric-only input restrictions where needed).
-       - Added `data/admin-backup-code.txt` to `.gitignore` to prevent secret leakage.
-    Validation performed:
-       - `npm run build` passed.
-       - `npm run server` startup passed to listen stage and showed new backup-code generation logging; then hit existing local DB `ECONNREFUSED` (expected in this environment without PostgreSQL).
-       - VS Code diagnostics check reported no errors in modified files.
-    Risks or follow-up:
-       - If `ADMIN_TOTP_SECRET` is not configured, safeguard verification now intentionally fails (500) until configured.
-       - Generated backup file should be migrated into `ADMIN_BACKUP_CODE` in `.env.local` and then stored securely in ops password vault.
-       - Existing variable names like `adminPinVerified` remain in session storage for compatibility; behavior is safeguard-code based despite legacy naming.
-      Suggested context destinations: `20-operations-runbook.md`, `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
-
-- Date: 2026-03-22 (latest)
-   Chat summary: Added "Potential Rewards" list to the Rewards tab — SNCO-only, plain bullet points, editable inline.
-   Files touched: `src/app/components/Rewards.tsx`
-   Behavior/decision changes:
-     - New card "Potential Rewards" visible only when `canManageRewards` (i.e. `userRole === 'snco'`); completely hidden from all other roles.
-     - State: `potentialItems: string[]` initialised from `localStorage.getItem('fp_potential_rewards')` (JSON array); `potentialInput: string`.
-     - Items stored in `localStorage` key `fp_potential_rewards` — no backend/DB changes needed.
-     - Each item rendered as a plain bullet (`•`) with an inline `✕` remove button.
-     - Add via text input + "Add" button or pressing Enter.
-     - Card inserted between the Reward Suggestions card and the Claimed Rewards section.
-     - Styled with `bg-emerald-50` header to visually distinguish from other cards.
-   Validation performed: `npm run build` passed (1826 modules, 11.45s).
-   Risks or follow-up:
-     - `localStorage` is per-browser; items won't sync across devices. If cross-device sync is needed later, add `GET/POST /api/rewards/potential-list` backed by a server-side JSON file.
-   Suggested context destinations: `50-feature-behavior.md`
-
-- Date: 2026-03-22
-      Chat summary: Fixed panel restart failures caused by `powershell.exe` not being resolvable in the service PATH.
-      Files touched: `panel/panel-server.cjs`, `.github/copilot-instructions.md`
-      Behavior/decision changes:
-         - Added `POWERSHELL_EXE` absolute-path resolution (`%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`) with optional override via `PANEL_POWERSHELL_PATH`.
-         - Updated shared `ps()` helper to invoke the resolved absolute path (fallback to `powershell.exe` only if the absolute file does not exist).
-         - Updated detached restart spawn in `handlePanelRestart()` to use the same resolved PowerShell executable.
-         - Result: all restart-related actions that rely on the PowerShell helper are no longer dependent on service PATH content.
-      Validation performed:
-         - `node --check panel/panel-server.cjs` executed without syntax errors.
-         - Confirmed `C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe` exists (`Test-Path` returned `True`) in this environment.
-      Risks or follow-up:
-         - If production host uses a custom PowerShell location, set `PANEL_POWERSHELL_PATH` in `.env.local`.
-         - Panel service should be restarted once so the new executable resolution is loaded.
-      Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+      Suggested context destinations: `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
