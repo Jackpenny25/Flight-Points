@@ -218,6 +218,23 @@ Entry template (copy for each chat):
 
 ### Inbox Entries
 
+- Date: 2026-03-23
+   Chat summary: Fixed 5 broken features in `panel/panel-server.cjs` that were visible in panel screenshots.
+   Files touched: `panel/panel-server.cjs`
+   Behavior/decision changes:
+     1. **execSync added to require**: `const { exec, execSync } = require('child_process')` — needed for dynamic tool discovery.
+     2. **TOOL_CANDIDATES expanded**: Added user-level Git paths (`%HOMEDIR%\AppData\Local\Programs\Git\cmd\git.exe`), Scoop, Chocolatey, and nvm paths for git/node/npm/npx so NSSM service context finds them even without system PATH entries.
+     3. **RESOLVED_TOOLS dynamic fallback**: After static path scan, now calls `where.exe <tool>` via `execSync` as a fallback. Startup console log shows which paths resolved (or "NOT FOUND") to help diagnose NSSM PATH issues.
+     4. **`ps()` now injects PANEL_EXEC_ENV**: Added `env: PANEL_EXEC_ENV` to the exec call inside `ps()`. Previously only `shell()` had it; PS scripts calling tools (e.g. cloudflared scripts) had no augmented PATH.
+     5. **Cloudflared process detection**: `getTunnelSummary()` now checks `Get-Process -Name cloudflared,cloudflared-windows-amd64` to cover both process name variants used by different cloudflared builds.
+     6. **`flight-points-panel` added to service queries**: Both `getServicesMap()` and `handleServices()` now include the panel service in the PS `foreach` loop so the panel shows its own status.
+   Validation performed: `npm run build` exit 0; `node --check panel/panel-server.cjs` no errors.
+   Risks or follow-up:
+     - If git is installed in a completely custom path not covered by hardcoded candidates AND `where.exe git` fails under NSSM service PATH, git will still show "NOT FOUND". User should check startup log `[panel] Tool resolution:` line to diagnose.
+     - NSSM service needs to be restarted to pick up the new panel-server.cjs code.
+     - Consider adding PANEL_GIT_PATH env variable override for custom git installs.
+   Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`
+
 - Date: 2026-03-18
    Chat summary: Added "Default Role Access" section to Accounts tab — lets admins/sncos adjust the default permissions for each role through a checkbox UI. Changes stored in DB, applied to all users of that role unless they have per-user overrides.
    Files touched: `server/server.ts`, `src/utils/permissions.ts`, `src/utils/api.ts`, `src/app/components/AdminSignups.tsx`, `.github/copilot-instructions.md`
