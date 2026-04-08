@@ -5,8 +5,25 @@
 	- scheduled task cards for `FlightPoints-AutoDeploy`, `FlightPoints-Weekly-Backup`, and `Flight-Points_Server_Tunnel`
 	- operator utility cards for TeamViewer launch, DBeaver tunnel startup, server restart script, and task setup helpers
 	- database utility status for `pg_dump`, the DBeaver tunnel script, backup root, and weekly backup task detection
+	- command center tab with a large built-in command library, search/filter, copy-to-clipboard, editable command runner, and live output capture from panel-executed PowerShell
 - The panel UI now supports a brighter visual theme, a collapsible desktop sidebar, and an off-canvas mobile sidebar with overlay dismissal.
 - System and Database sections include live action-output terminals so remote admin actions can be run without opening a separate PowerShell window.
+
+## Panel command center behavior (2026-04-08)
+- New sidebar tab: `Command Center` in `panel/index.html`.
+- Backend endpoints added in `panel/panel-server.cjs`:
+	- `GET /api/commands/catalog` returns command sections and metadata.
+	- `POST /api/commands/run` executes PowerShell commands and returns stdout/stderr, exit code, timeout, and duration.
+- Command catalog includes many ready-to-run operations across:
+	- service controls
+	- deploy/git
+	- health/network diagnostics
+	- logs/events
+	- SQL templates
+	- operations toolbox
+- Elevation-aware behavior:
+	- commands flagged `requiresElevation` are blocked with a clear error if panel service is not running under an elevated account.
+- SQL helper commands are intentionally editable templates (not hardcoded DB writes), so operators can copy/adjust quickly before execution.
 
 ## Control panel authentication behavior
 - Panel auth supports backup PIN plus optional TOTP via `PANEL_TOTP_SECRET`.

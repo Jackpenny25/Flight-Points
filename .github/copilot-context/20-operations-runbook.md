@@ -69,6 +69,16 @@
 	- slide-out sidebar with overlay on small screens
 	- brighter theme intended for phone/tablet use during remote administration
 
+## Panel command center (2026-04-08)
+- `Command Center` tab added to the standalone panel for copy/run workflows.
+- The runner executes commands on the server host via panel backend endpoint `POST /api/commands/run` and returns output directly to the browser terminal panel.
+- Catalog endpoint `GET /api/commands/catalog` provides grouped command packs so operators do not need to remember common troubleshooting syntax.
+- Elevation handling:
+	- commands flagged as `requiresElevation` verify whether the panel service account is admin before execution.
+	- if the panel service is not elevated, those commands fail safely with an actionable error.
+- Operational recommendation:
+	- keep `flight-points-panel` as NSSM service with automatic restart so remote recovery controls remain available even when API is unhealthy.
+
 ## Alerting
 - Deploy failures: email + data/deploy-status.json status=failed
 - Deploy recoveries: status=success clears Integrity banner

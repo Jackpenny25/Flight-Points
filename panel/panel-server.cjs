@@ -135,6 +135,96 @@ const UTILITY_SCRIPTS = {
   'setup-auto-deploy': path.join(ROOT, 'setup-auto-deploy.ps1')
 };
 
+const COMMAND_MAX_TIMEOUT_MS = 10 * 60 * 1000;
+const COMMAND_DEFAULT_TIMEOUT_MS = 90 * 1000;
+const COMMAND_LIBRARY = [
+  {
+    id: 'services-core',
+    title: 'Service Controls',
+    description: 'Start/stop/restart and inspect core services.',
+    commands: [
+      { id: 'svc-status', name: 'Service Status Snapshot', shell: 'powershell', command: "Get-Service flight-points, flight-points-tunnel, flight-points-panel | Select-Object Name,Status,StartType | Format-Table -Auto", tags: ['service', 'status'] },
+      { id: 'svc-restart-api', name: 'Restart API Service', shell: 'powershell', requiresElevation: true, command: "Restart-Service -Name 'flight-points' -Force", tags: ['service', 'api', 'restart'] },
+      { id: 'svc-restart-tunnel', name: 'Restart Tunnel Service', shell: 'powershell', requiresElevation: true, command: "Restart-Service -Name 'flight-points-tunnel' -Force", tags: ['service', 'tunnel', 'restart'] },
+      { id: 'svc-restart-panel', name: 'Restart Panel Service', shell: 'powershell', requiresElevation: true, command: "Restart-Service -Name 'flight-points-panel' -Force", tags: ['service', 'panel', 'restart'] },
+      { id: 'svc-tail-api', name: 'Tail API NSSM Log (last 80)', shell: 'powershell', command: "Get-Content 'C:\\inetpub\\wwwroot\\Flight-Points\\Logs\\Server\\nssm-stdout.log' -Tail 80", tags: ['log', 'api'] },
+      { id: 'svc-tail-tunnel', name: 'Tail Tunnel Log (last 80)', shell: 'powershell', command: "Get-Content 'C:\\inetpub\\wwwroot\\Flight-Points\\Logs\\Tunnel\\tunnel.log' -Tail 80", tags: ['log', 'tunnel'] },
+    ]
+  },
+  {
+    id: 'deploy-git',
+    title: 'Deploy and Git',
+    description: 'Run common deploy checks and repository commands.',
+    commands: [
+      { id: 'git-branch', name: 'Current Branch + Last Commit', shell: 'powershell', command: `${cmd('git', 'rev-parse --abbrev-ref HEAD')} ; ${cmd('git', 'log -1 --oneline')}`, tags: ['git'] },
+      { id: 'git-status', name: 'Git Status (short)', shell: 'powershell', command: cmd('git', 'status --short --branch'), tags: ['git'] },
+      { id: 'git-fetch', name: 'Git Fetch Prune Origin', shell: 'powershell', command: cmd('git', 'fetch --prune origin'), tags: ['git', 'deploy'] },
+      { id: 'git-pull-main', name: 'Git Pull main (ff-only)', shell: 'powershell', command: cmd('git', 'pull --ff-only origin main'), tags: ['git', 'deploy'] },
+      { id: 'npm-install', name: 'npm install', shell: 'powershell', command: cmd('npm', 'install'), tags: ['npm', 'deploy'] },
+      { id: 'npm-build', name: 'npm run build', shell: 'powershell', command: cmd('npm', 'run build'), tags: ['npm', 'build'] },
+      { id: 'tsc-noemit', name: 'TypeScript Check', shell: 'powershell', command: cmd('npx', 'tsc --noEmit'), tags: ['typescript', 'build'] },
+      { id: 'deploy-runonce', name: 'Run auto-deploy.ps1 -RunOnce', shell: 'powershell', command: "Set-Location '" + ROOT + "'; & '.\\auto-deploy.ps1' -RunOnce", tags: ['deploy'] },
+    ]
+  },
+  {
+    id: 'health-network',
+    title: 'Health and Network',
+    description: 'Quick diagnostics for API, ports, process state, and tunnel.',
+    commands: [
+      { id: 'health-local', name: 'Local API Health', shell: 'powershell', command: "Invoke-RestMethod -Uri 'http://localhost:3001/api/health' -Method Get | ConvertTo-Json -Depth 6", tags: ['health', 'api'] },
+      { id: 'health-public', name: 'Public API Health', shell: 'powershell', command: "Invoke-WebRequest -Uri 'https://api.flightpoints.uk/api/health' -UseBasicParsing -TimeoutSec 12 | Select-Object StatusCode,StatusDescription", tags: ['health', 'public'] },
+      { id: 'port-check', name: 'Port Check 3001/4000/5432/6543', shell: 'powershell', command: "3001,4000,5432,6543 | ForEach-Object { [PSCustomObject]@{Port=$_;Open=(Test-NetConnection localhost -Port $_ -InformationLevel Quiet -WarningAction SilentlyContinue)} } | Format-Table -Auto", tags: ['network', 'ports'] },
+      { id: 'proc-node-cloudflared', name: 'Node + Cloudflared Processes', shell: 'powershell', command: "Get-Process -Name node,cloudflared,cloudflared-windows-amd64 -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,CPU,@{N='MemMB';E={[Math]::Round($_.WorkingSet/1MB,1)}},StartTime | Format-Table -Auto", tags: ['process'] },
+      { id: 'task-snapshot', name: 'Scheduled Task Snapshot', shell: 'powershell', command: "Get-ScheduledTask -TaskName 'Flight-Points_Server_Tunnel','FlightPoints-AutoDeploy','FlightPoints-Weekly-Backup' -ErrorAction SilentlyContinue | Select-Object TaskName,State,@{N='Enabled';E={$_.Settings.Enabled}} | Format-Table -Auto", tags: ['task', 'scheduler'] },
+      { id: 'ip-config', name: 'IPv4 Interfaces', shell: 'powershell', command: "Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notmatch '^169\\.254' -and $_.InterfaceAlias -notmatch '^Loopback' } | Select-Object InterfaceAlias,IPAddress | Format-Table -Auto", tags: ['network'] },
+      { id: 'dns-api', name: 'DNS Resolve api.flightpoints.uk', shell: 'powershell', command: "Resolve-DnsName api.flightpoints.uk | Select-Object Name,Type,IPAddress | Format-Table -Auto", tags: ['dns', 'network'] },
+    ]
+  },
+  {
+    id: 'logs-events',
+    title: 'Logs and Events',
+    description: 'Read server logs and recent service-related event log entries.',
+    commands: [
+      { id: 'logs-server-recent', name: 'Recent Server Logs (20)', shell: 'powershell', command: "Get-ChildItem 'C:\\inetpub\\wwwroot\\Flight-Points\\Logs\\Server' -Filter *.log -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 20 Name,LastWriteTime,Length | Format-Table -Auto", tags: ['logs'] },
+      { id: 'logs-tunnel-recent', name: 'Recent Tunnel Logs (20)', shell: 'powershell', command: "Get-ChildItem 'C:\\inetpub\\wwwroot\\Flight-Points\\Logs\\Tunnel' -Filter *.log -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 20 Name,LastWriteTime,Length | Format-Table -Auto", tags: ['logs'] },
+      { id: 'event-api', name: 'Event Log for API Service', shell: 'powershell', command: "Get-WinEvent -FilterHashtable @{LogName='System';ProviderName='Service Control Manager';Id=7034,7036} -MaxEvents 50 | Where-Object { $_.Message -match 'flight-points' } | Select-Object TimeCreated,Id,LevelDisplayName,Message | Format-Table -Wrap", tags: ['events', 'api'] },
+      { id: 'event-tunnel', name: 'Event Log for Tunnel Service', shell: 'powershell', command: "Get-WinEvent -FilterHashtable @{LogName='System';ProviderName='Service Control Manager';Id=7034,7036} -MaxEvents 50 | Where-Object { $_.Message -match 'flight-points-tunnel' } | Select-Object TimeCreated,Id,LevelDisplayName,Message | Format-Table -Wrap", tags: ['events', 'tunnel'] },
+      { id: 'errors-today', name: 'Server Error Logs (Today)', shell: 'powershell', command: "Get-ChildItem 'C:\\inetpub\\wwwroot\\Flight-Points\\Logs\\Server' -Filter 'server-errors-*.log' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime.Date -eq (Get-Date).Date } | Select-Object Name,LastWriteTime,Length | Format-Table -Auto", tags: ['errors', 'logs'] },
+    ]
+  },
+  {
+    id: 'sql-helpers',
+    title: 'SQL Helpers (Editable)',
+    description: 'Ready-made SQL commands you can edit and copy before running in psql/DBeaver.',
+    commands: [
+      { id: 'sql-top-cadets', name: 'Top 20 Cadets by Points', shell: 'powershell', command: "@'\nSELECT c.name, c.flight, COALESCE(SUM(p.points),0) AS total_points\nFROM cadets c\nLEFT JOIN points p ON p.cadet_id = c.id\nGROUP BY c.id, c.name, c.flight\nORDER BY total_points DESC\nLIMIT 20;\n'@", tags: ['sql', 'leaderboard'] },
+      { id: 'sql-recent-points', name: 'Recent Points (50)', shell: 'powershell', command: "@'\nSELECT id, cadet_id, points, reason, given_by, created_at\nFROM points\nORDER BY created_at DESC\nLIMIT 50;\n'@", tags: ['sql', 'points'] },
+      { id: 'sql-attendance-week', name: 'Attendance Summary Last 7 Days', shell: 'powershell', command: "@'\nSELECT cadet_id, status, COUNT(*) AS count_entries\nFROM attendance\nWHERE attendance_date >= CURRENT_DATE - INTERVAL '7 days'\nGROUP BY cadet_id, status\nORDER BY cadet_id, status;\n'@", tags: ['sql', 'attendance'] },
+      { id: 'sql-orphans', name: 'Orphaned Point Rows', shell: 'powershell', command: "@'\nSELECT p.id, p.cadet_id, p.created_at\nFROM points p\nLEFT JOIN cadets c ON c.id = p.cadet_id\nWHERE c.id IS NULL\nORDER BY p.created_at DESC;\n'@", tags: ['sql', 'integrity'] },
+      { id: 'sql-users-role', name: 'Accounts by Role', shell: 'powershell', command: "@'\nSELECT role, COUNT(*) AS users\nFROM app_users\nGROUP BY role\nORDER BY role;\n'@", tags: ['sql', 'accounts'] },
+      { id: 'sql-revision-recent', name: 'Recent Revision History', shell: 'powershell', command: "@'\nSELECT record_type, record_id, action, changed_by, changed_by_role, changed_at\nFROM revision_history\nORDER BY changed_at DESC\nLIMIT 100;\n'@", tags: ['sql', 'audit'] },
+      { id: 'sql-db-size', name: 'Database/Table Size', shell: 'powershell', command: "@'\nSELECT relname AS table_name, pg_size_pretty(pg_total_relation_size(relid)) AS total_size\nFROM pg_catalog.pg_statio_user_tables\nORDER BY pg_total_relation_size(relid) DESC;\n'@", tags: ['sql', 'database'] },
+      { id: 'psql-run-template', name: 'Run SQL via psql Template', shell: 'powershell', command: "$env:DATABASE_URL='<paste connection string if not set>'; psql \"$env:DATABASE_URL\" -c \"SELECT NOW();\"", tags: ['sql', 'psql'] },
+    ]
+  },
+  {
+    id: 'ops-toolbox',
+    title: 'Ops Toolbox',
+    description: 'General maintenance and recovery commands.',
+    commands: [
+      { id: 'disk-space', name: 'Disk Space Summary', shell: 'powershell', command: "Get-PSDrive -PSProvider FileSystem | Select-Object Name,@{N='UsedGB';E={[math]::Round($_.Used/1GB,2)}},@{N='FreeGB';E={[math]::Round($_.Free/1GB,2)}} | Format-Table -Auto", tags: ['disk'] },
+      { id: 'memory-load', name: 'Memory Snapshot', shell: 'powershell', command: "$os = Get-CimInstance Win32_OperatingSystem; [PSCustomObject]@{TotalGB=[math]::Round($os.TotalVisibleMemorySize/1MB,2);FreeGB=[math]::Round($os.FreePhysicalMemory/1MB,2)} | Format-List", tags: ['memory'] },
+      { id: 'cpu-load', name: 'CPU Load (5 samples)', shell: 'powershell', command: "Get-Counter '\\Processor(_Total)\\% Processor Time' -SampleInterval 1 -MaxSamples 5 | Select-Object -ExpandProperty CounterSamples | Select-Object TimeStamp,CookedValue | Format-Table -Auto", tags: ['cpu'] },
+      { id: 'restart-iis', name: 'Restart IIS (if used)', shell: 'powershell', requiresElevation: true, command: "iisreset", tags: ['iis', 'web'] },
+      { id: 'firewall-ports', name: 'Firewall Rules for App Ports', shell: 'powershell', command: "Get-NetFirewallRule -Enabled True -Direction Inbound | Get-NetFirewallPortFilter | Where-Object { $_.LocalPort -in 3001,4000,5432,6543 } | Format-Table -Auto", tags: ['firewall'] },
+      { id: 'cloudflared-version', name: 'cloudflared Version', shell: 'powershell', command: "cloudflared --version", tags: ['cloudflare', 'tunnel'] },
+      { id: 'node-version', name: 'Node/NPM Versions', shell: 'powershell', command: "node -v; npm -v", tags: ['node'] },
+      { id: 'whoami-priv', name: 'WhoAmI + Privileges', shell: 'powershell', command: "whoami; whoami /groups", tags: ['security'] },
+      { id: 'reboot-host', name: 'Reboot Server (DANGEROUS)', shell: 'powershell', requiresElevation: true, command: "Restart-Computer -Force", tags: ['danger', 'reboot'] },
+    ]
+  }
+];
+
 function generateBackupCode() {
   return crypto.randomBytes(48).toString('base64url');
 }
@@ -357,6 +447,40 @@ function parseBody(req) {
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch { resolve({}); } });
     req.on('error', reject);
   });
+}
+
+function isElevationRequiredDenied(requested) {
+  return !!requested;
+}
+
+async function checkIsElevated() {
+  const result = await ps(`
+    try {
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      $pr = New-Object Security.Principal.WindowsPrincipal($id)
+      if ($pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { 'true' } else { 'false' }
+    } catch { 'false' }
+  `, 12000);
+  return (result.out || '').trim().toLowerCase() === 'true';
+}
+
+function commandPreviewText(raw) {
+  return String(raw || '').trim().replace(/\s+/g, ' ').slice(0, 180);
+}
+
+async function runPanelPowerShell(command, timeoutMs) {
+  const safeTimeout = Math.max(1000, Math.min(parseInt(timeoutMs, 10) || COMMAND_DEFAULT_TIMEOUT_MS, COMMAND_MAX_TIMEOUT_MS));
+  const start = Date.now();
+  const result = await ps(command, safeTimeout);
+  return {
+    ok: result.ok,
+    code: result.code,
+    durationMs: Date.now() - start,
+    timeoutMs: safeTimeout,
+    stdout: result.out || '',
+    stderr: result.err || '',
+    output: [result.out, result.err].filter(Boolean).join('\n') || '(no output)'
+  };
 }
 
 function requireAuth(req, res) {
@@ -646,6 +770,49 @@ async function handleUtilityAction(req, res, action) {
   if (!scriptPath || !fs.existsSync(scriptPath)) return json(res, 404, { error: 'Utility script not found' });
   const result = await ps(`Set-Location '${ROOT}'; & '${scriptPath}'`, 180000);
   json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') || 'Done' });
+}
+
+async function handleCommandCatalog(req, res) {
+  json(res, 200, {
+    shell: 'powershell',
+    defaultTimeoutMs: COMMAND_DEFAULT_TIMEOUT_MS,
+    maxTimeoutMs: COMMAND_MAX_TIMEOUT_MS,
+    sections: COMMAND_LIBRARY,
+    notes: [
+      'Commands run on the server host where the panel service is running.',
+      'Commands marked requiresElevation=true need the panel service to run under an elevated account.',
+      'SQL helper blocks are templates: edit before running in psql or DBeaver as needed.'
+    ]
+  });
+}
+
+async function handleCommandRun(req, res, body) {
+  const requestedShell = String(body.shell || 'powershell').toLowerCase();
+  const rawCommand = String(body.command || '');
+  const requiresElevation = !!body.requiresElevation;
+  if (requestedShell !== 'powershell') return json(res, 400, { error: 'Only powershell shell is supported in panel command runner.' });
+  if (!rawCommand.trim()) return json(res, 400, { error: 'Command is required.' });
+  if (rawCommand.length > 12000) return json(res, 400, { error: 'Command is too long (max 12000 chars).' });
+
+  if (isElevationRequiredDenied(requiresElevation)) {
+    const elevated = await checkIsElevated();
+    if (!elevated) {
+      return json(res, 403, {
+        error: 'This command requires elevation, but the panel service account is not running as Administrator.',
+        hint: 'Run panel service with an elevated account (for example LocalSystem) or use a non-elevated command.'
+      });
+    }
+  }
+
+  const result = await runPanelPowerShell(rawCommand, body.timeoutMs);
+  appendDiagnosticLog('panel_command_run', {
+    ok: result.ok,
+    code: result.code,
+    durationMs: result.durationMs,
+    requiresElevation,
+    preview: commandPreviewText(rawCommand)
+  });
+  json(res, 200, result);
 }
 
 // POST /api/services/:name/:action
@@ -1177,6 +1344,10 @@ const server = http.createServer(async (req, res) => {
   if (method === 'GET'  && p === '/api/system/utilities') return handleSystemUtilities(req, res);
   const utilityAct = p.match(/^\/api\/system\/actions\/([a-z0-9-]+)$/);
   if (method === 'POST' && utilityAct)                    return handleUtilityAction(req, res, utilityAct[1]);
+
+  // Command center
+  if (method === 'GET'  && p === '/api/commands/catalog') return handleCommandCatalog(req, res);
+  if (method === 'POST' && p === '/api/commands/run')     return handleCommandRun(req, res, body);
 
   // Logs
   if (method === 'GET'  && p === '/api/logs')            return handleListLogs(req, res);

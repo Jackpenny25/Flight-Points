@@ -146,15 +146,16 @@ Always test using `npm run build` and `npm run server` at the end of large chang
 ## Server-Side Checklist (Post-Implementation)
 **Control Panel:** Standalone server management GUI at port 4000.
 - Files: `panel/panel-server.cjs` (backend, pure Node.js built-ins only), `panel/index.html` (frontend SPA).
-- Auth: PIN via `PANEL_PIN` or falls back to `ADMIN_PIN` from `.env.local`. Rate-limited (5 attempts → 15min lockout). 2-hour sliding session.
+- Auth: TOTP via `PANEL_TOTP_SECRET` (or fallback `ADMIN_TOTP_SECRET`) plus long backup code (`ADMIN_BACKUP_CODE`). Rate-limited lockout and 2-hour sliding session.
 - Install as service: `panel\Install-PanelService.ps1` — creates NSSM service `flight-points-panel` on port 4000.
 - Start manually: `npm run panel` (added to package.json).
 - Configure Cloudflare tunnel subdomain (e.g. `panel.flightpoints.uk → localhost:4000`) for remote access.
 - Optional `.env.local` overrides: `PANEL_PORT` (default 4000), `PANEL_LOGS_ROOT` (default `C:\inetpub\wwwroot\Flight-Points\Logs`), `PANEL_BACKUPS_DIR` (default `C:\inetpub\wwwroot\Flight-Points\Backups`).
-- Key API endpoints: `/api/overview`, `/api/services/:name/:action`, `/api/git/*`, `/api/deploy/*`, `/api/logs/:type[/stream]`, `/api/db/*`, `/api/processes`, `/api/system`, `/api/tunnel`, `/api/ports`.
+- Key API endpoints: `/api/overview`, `/api/services/:name/:action`, `/api/git/*`, `/api/deploy/*`, `/api/logs/:type[/stream]`, `/api/db/*`, `/api/processes`, `/api/system`, `/api/tunnel`, `/api/ports`, `/api/commands/catalog`, `/api/commands/run`.
 - Log streaming via SSE (`/api/logs/:type/stream`).
 - Only kills `node` and `cloudflared` processes (no arbitrary kill).
 - Does NOT expose env variable values — only checks for presence/setting.
+- Command Center tab includes a large editable command library (service/deploy/network/logs/SQL/ops), copy-to-clipboard workflow, and PowerShell output capture directly in panel UI.
 
 ---
 
@@ -375,3 +376,23 @@ Entry template (copy for each chat):
         - The admin safeguard token is intentionally short-lived and currently focused on high-impact Accounts/role-default operations, not every destructive route in the application.
         - TeamViewer button still depends on TeamViewer being installed at one of the backend-detected paths.
       Suggested context destinations: `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
+
+   - Date: 2026-04-08
+       Chat summary: Added a full panel Command Center so the standalone panel can stay separate from the main website and be used to recover/restart the main services remotely with many prebuilt copy/run commands.
+       Files touched: `panel/panel-server.cjs`, `panel/index.html`, `.github/copilot-context/50-feature-behavior.md`, `.github/copilot-context/20-operations-runbook.md`, `.github/copilot-instructions.md`
+       Behavior/decision changes:
+          - Confirmed architecture: panel is a separate service (`flight-points-panel` on port 4000) and can run even when `flight-points` API is down.
+          - Added command catalog API: `GET /api/commands/catalog` with grouped command packs and metadata.
+          - Added command runner API: `POST /api/commands/run` executes PowerShell on the server host, returning stdout/stderr, exit code, timeout, and duration.
+          - Added elevation-aware execution checks: commands marked `requiresElevation` now verify if panel service account is admin before running; non-elevated contexts get explicit guidance.
+          - Added new panel sidebar tab `Command Center` with search/filter, command cards, `Use`, `Copy`, and `Run` actions.
+          - Added editable command textarea and output terminal so operators can tweak commands (including SQL templates) before execution.
+          - Added many built-in commands across service control, git/deploy, health/network, logs/events, SQL helpers, and ops toolbox.
+       Validation performed:
+          - `node --check panel/panel-server.cjs` passed.
+          - `npm run build` passed.
+       Risks or follow-up:
+          - Some commands (service restart, reboot, IIS reset) require elevated service account; if panel service runs under a non-admin account they will fail by design.
+          - SQL templates are provided as editable snippets; direct SQL execution still depends on available tooling (`psql` or DBeaver/manual copy).
+          - For always-on remote recovery, ensure NSSM recovery options for `flight-points-panel` are configured to auto-restart on failure.
+       Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`

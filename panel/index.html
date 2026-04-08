@@ -142,6 +142,8 @@ input,select{background:var(--bg3);border:1px solid var(--border);color:var(--te
 input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,166,255,.15);}
 .field{margin-bottom:12px;}
 .label{font-size:12px;color:var(--muted);margin-bottom:4px;display:block;}
+textarea{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;font-size:13px;width:100%;outline:none;font-family:var(--font-mono);line-height:1.45;}
+textarea:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,166,255,.15);}
 
 /* ── Utility ─────────────────────────────────────────── */
 .flex{display:flex;}
@@ -304,6 +306,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
       <div class="nav-item" onclick="nav('services')"><span class="nav-icon">⚙️</span>Services<span class="nav-dot" id="sdot-api"></span></div>
       <div class="nav-item" onclick="nav('deploy')"><span class="nav-icon">🚀</span>Git &amp; Deploy</div>
       <div class="nav-item" onclick="nav('logs')"><span class="nav-icon">📋</span>Logs</div>
+      <div class="nav-item" onclick="nav('commands')"><span class="nav-icon">🧪</span>Command Center</div>
       <div class="nav-section">Data</div>
       <div class="nav-item" onclick="nav('database')"><span class="nav-icon">🗄️</span>Database<span class="nav-dot" id="sdot-db"></span></div>
       <div class="nav-item" onclick="nav('processes')"><span class="nav-icon">⚡</span>Processes</div>
@@ -554,6 +557,71 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,1
         </div>
       </div>
 
+      <!-- ══════════════════ COMMAND CENTER ══════════════════ -->
+      <div class="section" id="sec-commands">
+        <div class="section-head">
+          <h2 style="font-size:18px;font-weight:700;">Command Center</h2>
+          <div class="section-actions">
+            <button class="btn small mobile-wide" onclick="loadCommandCenter()">⟳ Refresh Commands</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">🔎 Search and Filter</span></div>
+          <div class="card-body stack-12">
+            <div class="grid-2">
+              <div>
+                <div class="label">Search</div>
+                <input id="cmd-search" type="text" placeholder="Search commands, categories, tags" oninput="renderCommandCatalog()">
+              </div>
+              <div>
+                <div class="label">Category</div>
+                <select id="cmd-category" onchange="renderCommandCatalog()">
+                  <option value="">All categories</option>
+                </select>
+              </div>
+            </div>
+            <div class="text-sm text-muted" id="cmd-catalog-meta">Loading command pack…</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">📚 Command Library</span></div>
+          <div class="card-body">
+            <div class="action-grid" id="cmd-library-cards">
+              <div class="action-card"><h4>Loading…</h4><p>Fetching command catalog from panel server.</p></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">▶ Run Command</span></div>
+          <div class="card-body stack-12">
+            <div class="grid-2">
+              <div>
+                <div class="label">Selected Command</div>
+                <div id="cmd-selected-name" class="text-sm">None selected. Pick a command from the library.</div>
+              </div>
+              <div>
+                <div class="label">Execution</div>
+                <div id="cmd-selected-meta" class="text-sm text-muted">Runs through panel PowerShell runner.</div>
+              </div>
+            </div>
+            <div>
+              <div class="label">Editable Command Text</div>
+              <textarea id="cmd-editor" rows="11" placeholder="Select a command or paste your own PowerShell command."></textarea>
+            </div>
+            <div class="flex gap-8 flex-wrap">
+              <button class="btn" onclick="copyCommandEditor()">📋 Copy Command</button>
+              <button class="btn" onclick="fillCommandEditorTemplate()">🧩 Insert SQL Template Header</button>
+              <button class="btn primary" onclick="runCommandEditor()">▶ Run on Server</button>
+              <button class="btn danger" onclick="clearCommandOutput()">🧹 Clear Output</button>
+            </div>
+            <div class="terminal" id="cmd-output" style="height:280px;overflow-y:auto;">Command output appears here.</div>
+          </div>
+        </div>
+      </div>
+
       <!-- ══════════════════ DATABASE ══════════════════ -->
       <div class="section" id="sec-database">
         <div class="section-head">
@@ -761,6 +829,9 @@ let liveEventSource = null;
 let currentLogType = null;
 let procRefreshInterval = null;
 let latestSystemData = null;
+let commandCatalog = [];
+let selectedCommandMeta = null;
+let commandCatalogInfo = null;
 
 // ─── Auth ──────────────────────────────────────────────
 let TOTP_ENABLED = false;
@@ -945,11 +1016,194 @@ function nav(section) {
     case 'services':  loadServices(); break;
     case 'deploy':    loadGitStatus(); break;
     case 'logs':      loadLogList(); break;
+    case 'commands':  loadCommandCenter(); break;
     case 'database':  loadDbStatus(); break;
     case 'processes': loadProcesses(); break;
     case 'system':    loadSystem(); break;
     case 'tunnel':    loadTunnel(); break;
   }
+}
+
+// ─── Command Center ─────────────────────────────────
+async function loadCommandCenter() {
+  const data = await apiFetch('/api/commands/catalog');
+  if (!data || data.error || !Array.isArray(data.sections)) {
+    toast('Failed to load command catalog', 'error');
+    return;
+  }
+
+  commandCatalog = data.sections;
+  commandCatalogInfo = data;
+
+  const categoryEl = document.getElementById('cmd-category');
+  const previous = categoryEl.value;
+  categoryEl.innerHTML = '<option value="">All categories</option>' + commandCatalog.map(sec =>
+    `<option value="${escHtml(sec.id)}">${escHtml(sec.title)}</option>`
+  ).join('');
+  categoryEl.value = previous && commandCatalog.some(sec => sec.id === previous) ? previous : '';
+
+  const totalCommands = commandCatalog.reduce((acc, sec) => acc + ((sec.commands || []).length), 0);
+  const notes = Array.isArray(data.notes) ? data.notes : [];
+  document.getElementById('cmd-catalog-meta').textContent = `${totalCommands} commands across ${commandCatalog.length} categories. ${notes[0] || ''}`;
+
+  renderCommandCatalog();
+}
+
+function renderCommandCatalog() {
+  const search = (document.getElementById('cmd-search').value || '').trim().toLowerCase();
+  const category = (document.getElementById('cmd-category').value || '').trim();
+  const root = document.getElementById('cmd-library-cards');
+  if (!Array.isArray(commandCatalog) || commandCatalog.length === 0) {
+    root.innerHTML = '<div class="action-card"><h4>No commands loaded</h4><p>Use Refresh Commands to fetch the catalog.</p></div>';
+    return;
+  }
+
+  const cards = [];
+  for (const section of commandCatalog) {
+    if (category && section.id !== category) continue;
+    const filtered = (section.commands || []).filter(cmd => {
+      if (!search) return true;
+      const haystack = [
+        cmd.name,
+        cmd.command,
+        section.title,
+        section.description,
+        Array.isArray(cmd.tags) ? cmd.tags.join(' ') : ''
+      ].join(' ').toLowerCase();
+      return haystack.includes(search);
+    });
+    if (!filtered.length) continue;
+
+    for (const cmd of filtered) {
+      const isSelected = selectedCommandMeta && selectedCommandMeta.id === cmd.id;
+      cards.push(`
+        <div class="action-card stack-8" style="border-color:${isSelected ? 'var(--blue)' : 'var(--border)'};">
+          <div class="flex items-center justify-between gap-8">
+            <h4>${escHtml(cmd.name || cmd.id || 'Command')}</h4>
+            <span class="tag">${escHtml(section.title || 'General')}</span>
+          </div>
+          <p>${escHtml(section.description || '')}</p>
+          <div class="text-xs text-mono" style="max-height:82px;overflow:auto;background:rgba(7,16,24,.5);border:1px solid var(--border);border-radius:8px;padding:8px;">${escHtml(cmd.command || '')}</div>
+          <div class="flex gap-8 flex-wrap">
+            <button class="btn small" onclick="selectCatalogCommand('${escHtml(section.id)}','${escHtml(cmd.id)}')">Use</button>
+            <button class="btn small" onclick="copyCatalogCommand('${escHtml(section.id)}','${escHtml(cmd.id)}')">Copy</button>
+            <button class="btn small primary" onclick="runCatalogCommand('${escHtml(section.id)}','${escHtml(cmd.id)}')">Run</button>
+            ${cmd.requiresElevation ? '<span class="badge yellow">Admin required</span>' : '<span class="badge blue">Standard</span>'}
+          </div>
+        </div>
+      `);
+    }
+  }
+
+  root.innerHTML = cards.length
+    ? cards.join('')
+    : '<div class="action-card"><h4>No matches</h4><p>Try a broader search or remove category filters.</p></div>';
+}
+
+function getCatalogCommand(sectionId, commandId) {
+  const section = commandCatalog.find(sec => sec.id === sectionId);
+  if (!section) return null;
+  const command = (section.commands || []).find(cmd => cmd.id === commandId);
+  if (!command) return null;
+  return { section, command };
+}
+
+function selectCatalogCommand(sectionId, commandId) {
+  const entry = getCatalogCommand(sectionId, commandId);
+  if (!entry) return;
+  selectedCommandMeta = {
+    id: entry.command.id,
+    requiresElevation: !!entry.command.requiresElevation,
+    shell: entry.command.shell || 'powershell',
+    name: entry.command.name || entry.command.id,
+    sectionTitle: entry.section.title || sectionId
+  };
+  document.getElementById('cmd-editor').value = entry.command.command || '';
+  document.getElementById('cmd-selected-name').textContent = `${selectedCommandMeta.sectionTitle} / ${selectedCommandMeta.name}`;
+  document.getElementById('cmd-selected-meta').textContent = `${selectedCommandMeta.shell} • ${selectedCommandMeta.requiresElevation ? 'requires elevation' : 'no elevation required flag'}`;
+  renderCommandCatalog();
+}
+
+async function copyCatalogCommand(sectionId, commandId) {
+  const entry = getCatalogCommand(sectionId, commandId);
+  if (!entry) return;
+  await copyTextToClipboard(entry.command.command || '');
+}
+
+async function runCatalogCommand(sectionId, commandId) {
+  const entry = getCatalogCommand(sectionId, commandId);
+  if (!entry) return;
+  selectCatalogCommand(sectionId, commandId);
+  await runCommandEditor();
+}
+
+async function copyCommandEditor() {
+  const text = document.getElementById('cmd-editor').value || '';
+  await copyTextToClipboard(text);
+}
+
+async function copyTextToClipboard(text) {
+  if (!text.trim()) {
+    toast('Nothing to copy', 'error');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Command copied', 'ok');
+  } catch (_) {
+    toast('Clipboard copy failed in this browser context', 'error');
+  }
+}
+
+function fillCommandEditorTemplate() {
+  const template = [
+    "$sql = @'",
+    'SELECT NOW() AS server_time;',
+    "'@",
+    '',
+    '# Example execution with psql (edit connection string first)',
+    "$env:DATABASE_URL='<paste if not already set>'",
+    "psql \"$env:DATABASE_URL\" -c $sql",
+  ].join('\n');
+  document.getElementById('cmd-editor').value = template;
+  selectedCommandMeta = null;
+  document.getElementById('cmd-selected-name').textContent = 'Custom command template';
+  document.getElementById('cmd-selected-meta').textContent = 'powershell • editable';
+  renderCommandCatalog();
+}
+
+async function runCommandEditor() {
+  const output = document.getElementById('cmd-output');
+  const commandText = (document.getElementById('cmd-editor').value || '').trim();
+  if (!commandText) {
+    toast('Paste or select a command first', 'error');
+    return;
+  }
+
+  const shell = selectedCommandMeta?.shell || 'powershell';
+  const requiresElevation = !!selectedCommandMeta?.requiresElevation;
+  output.textContent = '▶ Running command on server via panel PowerShell runner…';
+  const res = await apiFetch('/api/commands/run', 'POST', {
+    shell,
+    requiresElevation,
+    command: commandText,
+    timeoutMs: commandCatalogInfo?.defaultTimeoutMs || 90000
+  });
+
+  if (res && res.error) {
+    output.textContent = `✗ ${res.error}\n${res.hint || ''}`.trim();
+    toast(res.error, 'error');
+    return;
+  }
+
+  const header = `Exit: ${res.code} | Duration: ${res.durationMs}ms | Timeout: ${res.timeoutMs}ms`;
+  output.textContent = `${header}\n\n${res.output || '(no output)'}`;
+  output.scrollTop = output.scrollHeight;
+  toast(res.ok ? 'Command completed' : 'Command returned non-zero exit', res.ok ? 'ok' : 'error');
+}
+
+function clearCommandOutput() {
+  document.getElementById('cmd-output').textContent = 'Command output appears here.';
 }
 
 function toggleSidebar() {
