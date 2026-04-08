@@ -408,3 +408,16 @@ Entry template (copy for each chat):
        Risks or follow-up:
           - User still needs to restart panel service on the server host for backend route changes to take effect.
        Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`
+
+   - Date: 2026-04-08
+       Chat summary: Investigated persistent "commands not found" report and confirmed dual panel backend files exist; only one includes Command Center routes.
+       Files touched: `.github/copilot-instructions.md`
+       Behavior/decision changes:
+          - Verified command catalog definitions live in `panel/panel-server.cjs` (`COMMAND_LIBRARY` + `/api/commands/catalog` + `/api/commands/run`).
+          - Verified legacy `panel/panel-server.js` does not contain those routes and still uses old PIN-based auth flow.
+          - Verified installer `panel/Install-PanelService.ps1` targets `panel/panel-server.cjs` by default.
+       Validation performed:
+          - Source search across `panel/` for `COMMAND_LIBRARY` and `/api/commands/catalog`.
+       Risks or follow-up:
+          - If production service was manually configured to run `panel-server.js`, Command Center will always show Not found until service config points to `panel-server.cjs`.
+       Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
