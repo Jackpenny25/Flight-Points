@@ -396,3 +396,15 @@ Entry template (copy for each chat):
           - SQL templates are provided as editable snippets; direct SQL execution still depends on available tooling (`psql` or DBeaver/manual copy).
           - For always-on remote recovery, ensure NSSM recovery options for `flight-points-panel` are configured to auto-restart on failure.
        Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
+
+   - Date: 2026-04-08
+       Chat summary: User reported Command Center showing "Loading" with no command cards. Added explicit UI error rendering for command-catalog failures and likely stale-service guidance.
+       Files touched: `panel/index.html`, `.github/copilot-instructions.md`
+       Behavior/decision changes:
+          - `loadCommandCenter()` now writes a visible card-level error message and reason when `/api/commands/catalog` is unavailable.
+          - UI now instructs operator to restart `flight-points-panel` when frontend is newer than running backend.
+       Validation performed:
+          - VS Code error scan for `panel/index.html` reported no errors.
+       Risks or follow-up:
+          - User still needs to restart panel service on the server host for backend route changes to take effect.
+       Suggested context destinations: `20-operations-runbook.md`, `50-feature-behavior.md`

@@ -1028,7 +1028,16 @@ function nav(section) {
 async function loadCommandCenter() {
   const data = await apiFetch('/api/commands/catalog');
   if (!data || data.error || !Array.isArray(data.sections)) {
-    toast('Failed to load command catalog', 'error');
+    const reason = data?.error || 'Command catalog endpoint unavailable';
+    document.getElementById('cmd-catalog-meta').textContent = `Failed to load command pack: ${reason}`;
+    document.getElementById('cmd-library-cards').innerHTML = `
+      <div class="action-card">
+        <h4>Command catalog unavailable</h4>
+        <p>The panel UI loaded, but the backend endpoint <span class="code">/api/commands/catalog</span> did not return data.</p>
+        <p>Usually this means the panel service is still running older backend code. Restart <span class="code">flight-points-panel</span> and refresh.</p>
+      </div>
+    `;
+    toast(`Failed to load command catalog: ${reason}`, 'error');
     return;
   }
 
