@@ -377,6 +377,7 @@ Entry template (copy for each chat):
         - TeamViewer button still depends on TeamViewer being installed at one of the backend-detected paths.
       Suggested context destinations: `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
 
+<<<<<<< Updated upstream
    - Date: 2026-04-08
        Chat summary: Added a full panel Command Center so the standalone panel can stay separate from the main website and be used to recover/restart the main services remotely with many prebuilt copy/run commands.
        Files touched: `panel/panel-server.cjs`, `panel/index.html`, `.github/copilot-context/50-feature-behavior.md`, `.github/copilot-context/20-operations-runbook.md`, `.github/copilot-instructions.md`
@@ -421,3 +422,57 @@ Entry template (copy for each chat):
        Risks or follow-up:
           - If production service was manually configured to run `panel-server.js`, Command Center will always show Not found until service config points to `panel-server.cjs`.
        Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
+=======
+- Date: 2026-04-10
+    Chat summary: Created a ready-to-present slide-by-slide speaker notes draft introducing the reward scheme, including what it is, how points and rewards work, account sign-up/onboarding flow, permissions, security/fairness controls, and FAQs.
+    Files touched: `docs/reward-scheme-powerpoint-notes.md`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Added a new documentation artifact with 12 suggested slides and detailed speaker notes.
+       - Included content aligned with current platform behavior: no self-signup, role-based access, points awarding boundaries, reward lifecycle, and suggestion/vote workflow.
+       - Added optional presenter prompts for cadet-only vs staff-focused delivery.
+    Validation performed:
+       - Confirmed notes content aligns with current project instructions context for rewards/account flow.
+    Risks or follow-up:
+       - Slide deck visuals are not generated yet; this is a script/notes file for manual import into PowerPoint.
+       - If local policy wording differs by squadron, minor wording customization may be needed before delivery.
+    Suggested context destinations: `50-feature-behavior.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-04-10
+    Chat summary: Condensed and refined the reward scheme presentation notes to a tighter script targeted to approximately 1,000 words while preserving all core sections (what it is, how it works, account setup, permissions, fairness, and FAQs).
+    Files touched: `docs/reward-scheme-powerpoint-notes.md`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Rewrote all 12 slide speaker-note sections with clearer, denser phrasing and stronger presenter flow.
+       - Preserved existing structure and scope while improving practical delivery language for cadet and staff audiences.
+       - Kept optional presenter prompts and adjusted timing guidance to match the revised script density.
+    Validation performed:
+       - Measured updated file word count using PowerShell (`Measure-Object -Word`) to confirm it is close to requested size.
+    Risks or follow-up:
+       - Exact spoken duration still depends on presenter pace and amount of ad-libbed examples.
+       - If required, a cadet-only cut-down or staff-briefing variant can be derived from this baseline.
+    Suggested context destinations: `50-feature-behavior.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-04-10
+    Chat summary: User requested the reward scheme notes be reduced to under 1,000 words; completed a full concise rewrite while preserving all 12 slides and required sections.
+    Files touched: `docs/reward-scheme-powerpoint-notes.md`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Replaced the previous expanded draft with a shorter script that still covers scheme purpose, points flow, rewards lifecycle, sign-up/account process, permissions, controls, cadet participation, FAQ, and closing call to action.
+       - Simplified language for clearer delivery and easier timing control during live presentation.
+    Validation performed:
+       - Measured final word count with PowerShell (`Measure-Object -Word`) and confirmed it is below 1,000 words.
+    Risks or follow-up:
+       - Further shortening may remove useful delivery context; if needed, produce a separate quick-brief variant rather than trimming this baseline further.
+    Suggested context destinations: `50-feature-behavior.md`, `60-open-items-and-handover.md`
+
+- Date: 2026-04-10
+    Chat summary: User requested a much shorter notes script capped below 1,000 characters; replaced the full speaker notes with an ultra-compact slide-by-slide summary.
+    Files touched: `docs/reward-scheme-powerpoint-notes.md`, `.github/copilot-instructions.md`
+    Behavior/decision changes:
+       - Rewrote the notes into 12 compact slide lines (S1-S12) covering what it is, how points/rewards work, signup, permissions, controls, participation, FAQ, and close.
+       - Removed verbose wording and optional presenter prompts to meet strict character limits.
+    Validation performed:
+       - Measured exact character length in PowerShell with string `.Length` and confirmed total content is 911 characters.
+    Risks or follow-up:
+       - This format is intentionally terse and may be too brief for longer spoken delivery without ad-lib.
+       - If needed, create two versions: ultra-compact (<=1000 chars) and presenter-expanded (~800-1000 words).
+    Suggested context destinations: `50-feature-behavior.md`, `60-open-items-and-handover.md`
+>>>>>>> Stashed changes
