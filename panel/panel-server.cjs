@@ -38,6 +38,7 @@ const API_PORT   = parseInt(process.env.PORT || '3001', 10);
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours sliding window
 const PANEL_MAX_LOGIN_ATTEMPTS = parseInt(process.env.PANEL_MAX_LOGIN_ATTEMPTS || '10', 10);
 const PANEL_LOCKOUT_MINUTES = parseInt(process.env.PANEL_LOCKOUT_MINUTES || '15', 10);
+const MAX_CONCURRENT_SESSIONS = 2; // Maximum active sessions at once
 
 // Locate log/backup directories (configurable so it works both in dev and on server)
 const LOGS_ROOT    = process.env.PANEL_LOGS_ROOT   || 'C:\\inetpub\\wwwroot\\Flight-Points\\Logs';
@@ -316,21 +317,72 @@ function discoverTooling() {
 }
 
 // ─── Session Store ────────────────────────────────────────────────────────────
-const sessions = new Map(); // token -> expiresAt
+const sessions = new Map(); // token -> { expiresAt, ip, createdAt }
 
-function createSession() {
+function createSession(ip) {
+  // Enforce max concurrent sessions — evict oldest if limit reached
+  if (sessions.size >= MAX_CONCURRENT_SESSIONS) {
+    let oldestToken = null, oldestTime = Infinity;
+    for (const [t, s] of sessions) {
+      if (s.createdAt < oldestTime) { oldestTime = s.createdAt; oldestToken = t; }
+    }
+    if (oldestToken) sessions.delete(oldestToken);
+  }
   const token = crypto.randomBytes(32).toString('hex');
-  sessions.set(token, Date.now() + SESSION_TTL_MS);
+  sessions.set(token, { expiresAt: Date.now() + SESSION_TTL_MS, ip: ip || 'unknown', createdAt: Date.now() });
   return token;
 }
 
 function validateSession(token) {
   if (!token || !sessions.has(token)) return false;
-  const exp = sessions.get(token);
-  if (Date.now() > exp) { sessions.delete(token); return false; }
-  sessions.set(token, Date.now() + SESSION_TTL_MS); // sliding
+  const sess = sessions.get(token);
+  if (Date.now() > sess.expiresAt) { sessions.delete(token); return false; }
+  sess.expiresAt = Date.now() + SESSION_TTL_MS; // sliding
   return true;
 }
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+const AUDIT_LOG_PATH = path.join(PANEL_LOG_DIR, 'panel-audit.log');
+function auditLog(action, details, req) {
+  try {
+    fs.mkdirSync(PANEL_LOG_DIR, { recursive: true });
+    const ip = req ? (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown') : 'system';
+    const entry = `${new Date().toISOString()} [${ip}] ${action} ${typeof details === 'string' ? details : JSON.stringify(details)}${os.EOL}`;
+    fs.appendFileSync(AUDIT_LOG_PATH, entry, 'utf8');
+  } catch { /* audit must never crash the panel */ }
+}
+
+// ─── Authenticated Rate Limiter ───────────────────────────────────────────────
+const authRateBuckets = new Map(); // ip -> { count, windowStart }
+const AUTH_RATE_WINDOW_MS = 60 * 1000; // 1 minute
+const AUTH_RATE_LIMITS = {
+  'command_run': 20,     // commands per minute
+  'deploy':      5,      // deploy actions per minute
+  'service':    10,      // service actions per minute
+  'destructive': 3,      // destructive ops per minute
+  'default':    60       // general API calls per minute
+};
+function checkAuthRateLimit(req, category) {
+  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+  const key = `${ip}:${category}`;
+  const limit = AUTH_RATE_LIMITS[category] || AUTH_RATE_LIMITS['default'];
+  const now = Date.now();
+  let bucket = authRateBuckets.get(key);
+  if (!bucket || now - bucket.windowStart > AUTH_RATE_WINDOW_MS) {
+    bucket = { count: 0, windowStart: now };
+    authRateBuckets.set(key, bucket);
+  }
+  bucket.count++;
+  if (bucket.count > limit) return false;
+  return true;
+}
+// Prune stale buckets every 5 minutes
+setInterval(() => {
+  const cutoff = Date.now() - AUTH_RATE_WINDOW_MS * 2;
+  for (const [k, v] of authRateBuckets) {
+    if (v.windowStart < cutoff) authRateBuckets.delete(k);
+  }
+}, 5 * 60 * 1000).unref();
 
 function getToken(req) {
   const hdr = req.headers['x-panel-token'] || '';
@@ -458,7 +510,12 @@ function ps(script, timeout = 30000) {
 const BASE_HEADERS = {
   'Cache-Control': 'no-store',
   'X-Content-Type-Options': 'nosniff',
-  'X-Frame-Options': 'SAMEORIGIN'
+  'X-Frame-Options': 'DENY',
+  'X-XSS-Protection': '1; mode=block',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self';",
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
 };
 
 function json(res, status, data) {
@@ -617,10 +674,12 @@ async function handleLogin(req, res, body) {
   
   if (!valid) {
     recordAttempt(ip, false);
+    auditLog('LOGIN_FAILED', { ip, method: submittedCode.length >= ADMIN_BACKUP_CODE_MIN_LENGTH ? 'backup' : 'totp' }, req);
     return json(res, 401, { error: 'Invalid authenticator or backup code' });
   }
   recordAttempt(ip, true);
-  json(res, 200, { token: createSession() });
+  auditLog('LOGIN_SUCCESS', { ip, method: totpValid ? 'totp' : 'backup' }, req);
+  json(res, 200, { token: createSession(ip) });
 }
 
 // GET /api/overview
@@ -814,6 +873,7 @@ async function handleCommandCatalog(req, res) {
 }
 
 async function handleCommandRun(req, res, body) {
+  if (!checkAuthRateLimit(req, 'command_run')) return json(res, 429, { error: 'Rate limit exceeded. Max 20 commands per minute.' });
   const requestedShell = String(body.shell || 'powershell').toLowerCase();
   const rawCommand = String(body.command || '');
   const isSql = body.type === 'sql';
@@ -845,12 +905,35 @@ async function handleCommandRun(req, res, body) {
     const psqlExe = firstExistingPath(psqlPaths);
     if (!psqlExe) return json(res, 500, { error: 'psql not found on the server. Install PostgreSQL client tools or run manually via DBeaver.' });
 
-    // Write SQL to temp file and execute via psql to avoid shell-escaping issues
+    // Write SQL to temp file and execute via psql using env vars (don't expose DATABASE_URL in process list)
     const tmpSql = path.join(os.tmpdir(), `fp_panel_sql_${crypto.randomBytes(6).toString('hex')}.sql`);
     fs.writeFileSync(tmpSql, rawCommand, 'utf8');
     const start = Date.now();
-    const result = await shell(`"${psqlExe}" "${dbUrl}" -f "${tmpSql}" 2>&1`, body.timeoutMs || 30000);
-    fs.unlink(tmpSql, () => {});
+    // Parse DATABASE_URL to extract components; pass password via PGPASSWORD env var
+    let psqlConnArgs;
+    try {
+      const u = new URL(dbUrl);
+      const pgEnv = { ...PANEL_EXEC_ENV, PGPASSWORD: decodeURIComponent(u.password || '') };
+      const host = u.hostname || 'localhost';
+      const port = u.port || '5432';
+      const dbname = (u.pathname || '/').slice(1);
+      const user = decodeURIComponent(u.username || '');
+      const sslParam = dbUrl.includes('sslmode=') ? '' : '';
+      psqlConnArgs = { args: `-h "${host}" -p ${port} -U "${user}" -d "${dbname}" -f "${tmpSql}" 2>&1`, env: pgEnv };
+    } catch {
+      // Fallback to full URL if parsing fails
+      psqlConnArgs = { args: `"${dbUrl}" -f "${tmpSql}" 2>&1`, env: PANEL_EXEC_ENV };
+    }
+    const result = await new Promise(resolve => {
+      exec(
+        `"${psqlExe}" ${psqlConnArgs.args}`,
+        { timeout: body.timeoutMs || 30000, windowsHide: true, cwd: ROOT, maxBuffer: 5 * 1024 * 1024, env: psqlConnArgs.env },
+        (err, stdout, stderr) => {
+          fs.unlink(tmpSql, () => {});
+          resolve({ ok: !err, out: (stdout || '').trim(), err: (stderr || '').trim(), code: err ? (err.code || 1) : 0 });
+        }
+      );
+    });
     const out = {
       ok: result.ok,
       code: result.code,
@@ -861,6 +944,7 @@ async function handleCommandRun(req, res, body) {
       output: [result.out, result.err].filter(Boolean).join('\n') || '(no output)'
     };
     appendDiagnosticLog('panel_sql_run', { ok: out.ok, code: out.code, durationMs: out.durationMs, preview: commandPreviewText(rawCommand) });
+    auditLog('SQL_EXECUTE', { ok: out.ok, preview: commandPreviewText(rawCommand), durationMs: out.durationMs }, req);
     return json(res, 200, out);
   }
 
@@ -872,6 +956,7 @@ async function handleCommandRun(req, res, body) {
     requiresElevation,
     preview: commandPreviewText(rawCommand)
   });
+  auditLog('COMMAND_EXECUTE', { ok: result.ok, preview: commandPreviewText(rawCommand), durationMs: result.durationMs, requiresElevation }, req);
   json(res, 200, result);
 }
 
@@ -879,6 +964,8 @@ async function handleCommandRun(req, res, body) {
 async function handleServiceAction(req, res, name, action) {
   if (!SERVICES.includes(name)) return json(res, 400, { error: 'Unknown service' });
   if (!['start', 'stop', 'restart'].includes(action)) return json(res, 400, { error: 'Invalid action' });
+  if (!checkAuthRateLimit(req, 'service')) return json(res, 429, { error: 'Rate limit exceeded. Max 10 service actions per minute.' });
+  auditLog('SERVICE_ACTION', { service: name, action }, req);
   const cmdlets = { start: 'Start-Service', stop: 'Stop-Service', restart: 'Restart-Service' };
   const result = await ps(`
     try {
@@ -893,6 +980,8 @@ async function handleServiceAction(req, res, name, action) {
 
 // POST /api/services/restart-app — restart flight-points + flight-points-tunnel (panel stays up)
 async function handleRestartApp(req, res) {
+  if (!checkAuthRateLimit(req, 'service')) return json(res, 429, { error: 'Rate limit exceeded.' });
+  auditLog('RESTART_APP', { services: ['flight-points', 'flight-points-tunnel'] }, req);
   const result = await ps(`
     $out = @()
     try {
@@ -912,6 +1001,7 @@ async function handleRestartApp(req, res) {
 
 // POST /api/panel/restart — restart panel + all managed services
 function handlePanelRestart(req, res) {
+  auditLog('PANEL_RESTART', { services: ['flight-points', 'flight-points-tunnel', 'flight-points-panel'] }, req);
   json(res, 200, { ok: true, message: 'Restart initiated. Panel and all services will restart in ~1s.' });
   // Detached PowerShell process restarts all services; survives this process dying
   const script = [
@@ -960,12 +1050,16 @@ async function handleGitLog(req, res) {
 
 // POST /api/git/fetch
 async function handleGitFetch(req, res) {
+  if (!checkAuthRateLimit(req, 'deploy')) return json(res, 429, { error: 'Rate limit exceeded.' });
+  auditLog('GIT_FETCH', {}, req);
   const result = await shell(cmd('git', 'fetch --prune origin') + ' 2>&1', 60000);
   json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') || 'Fetch complete (nothing new)' });
 }
 
 // POST /api/git/pull
 async function handleGitPull(req, res) {
+  if (!checkAuthRateLimit(req, 'deploy')) return json(res, 429, { error: 'Rate limit exceeded.' });
+  auditLog('GIT_PULL', {}, req);
   // Reset local changes (e.g. dist/index.html) before pulling, same as auto-deploy.ps1
   const reset = await shell(cmd('git', 'reset --hard') + ' 2>&1', 30000);
   const pull = await shell(cmd('git', 'pull --ff-only origin main') + ' 2>&1', 90000);
@@ -975,24 +1069,32 @@ async function handleGitPull(req, res) {
 
 // POST /api/deploy/build
 async function handleDeployBuild(req, res) {
+  if (!checkAuthRateLimit(req, 'deploy')) return json(res, 429, { error: 'Rate limit exceeded.' });
+  auditLog('DEPLOY_BUILD', {}, req);
   const result = await shell(cmd('npm', 'run build') + ' 2>&1', 180000);
   json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') });
 }
 
 // POST /api/deploy/typecheck
 async function handleDeployTypecheck(req, res) {
+  if (!checkAuthRateLimit(req, 'deploy')) return json(res, 429, { error: 'Rate limit exceeded.' });
+  auditLog('DEPLOY_TYPECHECK', {}, req);
   const result = await shell(cmd('npx', 'tsc --noEmit') + ' 2>&1', 90000);
   json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') || 'TypeScript check passed with no errors' });
 }
 
 // POST /api/deploy/install
 async function handleDeployInstall(req, res) {
+  if (!checkAuthRateLimit(req, 'deploy')) return json(res, 429, { error: 'Rate limit exceeded.' });
+  auditLog('DEPLOY_INSTALL', {}, req);
   const result = await shell(cmd('npm', 'install') + ' 2>&1', 180000);
   json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') });
 }
 
 // POST /api/deploy/run  (triggers auto-deploy -RunOnce)
 async function handleDeployRun(req, res) {
+  if (!checkAuthRateLimit(req, 'deploy')) return json(res, 429, { error: 'Rate limit exceeded.' });
+  auditLog('DEPLOY_RUN', {}, req);
   const script = path.join(ROOT, 'auto-deploy.ps1');
   if (!fs.existsSync(script)) return json(res, 404, { error: 'auto-deploy.ps1 not found' });
   const result = await ps(`Set-Location '${ROOT}'; & '${script}' -RunOnce`, 300000);
@@ -1001,6 +1103,8 @@ async function handleDeployRun(req, res) {
 
 // POST /api/deploy/audit  (npm audit)
 async function handleDeployAudit(req, res) {
+  if (!checkAuthRateLimit(req, 'deploy')) return json(res, 429, { error: 'Rate limit exceeded.' });
+  auditLog('DEPLOY_AUDIT', {}, req);
   const result = await shell(cmd('npm', 'audit --omit=dev') + ' 2>&1', 60000);
   json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') });
 }
@@ -1211,6 +1315,7 @@ async function handleDualTotpStep2(req, res, body) {
 
 // POST /api/db/reset-data — delete points, attendance, attendance_bulks (NOT cadets, accounts, rewards)
 async function handleDbResetData(req, res, body) {
+  if (!checkAuthRateLimit(req, 'destructive')) return json(res, 429, { error: 'Rate limit exceeded.' });
   // Dual-TOTP must already be verified by frontend (step1+step2)
   const code = String(body.code || '').trim();
   const challengeToken = String(body.challengeToken || '').trim();
@@ -1218,6 +1323,8 @@ async function handleDbResetData(req, res, body) {
   if (!challengeToken) return json(res, 400, { error: 'Challenge token is required.' });
   const vr = validateDualTotpChallenge(challengeToken, code);
   if (!vr.ok) return json(res, 403, { error: vr.error });
+
+  auditLog('DATA_RESET', { tables: ['points', 'attendance', 'attendance_bulks', 'revision_history'] }, req);
 
   // Tables to truncate — does NOT touch cadets, app_users, rewards, or reward_suggestions
   const tables = ['points', 'attendance', 'attendance_bulks', 'revision_history'];
@@ -1236,8 +1343,25 @@ async function handleDbResetData(req, res, body) {
   const truncateSql = tables.map(t => `TRUNCATE TABLE ${t} CASCADE`).join('; ') + ';';
 
   if (psqlExe) {
-    // Use psql directly
-    const result = await shell(`"${psqlExe}" "${dbUrl}" -c "${truncateSql}" 2>&1`, 30000);
+    // Use psql with env vars to avoid exposing DATABASE_URL in process list
+    let psqlArgs, psqlEnv;
+    try {
+      const u = new URL(dbUrl);
+      psqlEnv = { ...PANEL_EXEC_ENV, PGPASSWORD: decodeURIComponent(u.password || '') };
+      const host = u.hostname || 'localhost';
+      const port = u.port || '5432';
+      const dbname = (u.pathname || '/').slice(1);
+      const user = decodeURIComponent(u.username || '');
+      psqlArgs = `-h "${host}" -p ${port} -U "${user}" -d "${dbname}" -c "${truncateSql}" 2>&1`;
+    } catch {
+      psqlEnv = PANEL_EXEC_ENV;
+      psqlArgs = `"${dbUrl}" -c "${truncateSql}" 2>&1`;
+    }
+    const result = await new Promise(resolve => {
+      exec(`"${psqlExe}" ${psqlArgs}`, { timeout: 30000, windowsHide: true, cwd: ROOT, maxBuffer: 5 * 1024 * 1024, env: psqlEnv },
+        (err, stdout, stderr) => resolve({ ok: !err, out: (stdout || '').trim(), err: (stderr || '').trim() })
+      );
+    });
     appendDiagnosticLog('db_reset_data', { ok: result.ok, tables, method: 'psql', output: result.out || result.err });
     if (!result.ok) return json(res, 500, { error: 'SQL execution failed.', output: [result.out, result.err].filter(Boolean).join('\n') });
     return json(res, 200, { ok: true, tables, output: result.out || 'OK' });
@@ -1281,6 +1405,7 @@ async function handleProcesses(req, res) {
 }
 
 async function handleKillProcess(req, res, pid) {
+  if (!checkAuthRateLimit(req, 'destructive')) return json(res, 429, { error: 'Rate limit exceeded.' });
   const pidNum = parseInt(pid, 10);
   if (!pidNum || pidNum <= 4) return json(res, 400, { error: 'Invalid PID' });
 
@@ -1290,6 +1415,7 @@ async function handleKillProcess(req, res, pid) {
   if (!['node', 'cloudflared'].some(n => name.includes(n))) {
     return json(res, 403, { error: `Cannot kill process "${name}" — only node and cloudflared processes allowed` });
   }
+  auditLog('PROCESS_KILL', { pid: pidNum, processName: name }, req);
   const result = await ps(`Stop-Process -Id ${pidNum} -Force -EA Stop`);
   json(res, result.ok ? 200 : 500, { ok: result.ok, output: result.ok ? `Process ${pidNum} killed` : result.err });
 }
@@ -1438,7 +1564,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── Auth routes (no token required) ──
   if (method === 'POST' && p === '/api/auth/login')  return handleLogin(req, res, body);
-  if (method === 'POST' && p === '/api/auth/logout') { sessions.delete(getToken(req)); return json(res, 200, { ok: true }); }
+  if (method === 'POST' && p === '/api/auth/logout') { auditLog('LOGOUT', {}, req); sessions.delete(getToken(req)); return json(res, 200, { ok: true }); }
   if (method === 'GET'  && p === '/api/auth/check')  return json(res, 200, { ok: validateSession(getToken(req)), totpEnabled: true, backupCodeMinLength: ADMIN_BACKUP_CODE_MIN_LENGTH });
 
   // ── All routes below require auth ──
@@ -1494,8 +1620,10 @@ const server = http.createServer(async (req, res) => {
   const logMatch = p.match(/^\/api\/logs\/([a-z0-9-]+)$/);
   if (method === 'GET'    && logMatch)                   return handleGetLog(req, res, logMatch[1]);
   if (method === 'DELETE' && logMatch) {
+    if (!checkAuthRateLimit(req, 'destructive')) return json(res, 429, { error: 'Rate limit exceeded.' });
     const lp = resolveLogPath(logMatch[1]);
     if (!lp || !['nssm', 'server'].includes(logMatch[1])) return json(res, 400, { error: 'Can only clear server/nssm logs' });
+    auditLog('LOG_CLEAR', { logType: logMatch[1] }, req);
     try { fs.writeFileSync(lp, '', 'utf8'); json(res, 200, { ok: true }); }
     catch (e) { json(res, 500, { error: e.message }); }
     return;

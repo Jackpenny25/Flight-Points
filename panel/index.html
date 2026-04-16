@@ -1212,8 +1212,20 @@ async function runCommandEditor() {
     return;
   }
 
-  const shell = selectedCommandMeta?.shell || 'powershell';
+  // Safety check: warn on destructive SQL or dangerous PowerShell commands
+  const lowerCmd = commandText.toLowerCase();
+  const destructiveSqlPatterns = ['drop ', 'truncate ', 'delete from', 'alter table', 'update '];
+  const destructivePsPatterns = ['remove-item', 'rm -', 'del ', 'format-volume', 'clear-content', 'stop-computer', 'restart-computer'];
   const type = selectedCommandMeta?.type || null;
+  const isDestructive = type === 'sql'
+    ? destructiveSqlPatterns.some(p => lowerCmd.includes(p))
+    : destructivePsPatterns.some(p => lowerCmd.includes(p));
+
+  if (isDestructive) {
+    if (!confirm('⚠️ This command appears to be destructive (modifies/deletes data).\n\nAre you sure you want to run it?')) return;
+  }
+
+  const shell = selectedCommandMeta?.shell || 'powershell';
   const requiresElevation = !!selectedCommandMeta?.requiresElevation;
   output.textContent = type === 'sql' ? '▶ Running SQL query via psql…' : '▶ Running command on server via panel PowerShell runner…';
   const payload = {
