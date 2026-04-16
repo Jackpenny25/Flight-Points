@@ -1746,10 +1746,10 @@ app.post('/api/admin/reset-pin', requireAuth, requireRole(['admin']), async (req
 
 // ========== TICKETS ENDPOINTS ==========
 
-// GET /api/tickets/count - Get count of tickets
+// GET /api/tickets/count - Get count of open tickets (those needing action)
 app.get('/api/tickets/count', async (req: Request, res: Response) => {
   try {
-    const result = await query(`SELECT COUNT(*)::int AS count FROM tickets`).catch(() => ({ rows: [{ count: 0 }] }));
+    const result = await query(`SELECT COUNT(*)::int AS count FROM tickets WHERE status = 'open'`).catch(() => ({ rows: [{ count: 0 }] }));
     res.json({ count: Number(result.rows[0]?.count || 0) });
   } catch (error) {
     console.error('Error in GET /api/tickets/count:', error);
@@ -3630,13 +3630,10 @@ app.get('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Re
   }
 });
 
-// POST /api/reward-suggestions - Create a suggestion (any role except snco)
+// POST /api/reward-suggestions - Create a suggestion (any authenticated role)
 app.post('/api/reward-suggestions', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     await ensureRewardsSchema();
-    if (req.user?.role === 'snco') {
-      return res.status(403).json({ error: 'Flight Point Leads create rewards directly, not suggestions.' });
-    }
     const { title, description } = req.body || {};
     if (!title || !String(title).trim()) {
       return res.status(400).json({ error: 'Title is required' });

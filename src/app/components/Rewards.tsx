@@ -49,7 +49,7 @@ type Cadet = {
 
 export function Rewards({ userRole }: RewardsProps) {
   const canManageRewards = userRole === 'snco';
-  const canSuggest = userRole !== 'snco';
+  const canSuggest = true;
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [cadets, setCadets] = useState<Cadet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -603,7 +603,7 @@ export function Rewards({ userRole }: RewardsProps) {
           <CardDescription>Suggest rewards you'd like to see and vote for your favourites.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Suggestion form (not for snco) */}
+          {/* Suggestion form (all roles) */}
           {canSuggest && (
             <div className="rounded-md border border-slate-200 bg-white p-4 space-y-3">
               <p className="text-sm font-medium text-slate-700">Suggest a reward</p>

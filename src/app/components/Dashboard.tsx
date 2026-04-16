@@ -265,6 +265,12 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
     return () => clearInterval(timer);
   }, [canViewPoints, accessToken]);
 
+  // Clear view-only badges when the user visits the tab (informational, not action-required)
+  useEffect(() => {
+    if (activeTab === 'rewards') setRewardsCount(0);
+    if (activeTab === 'points') setPointsCount(0);
+  }, [activeTab]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50">
       {/* Header */}
@@ -508,7 +514,12 @@ export function Dashboard({ user, accessToken, onLogout }: DashboardProps) {
 
               {/* Admin tickets review (Flight Point Leads/Staff) */}
               {canViewTickets && <TabsContent value="tickets">
-                <TicketsAdmin accessToken={accessToken} />
+                <TicketsAdmin accessToken={accessToken} onTicketAction={async () => {
+                  try {
+                    const res = await api.getTicketsCount?.();
+                    if (typeof res?.count === 'number') setTicketsCount(res.count);
+                  } catch (_) {}
+                }} />
               </TabsContent>}
 
               {adminUnlocked && canViewSignups && canManageAccounts && (

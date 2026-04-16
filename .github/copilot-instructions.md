@@ -377,7 +377,6 @@ Entry template (copy for each chat):
         - TeamViewer button still depends on TeamViewer being installed at one of the backend-detected paths.
       Suggested context destinations: `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`, `60-open-items-and-handover.md`
 
-<<<<<<< Updated upstream
    - Date: 2026-04-08
        Chat summary: Added a full panel Command Center so the standalone panel can stay separate from the main website and be used to recover/restart the main services remotely with many prebuilt copy/run commands.
        Files touched: `panel/panel-server.cjs`, `panel/index.html`, `.github/copilot-context/50-feature-behavior.md`, `.github/copilot-context/20-operations-runbook.md`, `.github/copilot-instructions.md`
@@ -422,7 +421,7 @@ Entry template (copy for each chat):
        Risks or follow-up:
           - If production service was manually configured to run `panel-server.js`, Command Center will always show Not found until service config points to `panel-server.cjs`.
        Suggested context destinations: `20-operations-runbook.md`, `60-open-items-and-handover.md`
-=======
+
 - Date: 2026-04-10
     Chat summary: Created a ready-to-present slide-by-slide speaker notes draft introducing the reward scheme, including what it is, how points and rewards work, account sign-up/onboarding flow, permissions, security/fairness controls, and FAQs.
     Files touched: `docs/reward-scheme-powerpoint-notes.md`, `.github/copilot-instructions.md`
@@ -475,4 +474,18 @@ Entry template (copy for each chat):
        - This format is intentionally terse and may be too brief for longer spoken delivery without ad-lib.
        - If needed, create two versions: ultra-compact (<=1000 chars) and presenter-expanded (~800-1000 words).
     Suggested context destinations: `50-feature-behavior.md`, `60-open-items-and-handover.md`
->>>>>>> Stashed changes
+
+- Date: 2026-04-16
+    Chat summary: Fixed tab badge notification behavior. Badges that require action (tickets, integrity) now only show counts for actionable items. Informational badges (rewards, points) now clear when the user visits the tab.
+    Files touched: `server/server.ts`, `src/app/components/Dashboard.tsx`, `src/app/components/TicketsAdmin.tsx`
+    Behavior/decision changes:
+       - `/api/tickets/count` now filters `WHERE status = 'open'` instead of counting all tickets. Badge only shows open (unactioned) tickets.
+       - Integrity badge unchanged — already correct (shows failures/warnings requiring fixes).
+       - Rewards and Points badges now clear instantly when user clicks into those tabs (informational, view-only).
+       - `TicketsAdmin` now accepts `onTicketAction` callback prop; Dashboard passes a callback that re-fetches ticket count immediately after approve/reject, so badge updates without waiting for 2-minute poll.
+    Validation performed:
+       - `npm run build` passed successfully.
+    Risks or follow-up:
+       - Rewards/points badges will reappear on next 2-minute poll if new data exists — this is intentional (new unviewed info).
+       - If a ticket has a NULL status (legacy data), it won't be counted by the new query. Consider running `UPDATE tickets SET status = 'open' WHERE status IS NULL` if legacy rows exist.
+    Suggested context destinations: `50-feature-behavior.md`, `30-api-db-reference.md`

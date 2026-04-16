@@ -10,9 +10,9 @@ import { MessageSquare } from 'lucide-react';
 import { api } from '../../utils/api';
 import { toast } from 'sonner';
 
-interface Props { accessToken: string; }
+interface Props { accessToken: string; onTicketAction?: () => void; }
 
-export function TicketsAdmin({ accessToken }: Props) {
+export function TicketsAdmin({ accessToken, onTicketAction }: Props) {
   const [tickets, setTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionState, setActionState] = useState<Record<string, {points: string; reason: string}>>({});
@@ -54,6 +54,7 @@ export function TicketsAdmin({ accessToken }: Props) {
       }
       await api.updateTicket(id, body);
       await fetchTickets();
+      onTicketAction?.();
     } catch (e) {
       console.error('Action error', e);
     }

@@ -55,7 +55,7 @@ const PERMISSIONS: Permission[] = [
   { area: 'Rewards', action: 'Create rewards', snco: true, pointgiver: false, staff: false, cadet: false, presentation: false },
   { area: 'Rewards', action: 'Delete rewards', snco: true, pointgiver: false, staff: false, cadet: false, presentation: false },
   { area: 'Rewards', action: 'Set reward winner', snco: true, pointgiver: false, staff: false, cadet: false, presentation: false },
-  { area: 'Rewards', action: 'Suggest rewards', snco: false, pointgiver: true, staff: true, cadet: true, presentation: false },
+  { area: 'Rewards', action: 'Suggest rewards', snco: true, pointgiver: true, staff: true, cadet: true, presentation: false },
   { area: 'Rewards', action: 'Vote on suggestions', snco: true, pointgiver: true, staff: true, cadet: true, presentation: false },
   { area: 'Rewards', action: 'Moderate suggestions', snco: true, pointgiver: false, staff: false, cadet: false, presentation: false },
 
