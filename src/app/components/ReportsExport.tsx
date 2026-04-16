@@ -24,6 +24,7 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
   const [attendance, setAttendance] = useState<any[]>([]);
   const [cadets, setCadets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
 
   // Filters
   const [dateFrom, setDateFrom] = useState('');
@@ -44,6 +45,7 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
 
   const fetchAllData = async () => {
     setLoading(true);
+    setFetchError(false);
     try {
       const [pointsData, attendanceData, cadetsData] = await Promise.all([
         api.getPoints(),
@@ -56,6 +58,7 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
     } catch (error) {
       toast.error('Error fetching reports data');
       console.error('Error fetching reports data:', error);
+      setFetchError(true);
     } finally {
       setLoading(false);
     }
@@ -111,6 +114,24 @@ export function ReportsExport({ accessToken, userRole }: ReportsExportProps) {
   const cadetNames = cadets.map(c => c.name).sort();
 
   const canEdit = userRole === 'snco';
+
+  if (loading) {
+    return (
+      <div className="text-center py-12 text-gray-500">Loading reports data...</div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-red-600 font-medium mb-2">Failed to load reports data</p>
+          <p className="text-sm text-muted-foreground mb-4">This may be due to rate limiting (too many requests). Wait a moment and try again.</p>
+          <Button onClick={fetchAllData}>Retry</Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">

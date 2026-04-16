@@ -446,14 +446,23 @@ const upload = multer({
 });
 
 // Rate limiters
+// Paths exempt from general rate limit (polled frequently for badge counts)
+const RATE_LIMIT_EXEMPT_PATHS = new Set([
+  '/api/integrity-check/count',
+  '/api/tickets/count',
+  '/api/rewards/active-count',
+  '/api/points/recent-count',
+]);
+
 // General API rate limiter
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+  max: 300,
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: ipKeyGen // Properly handles IPv6 addresses with Cloudflare proxy
+  keyGenerator: ipKeyGen, // Properly handles IPv6 addresses with Cloudflare proxy
+  skip: (req: any) => RATE_LIMIT_EXEMPT_PATHS.has(req.path),
 });
 
 // Stricter limiter for auth endpoints

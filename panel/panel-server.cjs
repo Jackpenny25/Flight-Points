@@ -344,6 +344,34 @@ function getToken(req) {
 // ─── Login Rate Limiting ──────────────────────────────────────────────────────
 const loginAttempts = new Map(); // ip -> {count, lockedUntil}
 
+// ─── Dual-TOTP Challenge Store ───────────────────────────────────────────────
+// challenge token -> { codeHash, createdAt }  —  expires after 2 minutes
+const dualTotpChallenges = new Map();
+function createDualTotpChallenge(code) {
+  const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+  const token = crypto.randomBytes(32).toString('hex');
+  dualTotpChallenges.set(token, { codeHash, createdAt: Date.now() });
+  // Prune stale challenges
+  for (const [k, v] of dualTotpChallenges) {
+    if (Date.now() - v.createdAt > 3 * 60 * 1000) dualTotpChallenges.delete(k);
+  }
+  return token;
+}
+function validateDualTotpChallenge(challengeToken, secondCode) {
+  const challenge = dualTotpChallenges.get(challengeToken);
+  if (!challenge) return { ok: false, error: 'Challenge expired or invalid. Please restart from step 1.' };
+  if (Date.now() - challenge.createdAt > 2 * 60 * 1000) {
+    dualTotpChallenges.delete(challengeToken);
+    return { ok: false, error: 'Challenge expired. Please restart from step 1.' };
+  }
+  const tokens = generateTotp(PANEL_TOTP_SECRET) || [];
+  if (!tokens.includes(secondCode)) return { ok: false, error: 'Incorrect authenticator code.' };
+  const secondHash = crypto.createHash('sha256').update(secondCode).digest('hex');
+  if (secondHash === challenge.codeHash) return { ok: false, error: 'Second code must be different from the first. Wait for your authenticator to show a new code.' };
+  dualTotpChallenges.delete(challengeToken);
+  return { ok: true };
+}
+
 function isLocked(ip) {
   const a = loginAttempts.get(ip);
   return !!(a && a.lockedUntil && Date.now() < a.lockedUntil);
@@ -906,8 +934,11 @@ async function handleGitFetch(req, res) {
 
 // POST /api/git/pull
 async function handleGitPull(req, res) {
-  const result = await shell(cmd('git', 'pull --ff-only origin main') + ' 2>&1', 90000);
-  json(res, 200, { ok: result.ok, output: [result.out, result.err].filter(Boolean).join('\n') });
+  // Reset local changes (e.g. dist/index.html) before pulling, same as auto-deploy.ps1
+  const reset = await shell(cmd('git', 'reset --hard') + ' 2>&1', 30000);
+  const pull = await shell(cmd('git', 'pull --ff-only origin main') + ' 2>&1', 90000);
+  const output = [reset.out, reset.err, pull.out, pull.err].filter(Boolean).join('\n');
+  json(res, 200, { ok: pull.ok, output });
 }
 
 // POST /api/deploy/build
@@ -1120,6 +1151,81 @@ async function handleDbUtilities(req, res) {
     dbeaverTunnelOpen: (dbeaverPort.out || '').trim() === 'true',
     weeklyBackupTask: backupTask,
     backupRoot: BACKUPS_DIR
+  });
+}
+
+// ─── Dual-TOTP & Data Reset ──────────────────────────────────────────────────
+
+// POST /api/dual-totp/step1 — validate first code, return challenge token
+async function handleDualTotpStep1(req, res, body) {
+  const code = String(body.code || '').trim();
+  if (!/^\d{6}$/.test(code)) return json(res, 400, { error: 'A 6-digit authenticator code is required.' });
+  const tokens = generateTotp(PANEL_TOTP_SECRET) || [];
+  if (!tokens.includes(code)) return json(res, 401, { error: 'Incorrect authenticator code.' });
+  const challengeToken = createDualTotpChallenge(code);
+  json(res, 200, { success: true, challengeToken });
+}
+
+// POST /api/dual-totp/step2 — validate second (different) code
+async function handleDualTotpStep2(req, res, body) {
+  const code = String(body.code || '').trim();
+  const challengeToken = String(body.challengeToken || '').trim();
+  if (!/^\d{6}$/.test(code)) return json(res, 400, { error: 'A 6-digit authenticator code is required.' });
+  if (!challengeToken) return json(res, 400, { error: 'Challenge token from step 1 is required.' });
+  const result = validateDualTotpChallenge(challengeToken, code);
+  if (!result.ok) return json(res, result.error.includes('expired') ? 403 : 400, { error: result.error });
+  json(res, 200, { success: true });
+}
+
+// POST /api/db/reset-data — delete points, attendance, attendance_bulks (NOT cadets, accounts, rewards)
+async function handleDbResetData(req, res, body) {
+  // Dual-TOTP must already be verified by frontend (step1+step2)
+  const code = String(body.code || '').trim();
+  const challengeToken = String(body.challengeToken || '').trim();
+  if (!/^\d{6}$/.test(code)) return json(res, 400, { error: 'Final authenticator code is required.' });
+  if (!challengeToken) return json(res, 400, { error: 'Challenge token is required.' });
+  const vr = validateDualTotpChallenge(challengeToken, code);
+  if (!vr.ok) return json(res, 403, { error: vr.error });
+
+  // Tables to truncate — does NOT touch cadets, app_users, rewards, or reward_suggestions
+  const tables = ['points', 'attendance', 'attendance_bulks', 'revision_history'];
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) return json(res, 500, { error: 'DATABASE_URL is not configured.' });
+
+  // Find psql to execute SQL
+  const psqlPaths = [
+    'C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe',
+    'C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe',
+    'C:\\Program Files\\PostgreSQL\\16\\bin\\psql.exe',
+    'C:\\Program Files\\PostgreSQL\\15\\bin\\psql.exe',
+  ];
+  const psqlExe = firstExistingPath(psqlPaths);
+
+  const truncateSql = tables.map(t => `TRUNCATE TABLE ${t} CASCADE`).join('; ') + ';';
+
+  if (psqlExe) {
+    // Use psql directly
+    const result = await shell(`"${psqlExe}" "${dbUrl}" -c "${truncateSql}" 2>&1`, 30000);
+    appendDiagnosticLog('db_reset_data', { ok: result.ok, tables, method: 'psql', output: result.out || result.err });
+    if (!result.ok) return json(res, 500, { error: 'SQL execution failed.', output: [result.out, result.err].filter(Boolean).join('\n') });
+    return json(res, 200, { ok: true, tables, output: result.out || 'OK' });
+  }
+
+  // Fallback: use Node.js and the main API's health endpoint to check, then run via powershell psql if available
+  const fallback = await ps(`
+    try {
+      $env:PGPASSWORD = ''
+      $sql = "${truncateSql.replace(/"/g, '`"')}"
+      Write-Output "SQL: $sql"
+      Write-Output "ERROR: psql not found. Run manually: psql $env:DATABASE_URL -c '$sql'"
+    } catch {
+      Write-Output ("ERROR: " + $_.Exception.Message)
+    }
+  `, 15000);
+  return json(res, 500, {
+    error: 'psql not found on the server. Run the SQL manually.',
+    sql: truncateSql,
+    output: fallback.out || fallback.err
   });
 }
 
@@ -1368,6 +1474,11 @@ const server = http.createServer(async (req, res) => {
   if (method === 'POST' && p === '/api/db/backup')       return handleDbBackup(req, res);
   if (method === 'GET'  && p === '/api/db/backups')      return handleDbBackups(req, res);
   if (method === 'GET'  && p === '/api/db/utilities')    return handleDbUtilities(req, res);
+
+  // Dual-TOTP & Data Reset
+  if (method === 'POST' && p === '/api/dual-totp/step1')   return handleDualTotpStep1(req, res, body);
+  if (method === 'POST' && p === '/api/dual-totp/step2')   return handleDualTotpStep2(req, res, body);
+  if (method === 'POST' && p === '/api/db/reset-data')     return handleDbResetData(req, res, body);
 
   // Processes
   if (method === 'GET' && p === '/api/processes')        return handleProcesses(req, res);

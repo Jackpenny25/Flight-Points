@@ -681,6 +681,22 @@ textarea:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,166,255,.15
           <div class="card-header"><span class="card-title">💻 Backup Output</span></div>
           <div class="terminal" id="backup-output" style="height:160px;overflow-y:auto;">No backup run yet.</div>
         </div>
+
+        <!-- Data Reset (dual-TOTP protected) -->
+        <div class="card" style="border:1px solid #ef4444;">
+          <div class="card-header" style="background:rgba(239,68,68,0.08);"><span class="card-title" style="color:#ef4444;">⚠️ Data Reset — Destructive</span></div>
+          <div class="card-body stack-12">
+            <p style="font-size:13px;color:var(--muted);">
+              Permanently deletes <strong>all points, attendance, and revision history</strong> from the database.<br>
+              Cadets, accounts, rewards, and reward suggestions are <strong>NOT affected</strong>.<br>
+              Requires two different authenticator codes (wait for code rotation between entries).
+            </p>
+            <div id="data-reset-ui">
+              <button class="btn" style="background:#ef4444;color:#fff;" onclick="startDataReset()">🗑️ Begin Data Reset</button>
+            </div>
+            <div class="terminal" id="data-reset-output" style="height:120px;overflow-y:auto;display:none;"></div>
+          </div>
+        </div>
       </div>
 
       <!-- ══════════════════ PROCESSES ══════════════════ -->
@@ -1812,6 +1828,107 @@ async function loadSystem() {
 
   loadSystemUtilities();
   loadTaskControls();
+}
+
+// ─── Data Reset (dual-TOTP) ───────────────────────────
+function startDataReset() {
+  const ui = document.getElementById('data-reset-ui');
+  const out = document.getElementById('data-reset-output');
+  out.style.display = 'none';
+  out.textContent = '';
+  ui.innerHTML = `
+    <div style="border:1px solid var(--border);border-radius:6px;padding:16px;">
+      <div style="margin-bottom:12px;">
+        <strong style="color:#ef4444;">Step 1 of 2</strong>
+        <span style="color:var(--muted);font-size:12px;margin-left:8px;">Enter your first authenticator code</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="reset-code1" type="text" inputmode="numeric" maxlength="6" placeholder="000000"
+               style="width:120px;text-align:center;font-family:monospace;font-size:16px;letter-spacing:4px;"
+               onkeydown="if(event.key==='Enter')submitResetStep1()">
+        <button class="btn small" onclick="submitResetStep1()" style="background:#ef4444;color:#fff;">Verify Code 1</button>
+        <button class="btn small" onclick="cancelDataReset()">Cancel</button>
+      </div>
+      <div id="reset-step-error" style="color:#ef4444;font-size:12px;margin-top:6px;"></div>
+    </div>`;
+  document.getElementById('reset-code1').focus();
+}
+
+function cancelDataReset() {
+  const ui = document.getElementById('data-reset-ui');
+  const out = document.getElementById('data-reset-output');
+  ui.innerHTML = '<button class="btn" style="background:#ef4444;color:#fff;" onclick="startDataReset()">🗑️ Begin Data Reset</button>';
+  out.style.display = 'none';
+  out.textContent = '';
+}
+
+let _resetChallengeToken = null;
+
+async function submitResetStep1() {
+  const inp = document.getElementById('reset-code1');
+  const err = document.getElementById('reset-step-error');
+  const code = (inp.value || '').replace(/\D/g, '').slice(0, 6);
+  if (code.length !== 6) { err.textContent = 'Enter a 6-digit code'; return; }
+  err.textContent = '';
+  inp.disabled = true;
+
+  const res = await apiFetch('/api/dual-totp/step1', 'POST', { code });
+  if (!res.challengeToken) {
+    err.textContent = res.error || 'Verification failed';
+    inp.disabled = false;
+    return;
+  }
+  _resetChallengeToken = res.challengeToken;
+  showResetStep2();
+}
+
+function showResetStep2() {
+  const ui = document.getElementById('data-reset-ui');
+  ui.innerHTML = `
+    <div style="border:1px solid var(--border);border-radius:6px;padding:16px;">
+      <div style="margin-bottom:12px;">
+        <strong style="color:#ef4444;">Step 2 of 2</strong>
+        <span style="color:var(--muted);font-size:12px;margin-left:8px;">Wait for your authenticator to show a new code</span>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+        ⏳ Your authenticator rotates codes every 30 seconds. Enter the <strong>next</strong> code once it appears.
+      </p>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="reset-code2" type="text" inputmode="numeric" maxlength="6" placeholder="000000"
+               style="width:120px;text-align:center;font-family:monospace;font-size:16px;letter-spacing:4px;"
+               onkeydown="if(event.key==='Enter')submitResetStep2()">
+        <button class="btn small" onclick="submitResetStep2()" style="background:#ef4444;color:#fff;">Confirm &amp; Reset</button>
+        <button class="btn small" onclick="cancelDataReset()">Cancel</button>
+      </div>
+      <div id="reset-step-error" style="color:#ef4444;font-size:12px;margin-top:6px;"></div>
+    </div>`;
+  document.getElementById('reset-code2').focus();
+}
+
+async function submitResetStep2() {
+  const inp = document.getElementById('reset-code2');
+  const err = document.getElementById('reset-step-error');
+  const out = document.getElementById('data-reset-output');
+  const code = (inp.value || '').replace(/\D/g, '').slice(0, 6);
+  if (code.length !== 6) { err.textContent = 'Enter a 6-digit code'; return; }
+  err.textContent = '';
+  inp.disabled = true;
+
+  out.style.display = 'block';
+  out.textContent = '▶ Verifying second code and executing data reset…';
+
+  const res = await apiFetch('/api/db/reset-data', 'POST', { code, challengeToken: _resetChallengeToken });
+  _resetChallengeToken = null;
+
+  if (res.ok) {
+    out.textContent = '✓ Data reset completed successfully.\n\n' + (res.output || 'Points, attendance, and revision history have been cleared.');
+    toast('Data reset completed', 'ok');
+  } else {
+    out.textContent = '✗ Data reset failed.\n\n' + (res.error || 'Unknown error');
+    toast(res.error || 'Data reset failed', 'error');
+  }
+  cancelDataReset();
+  out.style.display = 'block'; // keep terminal visible after cancel resets it
 }
 
 async function loadDbUtilities() {
