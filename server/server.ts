@@ -571,7 +571,6 @@ app.use(helmet({
         "'self'",
         "'unsafe-inline'",
         'https://static.cloudflareinsights.com',
-        "'sha256-01FLQSjuSDH2Uy9763XUnLLdevloYBzKmIAhPOIIpPk='",
       ],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
