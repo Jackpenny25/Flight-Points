@@ -168,6 +168,8 @@ export const api = {
   // Verify admin safeguard code
   verifyPin: (pin: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ code: pin }) }).then(r => r.json()),
   verifyAdminCode: (code: string) => fetchWithAuth('/admin/verify-pin', { method: 'POST', body: JSON.stringify({ code }) }).then(r => r.json()),
+  dualTotpStep1: (code: string) => fetchWithAuth('/admin/dual-totp-step1', { method: 'POST', body: JSON.stringify({ code }) }).then(r => r.json()),
+  dualTotpStep2: (code: string, challengeToken: string) => fetchWithAuth('/admin/dual-totp-step2', { method: 'POST', body: JSON.stringify({ code, challengeToken }) }).then(r => r.json()),
   getAdminSafeguardStatus: () => fetchWithAuth('/admin/pin-status', { method: 'GET' }).then(r => r.json()),
   
   // Admin utilities

@@ -1716,6 +1716,98 @@ app.post('/api/admin/verify-pin', pinLimiter, requireAuth, async (req: AuthReque
   }
 });
 
+// POST /api/admin/dual-totp-step1 - First step of dual-TOTP verification
+app.post('/api/admin/dual-totp-step1', pinLimiter, requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!hasAdminPinRole(req.user)) {
+      return res.status(403).json({ error: 'Only Flight Point Leads can perform this action' });
+    }
+    if (!ADMIN_TOTP_SECRET) {
+      return res.status(500).json({ error: 'Authenticator secret is not configured. Set ADMIN_TOTP_SECRET in .env.local.' });
+    }
+
+    const { code } = req.body || {};
+    const rawCode = String(code || '').trim();
+    if (!/^\d{6}$/.test(rawCode)) {
+      return res.status(400).json({ error: 'A 6-digit authenticator code is required' });
+    }
+
+    const validCodes = generateTotpCodes(ADMIN_TOTP_SECRET);
+    if (!validCodes.includes(rawCode)) {
+      return res.status(401).json({ error: 'Incorrect authenticator code' });
+    }
+
+    // Create a short-lived challenge token containing a hash of the first code
+    const codeHash = crypto.createHash('sha256').update(rawCode).digest('hex');
+    const challengeToken = jwt.sign(
+      { purpose: 'dual-totp-challenge', sub: req.user!.id, codeHash },
+      JWT_SECRET,
+      { expiresIn: 120 }, // 2 minutes to enter the second code
+    );
+
+    res.json({ success: true, challengeToken });
+  } catch (error) {
+    console.error('Error in POST /api/admin/dual-totp-step1:', error);
+    res.status(500).json({ error: 'Failed to verify first code' });
+  }
+});
+
+// POST /api/admin/dual-totp-step2 - Second step: verify a different TOTP code
+app.post('/api/admin/dual-totp-step2', pinLimiter, requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!hasAdminPinRole(req.user)) {
+      return res.status(403).json({ error: 'Only Flight Point Leads can perform this action' });
+    }
+    if (!ADMIN_TOTP_SECRET) {
+      return res.status(500).json({ error: 'Authenticator secret is not configured.' });
+    }
+
+    const { code, challengeToken } = req.body || {};
+    const rawCode = String(code || '').trim();
+    if (!/^\d{6}$/.test(rawCode)) {
+      return res.status(400).json({ error: 'A 6-digit authenticator code is required' });
+    }
+    if (!challengeToken) {
+      return res.status(400).json({ error: 'Challenge token from step 1 is required' });
+    }
+
+    // Verify the challenge token
+    let challenge: jwt.JwtPayload;
+    try {
+      challenge = jwt.verify(String(challengeToken), JWT_SECRET) as jwt.JwtPayload;
+    } catch {
+      return res.status(403).json({ error: 'Challenge expired or invalid. Please restart from step 1.' });
+    }
+
+    if (challenge?.purpose !== 'dual-totp-challenge' || challenge?.sub !== req.user!.id) {
+      return res.status(403).json({ error: 'Invalid challenge token' });
+    }
+
+    // Verify the second code is a valid TOTP code
+    const validCodes = generateTotpCodes(ADMIN_TOTP_SECRET);
+    if (!validCodes.includes(rawCode)) {
+      return res.status(401).json({ error: 'Incorrect authenticator code' });
+    }
+
+    // Ensure the second code is different from the first
+    const secondCodeHash = crypto.createHash('sha256').update(rawCode).digest('hex');
+    if (secondCodeHash === challenge.codeHash) {
+      return res.status(400).json({ error: 'Second code must be different from the first. Wait for your authenticator to show a new code.' });
+    }
+
+    // Both codes verified and different — issue safeguard token
+    res.json({
+      success: true,
+      method: 'dual-totp',
+      safeguardToken: createAdminSafeguardToken(req.user!, 'totp'),
+      expiresInSeconds: ADMIN_SAFEGUARD_TTL_SECONDS,
+    });
+  } catch (error) {
+    console.error('Error in POST /api/admin/dual-totp-step2:', error);
+    res.status(500).json({ error: 'Failed to verify second code' });
+  }
+});
+
 // POST /api/admin/change-pin - Deprecated legacy endpoint
 app.post('/api/admin/change-pin', requireAuth, async (req: AuthRequest, res: Response) => {
   try {

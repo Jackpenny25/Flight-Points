@@ -489,3 +489,21 @@ Entry template (copy for each chat):
        - Rewards/points badges will reappear on next 2-minute poll if new data exists — this is intentional (new unviewed info).
        - If a ticket has a NULL status (legacy data), it won't be counted by the new query. Consider running `UPDATE tickets SET status = 'open' WHERE status IS NULL` if legacy rows exist.
     Suggested context destinations: `50-feature-behavior.md`, `30-api-db-reference.md`
+
+- Date: 2026-04-16
+    Chat summary: Re-added bulk add and bulk remove features to the Cadets tab, protected by dual-TOTP verification requiring two different authenticator codes from the same secret (user must wait for code rotation).
+    Files touched: `server/server.ts`, `src/utils/api.ts`, `src/app/components/DualTotpDialog.tsx` (new), `src/app/components/CadetsManager.tsx`
+    Behavior/decision changes:
+       - New server endpoints: `POST /api/admin/dual-totp-step1` (validates first 6-digit TOTP code, returns JWT challenge token with 2-min expiry containing hashed code1) and `POST /api/admin/dual-totp-step2` (validates second code is valid TOTP + different from first via hash comparison, issues safeguard token).
+       - New reusable `DualTotpDialog` component: two-step UI flow with step indicator, enforces 6-digit numeric input, shows guidance to wait for code rotation between steps.
+       - CadetsManager now has "Bulk Add" button: enter multiple names (one per line) + flight selector → dual-TOTP verification → parallel API create calls.
+       - CadetsManager bulk remove now routes through DualTotpDialog instead of the single-pin verify dialog.
+       - api.ts: added `dualTotpStep1(code)` and `dualTotpStep2(code, challengeToken)` methods.
+    Validation performed:
+       - `npm run build` passed successfully.
+       - VS Code error check: no errors in modified/new files (only pre-existing CSV input accessibility lint warning).
+    Risks or follow-up:
+       - Challenge token expires in 2 minutes; if user takes longer than that between step 1 and step 2, they must restart.
+       - `generateTotpCodes` window includes previous/current/next time slot (±1); in theory two of those three codes could be entered without waiting, but authenticator apps only display one code at a time so this is acceptable.
+       - Backup codes are NOT accepted for dual-TOTP — only 6-digit authenticator codes.
+    Suggested context destinations: `30-api-db-reference.md`, `40-security-history-and-decisions.md`, `50-feature-behavior.md`

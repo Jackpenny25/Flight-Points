@@ -10,9 +10,10 @@ import { formatFlight } from './ui/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
-import { Plus, Trash2, UserPlus, Edit2, Shield } from 'lucide-react';
+import { Plus, Trash2, UserPlus, Edit2, Shield, Users } from 'lucide-react';
 import { Checkbox } from './ui/checkbox';
 import { toast } from 'sonner';
+import { DualTotpDialog } from './DualTotpDialog';
 
 interface Cadet {
   id: string;
@@ -69,6 +70,14 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
   const [editRank, setEditRank] = useState('');
   const [editNco, setEditNco] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
+
+  // Dual-TOTP protected bulk operations
+  const [dualTotpOpen, setDualTotpOpen] = useState(false);
+  const [dualTotpAction, setDualTotpAction] = useState<'bulk-remove' | 'bulk-add' | null>(null);
+  const [bulkAddOpen, setBulkAddOpen] = useState(false);
+  const [bulkAddText, setBulkAddText] = useState('');
+  const [bulkAddFlight, setBulkAddFlight] = useState('1');
+  const [bulkAddSubmitting, setBulkAddSubmitting] = useState(false);
 
   const ensureAdminPin = () => {
     if (sessionStorage.getItem('adminPinVerified') === 'true') return true;
@@ -345,7 +354,62 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
 
     setBulkRemoveOpen(false);
     setBulkRemoveConfirmText('');
-    openPinVerifyForBulkDelete();
+    // Open dual TOTP verification
+    setDualTotpAction('bulk-remove');
+    setDualTotpOpen(true);
+  };
+
+  const confirmBulkAdd = () => {
+    if (!ensureAdminPin()) return;
+    const lines = bulkAddText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) {
+      toast.error('Enter at least one cadet name');
+      return;
+    }
+    setBulkAddOpen(false);
+    setDualTotpAction('bulk-add');
+    setDualTotpOpen(true);
+  };
+
+  const executeBulkAdd = async () => {
+    const lines = bulkAddText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) return;
+    setBulkAddSubmitting(true);
+    try {
+      const results = await Promise.all(lines.map(async (name) => {
+        try {
+          const res = await api.createCadet({ name, flight: bulkAddFlight });
+          if (res && res.id) return { ok: true, name, cadet: res };
+          return { ok: false, name, reason: res?.error || 'Unknown error' };
+        } catch (err: any) {
+          return { ok: false, name, reason: String(err) };
+        }
+      }));
+      const failed = results.filter(r => !r.ok);
+      const succeeded = results.filter((r): r is { ok: true; name: string; cadet: Cadet } => r.ok);
+      if (succeeded.length > 0) {
+        toast.success(`Added ${succeeded.length} cadet(s)`);
+      }
+      if (failed.length > 0) {
+        toast.error(`${failed.length} cadet(s) failed to add`);
+      }
+      setBulkAddText('');
+      fetchCadets();
+    } catch (err) {
+      console.error('Bulk add error:', err);
+      toast.error('Bulk add failed');
+    } finally {
+      setBulkAddSubmitting(false);
+    }
+  };
+
+  const handleDualTotpVerified = async () => {
+    if (dualTotpAction === 'bulk-remove') {
+      await executeBulkRemove();
+    } else if (dualTotpAction === 'bulk-add') {
+      await executeBulkAdd();
+    }
+    setDualTotpAction(null);
   };
 
   const executeBulkRemove = async () => {
@@ -597,6 +661,14 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
               </DialogContent>
             </Dialog>
 
+            {/* Bulk Add Button */}
+            <div className="ml-2">
+              <Button variant="outline" onClick={() => setBulkAddOpen(true)}>
+                <Users className="size-4 mr-2" />
+                Bulk Add
+              </Button>
+            </div>
+
             {/* Bulk Remove Button */}
             <div className="ml-2">
               <Button variant="destructive" disabled={selectedCadetIds.size === 0} onClick={() => setBulkRemoveOpen(true)}>
@@ -662,6 +734,70 @@ export function CadetsManager({ accessToken }: CadetsManagerProps) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Bulk Add Dialog */}
+        <Dialog open={bulkAddOpen} onOpenChange={setBulkAddOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Bulk Add Cadets</DialogTitle>
+              <DialogDescription>
+                Enter one cadet name per line. All will be added to the selected flight.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="space-y-2">
+                <Label>Flight</Label>
+                <Select value={bulkAddFlight} onValueChange={(v: any) => setBulkAddFlight(v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select flight" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">{formatFlight('1')}</SelectItem>
+                    <SelectItem value="2">{formatFlight('2')}</SelectItem>
+                    <SelectItem value="3">{formatFlight('3')}</SelectItem>
+                    <SelectItem value="4">{formatFlight('4')}</SelectItem>
+                    <SelectItem value="hq">Staff / HQ Flight</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Cadet names (one per line)</Label>
+                <textarea
+                  className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  placeholder={"Surname Initial\nSmith J\nJones A"}
+                  value={bulkAddText}
+                  onChange={(e) => setBulkAddText(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {bulkAddText.split(/\r?\n/).map(l => l.trim()).filter(Boolean).length} name(s) entered
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setBulkAddOpen(false)}>Cancel</Button>
+              <Button
+                disabled={bulkAddText.split(/\r?\n/).map(l => l.trim()).filter(Boolean).length === 0}
+                onClick={confirmBulkAdd}
+              >
+                Continue to Verification
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dual TOTP Dialog for bulk operations */}
+        <DualTotpDialog
+          open={dualTotpOpen}
+          onOpenChange={(v) => { setDualTotpOpen(v); if (!v) setDualTotpAction(null); }}
+          title={dualTotpAction === 'bulk-remove' ? 'Confirm Bulk Remove' : 'Confirm Bulk Add'}
+          description={
+            dualTotpAction === 'bulk-remove'
+              ? `You are about to permanently delete ${selectedCadetIds.size} cadet(s). Enter two different authenticator codes to confirm.`
+              : `You are about to add ${bulkAddText.split(/\r?\n/).map(l => l.trim()).filter(Boolean).length} cadet(s). Enter two different authenticator codes to confirm.`
+          }
+          onVerified={handleDualTotpVerified}
+        />
+
         {/* Edit Cadet Dialog (always rendered) */}
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
           <DialogContent>
