@@ -291,6 +291,7 @@ textarea:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(88,166,255,.15
     <div class="header-quick">
       <button class="btn small" onclick="quickAction('restart','flight-points')">⟳ Restart API</button>
       <button class="btn small" onclick="quickAction('restart','flight-points-tunnel')">⟳ Restart Tunnel</button>
+      <button class="btn small" onclick="restartPanelOnly()" title="Restart only the panel service">⟳ Restart Panel</button>
       <button class="btn small" id="btn-check-updates" onclick="checkUpdates()">↑ Check Updates</button>
       <button class="btn small danger" onclick="restartPanel()" title="Restart panel server + API + tunnel">🔄 Restart All</button>
       <button class="btn small danger" onclick="doLogout()">Logout</button>
@@ -910,6 +911,18 @@ async function doLogout() {
   TOKEN = '';
   sessionStorage.removeItem('panel_token');
   location.reload();
+}
+
+async function restartPanelOnly() {
+  if (!confirm('This will restart only the panel service (flight-points-panel).\n\nThe API and tunnel will stay running.\nYou will need to log back in once the panel is back.\n\nContinue?')) return;
+  const overlay = document.getElementById('reconnect-overlay');
+  overlay.style.display = 'flex';
+  try {
+    await apiFetch('/api/services/flight-points-panel/restart', 'POST');
+  } catch (_) { /* expected — server dies before responding */ }
+  TOKEN = '';
+  sessionStorage.removeItem('panel_token');
+  startReconnectPoller();
 }
 
 async function restartPanel() {
