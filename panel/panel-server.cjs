@@ -195,16 +195,15 @@ const COMMAND_LIBRARY = [
   {
     id: 'sql-helpers',
     title: 'SQL Helpers (Editable)',
-    description: 'Ready-made SQL commands you can edit and copy before running in psql/DBeaver.',
+    description: 'Ready-made SQL queries. These run directly against the database via psql.',
     commands: [
-      { id: 'sql-top-cadets', name: 'Top 20 Cadets by Points', shell: 'powershell', command: "@'\nSELECT c.name, c.flight, COALESCE(SUM(p.points),0) AS total_points\nFROM cadets c\nLEFT JOIN points p ON p.cadet_id = c.id\nGROUP BY c.id, c.name, c.flight\nORDER BY total_points DESC\nLIMIT 20;\n'@", tags: ['sql', 'leaderboard'] },
-      { id: 'sql-recent-points', name: 'Recent Points (50)', shell: 'powershell', command: "@'\nSELECT id, cadet_id, points, reason, given_by, created_at\nFROM points\nORDER BY created_at DESC\nLIMIT 50;\n'@", tags: ['sql', 'points'] },
-      { id: 'sql-attendance-week', name: 'Attendance Summary Last 7 Days', shell: 'powershell', command: "@'\nSELECT cadet_id, status, COUNT(*) AS count_entries\nFROM attendance\nWHERE attendance_date >= CURRENT_DATE - INTERVAL '7 days'\nGROUP BY cadet_id, status\nORDER BY cadet_id, status;\n'@", tags: ['sql', 'attendance'] },
-      { id: 'sql-orphans', name: 'Orphaned Point Rows', shell: 'powershell', command: "@'\nSELECT p.id, p.cadet_id, p.created_at\nFROM points p\nLEFT JOIN cadets c ON c.id = p.cadet_id\nWHERE c.id IS NULL\nORDER BY p.created_at DESC;\n'@", tags: ['sql', 'integrity'] },
-      { id: 'sql-users-role', name: 'Accounts by Role', shell: 'powershell', command: "@'\nSELECT role, COUNT(*) AS users\nFROM app_users\nGROUP BY role\nORDER BY role;\n'@", tags: ['sql', 'accounts'] },
-      { id: 'sql-revision-recent', name: 'Recent Revision History', shell: 'powershell', command: "@'\nSELECT record_type, record_id, action, changed_by, changed_by_role, changed_at\nFROM revision_history\nORDER BY changed_at DESC\nLIMIT 100;\n'@", tags: ['sql', 'audit'] },
-      { id: 'sql-db-size', name: 'Database/Table Size', shell: 'powershell', command: "@'\nSELECT relname AS table_name, pg_size_pretty(pg_total_relation_size(relid)) AS total_size\nFROM pg_catalog.pg_statio_user_tables\nORDER BY pg_total_relation_size(relid) DESC;\n'@", tags: ['sql', 'database'] },
-      { id: 'psql-run-template', name: 'Run SQL via psql Template', shell: 'powershell', command: "$env:DATABASE_URL='<paste connection string if not set>'; psql \"$env:DATABASE_URL\" -c \"SELECT NOW();\"", tags: ['sql', 'psql'] },
+      { id: 'sql-top-cadets', name: 'Top 20 Cadets by Points', shell: 'powershell', type: 'sql', command: "SELECT c.name, c.flight, COALESCE(SUM(p.points),0) AS total_points\nFROM cadets c\nLEFT JOIN points p ON p.cadet_id = c.id\nGROUP BY c.id, c.name, c.flight\nORDER BY total_points DESC\nLIMIT 20;", tags: ['sql', 'leaderboard'] },
+      { id: 'sql-recent-points', name: 'Recent Points (50)', shell: 'powershell', type: 'sql', command: "SELECT id, cadet_id, points, reason, given_by, created_at\nFROM points\nORDER BY created_at DESC\nLIMIT 50;", tags: ['sql', 'points'] },
+      { id: 'sql-attendance-week', name: 'Attendance Summary Last 7 Days', shell: 'powershell', type: 'sql', command: "SELECT cadet_id, status, COUNT(*) AS count_entries\nFROM attendance\nWHERE attendance_date >= CURRENT_DATE - INTERVAL '7 days'\nGROUP BY cadet_id, status\nORDER BY cadet_id, status;", tags: ['sql', 'attendance'] },
+      { id: 'sql-orphans', name: 'Orphaned Point Rows', shell: 'powershell', type: 'sql', command: "SELECT p.id, p.cadet_id, p.created_at\nFROM points p\nLEFT JOIN cadets c ON c.id = p.cadet_id\nWHERE c.id IS NULL\nORDER BY p.created_at DESC;", tags: ['sql', 'integrity'] },
+      { id: 'sql-users-role', name: 'Accounts by Role', shell: 'powershell', type: 'sql', command: "SELECT role, COUNT(*) AS users\nFROM app_users\nGROUP BY role\nORDER BY role;", tags: ['sql', 'accounts'] },
+      { id: 'sql-revision-recent', name: 'Recent Revision History', shell: 'powershell', type: 'sql', command: "SELECT record_type, record_id, action, changed_by, changed_by_role, changed_at\nFROM revision_history\nORDER BY changed_at DESC\nLIMIT 100;", tags: ['sql', 'audit'] },
+      { id: 'sql-db-size', name: 'Database/Table Size', shell: 'powershell', type: 'sql', command: "SELECT relname AS table_name, pg_size_pretty(pg_total_relation_size(relid)) AS total_size\nFROM pg_catalog.pg_statio_user_tables\nORDER BY pg_total_relation_size(relid) DESC;", tags: ['sql', 'database'] },
     ]
   },
   {
@@ -817,6 +816,7 @@ async function handleCommandCatalog(req, res) {
 async function handleCommandRun(req, res, body) {
   const requestedShell = String(body.shell || 'powershell').toLowerCase();
   const rawCommand = String(body.command || '');
+  const isSql = body.type === 'sql';
   const requiresElevation = !!body.requiresElevation;
   if (requestedShell !== 'powershell') return json(res, 400, { error: 'Only powershell shell is supported in panel command runner.' });
   if (!rawCommand.trim()) return json(res, 400, { error: 'Command is required.' });
@@ -830,6 +830,38 @@ async function handleCommandRun(req, res, body) {
         hint: 'Run panel service with an elevated account (for example LocalSystem) or use a non-elevated command.'
       });
     }
+  }
+
+  // If this is a SQL command, route through psql
+  if (isSql) {
+    const dbUrl = process.env.DATABASE_URL;
+    if (!dbUrl) return json(res, 500, { error: 'DATABASE_URL is not configured on the panel server.' });
+    const psqlPaths = [
+      'C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe',
+      'C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe',
+      'C:\\Program Files\\PostgreSQL\\16\\bin\\psql.exe',
+      'C:\\Program Files\\PostgreSQL\\15\\bin\\psql.exe',
+    ];
+    const psqlExe = firstExistingPath(psqlPaths);
+    if (!psqlExe) return json(res, 500, { error: 'psql not found on the server. Install PostgreSQL client tools or run manually via DBeaver.' });
+
+    // Write SQL to temp file and execute via psql to avoid shell-escaping issues
+    const tmpSql = path.join(os.tmpdir(), `fp_panel_sql_${crypto.randomBytes(6).toString('hex')}.sql`);
+    fs.writeFileSync(tmpSql, rawCommand, 'utf8');
+    const start = Date.now();
+    const result = await shell(`"${psqlExe}" "${dbUrl}" -f "${tmpSql}" 2>&1`, body.timeoutMs || 30000);
+    fs.unlink(tmpSql, () => {});
+    const out = {
+      ok: result.ok,
+      code: result.code,
+      durationMs: Date.now() - start,
+      timeoutMs: body.timeoutMs || 30000,
+      stdout: result.out || '',
+      stderr: result.err || '',
+      output: [result.out, result.err].filter(Boolean).join('\n') || '(no output)'
+    };
+    appendDiagnosticLog('panel_sql_run', { ok: out.ok, code: out.code, durationMs: out.durationMs, preview: commandPreviewText(rawCommand) });
+    return json(res, 200, out);
   }
 
   const result = await runPanelPowerShell(rawCommand, body.timeoutMs);

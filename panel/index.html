@@ -1153,12 +1153,14 @@ function selectCatalogCommand(sectionId, commandId) {
     id: entry.command.id,
     requiresElevation: !!entry.command.requiresElevation,
     shell: entry.command.shell || 'powershell',
+    type: entry.command.type || null,
     name: entry.command.name || entry.command.id,
     sectionTitle: entry.section.title || sectionId
   };
   document.getElementById('cmd-editor').value = entry.command.command || '';
   document.getElementById('cmd-selected-name').textContent = `${selectedCommandMeta.sectionTitle} / ${selectedCommandMeta.name}`;
-  document.getElementById('cmd-selected-meta').textContent = `${selectedCommandMeta.shell} • ${selectedCommandMeta.requiresElevation ? 'requires elevation' : 'no elevation required flag'}`;
+  const metaLabel = selectedCommandMeta.type === 'sql' ? 'sql via psql' : (selectedCommandMeta.requiresElevation ? 'requires elevation' : 'no elevation required flag');
+  document.getElementById('cmd-selected-meta').textContent = `${selectedCommandMeta.shell} • ${metaLabel}`;
   renderCommandCatalog();
 }
 
@@ -1194,19 +1196,11 @@ async function copyTextToClipboard(text) {
 }
 
 function fillCommandEditorTemplate() {
-  const template = [
-    "$sql = @'",
-    'SELECT NOW() AS server_time;',
-    "'@",
-    '',
-    '# Example execution with psql (edit connection string first)',
-    "$env:DATABASE_URL='<paste if not already set>'",
-    "psql \"$env:DATABASE_URL\" -c $sql",
-  ].join('\n');
+  const template = 'SELECT NOW() AS server_time;';
   document.getElementById('cmd-editor').value = template;
-  selectedCommandMeta = null;
-  document.getElementById('cmd-selected-name').textContent = 'Custom command template';
-  document.getElementById('cmd-selected-meta').textContent = 'powershell • editable';
+  selectedCommandMeta = { type: 'sql', shell: 'powershell' };
+  document.getElementById('cmd-selected-name').textContent = 'Custom SQL query';
+  document.getElementById('cmd-selected-meta').textContent = 'sql via psql • editable';
   renderCommandCatalog();
 }
 
@@ -1219,14 +1213,17 @@ async function runCommandEditor() {
   }
 
   const shell = selectedCommandMeta?.shell || 'powershell';
+  const type = selectedCommandMeta?.type || null;
   const requiresElevation = !!selectedCommandMeta?.requiresElevation;
-  output.textContent = '▶ Running command on server via panel PowerShell runner…';
-  const res = await apiFetch('/api/commands/run', 'POST', {
+  output.textContent = type === 'sql' ? '▶ Running SQL query via psql…' : '▶ Running command on server via panel PowerShell runner…';
+  const payload = {
     shell,
     requiresElevation,
     command: commandText,
     timeoutMs: commandCatalogInfo?.defaultTimeoutMs || 90000
-  });
+  };
+  if (type) payload.type = type;
+  const res = await apiFetch('/api/commands/run', 'POST', payload);
 
   if (res && res.error) {
     output.textContent = `✗ ${res.error}\n${res.hint || ''}`.trim();

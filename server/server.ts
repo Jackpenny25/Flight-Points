@@ -565,9 +565,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      // Allow Cloudflare Web Analytics beacon script and its inline bootstrap hash.
+      // Vite emits inline <script type="module"> tags, so 'unsafe-inline' is required.
+      // Cloudflare Web Analytics beacon also needs its domain + bootstrap hash.
       scriptSrc: [
         "'self'",
+        "'unsafe-inline'",
         'https://static.cloudflareinsights.com',
         "'sha256-01FLQSjuSDH2Uy9763XUnLLdevloYBzKmIAhPOIIpPk='",
       ],
@@ -579,6 +581,7 @@ app.use(helmet({
         'https://flightpoints.uk',
         'https://api.flightpoints.uk',
         'https://cloudflareinsights.com',
+        'https://static.cloudflareinsights.com',
       ],
       objectSrc: ["'none'"],
       frameSrc: ["'none'"],
